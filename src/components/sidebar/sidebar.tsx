@@ -1,17 +1,19 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { ProjectList } from './project-list';
 import { ConnectionStatus } from './connection-status';
 import { NewProjectDialog } from './new-project-dialog';
+import { ImportSessionsDialog } from '@/components/import/import-sessions-dialog';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
-import { Settings, LogOut, Wifi } from 'lucide-react';
+import { Settings, LogOut, Wifi, Download } from 'lucide-react';
 import { toast } from 'sonner';
 import { useProjectStore } from '@/stores/project-store';
+import { useGatewayStore } from '@/stores/gateway-store';
 import { fetchProjects } from '@/lib/projects';
 
 export function Sidebar() {
@@ -19,6 +21,8 @@ export function Sidebar() {
   const supabase = createClient();
   const setProjects = useProjectStore((s) => s.setProjects);
   const setLoading = useProjectStore((s) => s.setLoading);
+  const isConnected = useGatewayStore((s) => s.status === 'connected');
+  const [importOpen, setImportOpen] = useState(false);
 
   // Load projects on mount
   useEffect(() => {
@@ -62,9 +66,20 @@ export function Sidebar() {
 
       <Separator />
 
-      {/* New Project Button */}
-      <div className="px-3 py-3">
+      {/* New Project + Import */}
+      <div className="space-y-1 px-3 py-3">
         <NewProjectDialog />
+        {isConnected && (
+          <Button
+            variant="ghost"
+            className="w-full justify-start gap-2"
+            size="sm"
+            onClick={() => setImportOpen(true)}
+          >
+            <Download className="h-4 w-4" />
+            Import from Gateway
+          </Button>
+        )}
       </div>
 
       {/* Project List */}
@@ -111,6 +126,12 @@ export function Sidebar() {
           Sign Out
         </Button>
       </div>
+
+      {/* Import Dialog */}
+      <ImportSessionsDialog
+        open={importOpen}
+        onOpenChange={setImportOpen}
+      />
     </aside>
   );
 }

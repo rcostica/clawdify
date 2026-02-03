@@ -101,14 +101,20 @@ The Docker image:
 
 ---
 
-## 🔌 Connecting via Tailscale (Recommended)
+## 🔌 Connection Options
 
-For secure remote connections to your Gateway:
+### Hosted Mode (Recommended)
 
-1. Install [Tailscale](https://tailscale.com/) on both machines
-2. On the Gateway host: `openclaw gateway --tailscale serve`
-3. Use `wss://<your-machine>.tail12345.ts.net` as the Gateway URL
-4. No port forwarding needed!
+Use Clawdify's hosted relay — no server setup required. Just sign up and start chatting.
+
+### Self-Hosted Gateway
+
+For maximum privacy, run your own [OpenClaw Gateway](https://github.com/nichochar/openclaw):
+
+1. Install and start the OpenClaw Gateway on your machine
+2. In Clawdify → **Settings**, enter your Gateway URL (e.g., `ws://localhost:18789`)
+3. Enter your Gateway token and click **Test & Connect**
+4. For remote access, use `wss://` with a reverse proxy for encrypted connections
 
 ---
 

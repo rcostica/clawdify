@@ -210,8 +210,7 @@ export default function SettingsPage() {
                   <AlertTriangle className="h-4 w-4 text-yellow-600" />
                   <AlertDescription className="text-xs text-yellow-700 dark:text-yellow-300">
                     ⚠️ Unencrypted connection — your gateway token will be
-                    sent in plaintext. Use wss:// (Tailscale Serve) for
-                    secure connections.
+                    sent in plaintext. Use wss:// for secure connections.
                   </AlertDescription>
                 </Alert>
               )}
@@ -358,37 +357,39 @@ export default function SettingsPage() {
           </CardContent>
         </Card>
 
-        {/* Tailscale Guidance */}
+        {/* Connection Help */}
         <Card>
           <CardHeader>
             <CardTitle className="text-base">
-              Connecting via Tailscale (Recommended)
+              Connection Options
             </CardTitle>
             <CardDescription>
-              Tailscale provides secure, encrypted connections without
-              port forwarding.
+              Choose how to connect to your AI workspace.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-3 text-sm text-muted-foreground">
-            <ol className="list-decimal list-inside space-y-2">
-              <li>Install Tailscale on both machines</li>
-              <li>
-                On the Gateway host:{' '}
-                <code className="rounded bg-muted px-1.5 py-0.5 text-xs">
-                  openclaw gateway --tailscale serve
-                </code>
-              </li>
-              <li>
-                Use{' '}
-                <code className="rounded bg-muted px-1.5 py-0.5 text-xs">
-                  wss://&lt;magicdns&gt;
-                </code>{' '}
-                as the Gateway URL
-              </li>
-              <li>
-                Token-based auth or Tailscale identity auth
-              </li>
-            </ol>
+            <div className="space-y-3">
+              <div>
+                <p className="font-medium text-foreground">Hosted Mode (Recommended)</p>
+                <p className="text-xs mt-1">
+                  Use Clawdify&apos;s hosted relay — no server setup required. Just sign up and start chatting.
+                </p>
+              </div>
+              <div>
+                <p className="font-medium text-foreground">Self-Hosted Gateway</p>
+                <p className="text-xs mt-1">
+                  Run your own OpenClaw Gateway for full privacy. Use{' '}
+                  <code className="rounded bg-muted px-1.5 py-0.5 text-[11px]">
+                    wss://
+                  </code>{' '}
+                  for encrypted connections, or{' '}
+                  <code className="rounded bg-muted px-1.5 py-0.5 text-[11px]">
+                    ws://localhost
+                  </code>{' '}
+                  for local development.
+                </p>
+              </div>
+            </div>
           </CardContent>
         </Card>
 

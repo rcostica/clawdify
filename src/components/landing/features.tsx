@@ -9,7 +9,7 @@ const features = [
     icon: '⚡',
     title: 'Start on laptop, finish on phone',
     description:
-      'No VPN, no Tailscale, no port forwarding. Just open your browser and go.',
+      'No VPN, no port forwarding, no complex setup. Just open your browser and go.',
   },
   {
     icon: '📁',

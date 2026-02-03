@@ -1,4 +1,4 @@
-# ClawSpace — Detailed Build Plan
+# Clawdify (formerly ClawSpace) — Detailed Build Plan
 
 > **Version:** 1.1 — February 3, 2026
 > **Based on:** BUILD-BRIEF.md by Goat, corrected against actual Gateway protocol source code

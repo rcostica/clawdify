@@ -11,6 +11,7 @@ import { ImportSessionsDialog } from '@/components/import/import-sessions-dialog
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { Settings, LogOut, Wifi, Download } from 'lucide-react';
+import { ThemeToggle } from '@/components/theme-toggle';
 import { toast } from 'sonner';
 import { useProjectStore } from '@/stores/project-store';
 import { useGatewayStore } from '@/stores/gateway-store';
@@ -96,6 +97,10 @@ export function Sidebar() {
 
       {/* Footer */}
       <div className="flex flex-col gap-1 px-2 py-2">
+        <div className="flex items-center justify-between px-1 mb-1">
+          <span className="text-xs text-muted-foreground">Theme</span>
+          <ThemeToggle />
+        </div>
         <Link href="/connect">
           <Button
             variant="ghost"

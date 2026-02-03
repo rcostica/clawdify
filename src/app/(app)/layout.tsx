@@ -1,14 +1,15 @@
 'use client';
 
-import { Suspense } from 'react';
+import { Suspense, useState } from 'react';
 import { Sidebar } from '@/components/sidebar/sidebar';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
 import { Button } from '@/components/ui/button';
 import { Menu } from 'lucide-react';
-import { useState } from 'react';
 import { GatewayProvider } from '@/components/gateway-provider';
 import { QuickConnectHandler } from '@/components/quick-connect-handler';
 import { OnboardingGate } from '@/components/onboarding/onboarding-gate';
+import { CommandPalette } from '@/components/command-palette';
+import { ErrorBoundary } from '@/components/error-boundary';
 
 export default function AppLayout({
   children,
@@ -23,6 +24,7 @@ export default function AppLayout({
         <QuickConnectHandler />
       </Suspense>
       <OnboardingGate />
+      <CommandPalette />
       <div className="flex h-dvh overflow-hidden">
         {/* Desktop sidebar */}
         <div className="hidden md:flex">
@@ -46,7 +48,9 @@ export default function AppLayout({
         </Sheet>
 
         {/* Main content */}
-        <main className="flex-1 overflow-hidden">{children}</main>
+        <main className="flex-1 overflow-hidden">
+          <ErrorBoundary>{children}</ErrorBoundary>
+        </main>
       </div>
     </GatewayProvider>
   );

@@ -10,9 +10,11 @@ import { loadPersistedMessages, persistMessage } from '@/lib/messages';
 import { MessageList } from '@/components/chat/message-list';
 import { MessageInput } from '@/components/chat/message-input';
 import { Badge } from '@/components/ui/badge';
-import { WifiOff, Settings } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { WifiOff, Settings, Search } from 'lucide-react';
 import Link from 'next/link';
 import { toast } from 'sonner';
+import { MessageSearch } from '@/components/chat/message-search';
 
 export default function ProjectPage() {
   const { id: projectId } = useParams<{ id: string }>();
@@ -26,6 +28,7 @@ export default function ProjectPage() {
 
   const [replyTo, setReplyTo] = useState<ChatMessage | null>(null);
   const [initialized, setInitialized] = useState(false);
+  const [showSearch, setShowSearch] = useState(false);
 
   const sessionKey = project?.sessionKey ?? '';
   const {
@@ -127,6 +130,14 @@ export default function ProjectPage() {
           )}
         </div>
         <div className="flex items-center gap-2">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8"
+            onClick={() => setShowSearch(!showSearch)}
+          >
+            <Search className="h-4 w-4" />
+          </Button>
           {!isConnected && (
             <Link href="/settings">
               <Badge
@@ -156,6 +167,14 @@ export default function ProjectPage() {
         </div>
       )}
 
+      {/* Search */}
+      {showSearch && (
+        <MessageSearch
+          messages={messages}
+          onClose={() => setShowSearch(false)}
+        />
+      )}
+
       {/* Messages */}
       <MessageList
         messages={messages}
@@ -174,6 +193,7 @@ export default function ProjectPage() {
         isStreaming={!!streaming}
         replyTo={replyTo}
         onCancelReply={() => setReplyTo(null)}
+        projectId={projectId}
       />
     </div>
   );

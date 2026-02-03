@@ -18,14 +18,14 @@ import {
   Send,
   Square,
   Smile,
-  Paperclip,
   Mic,
-  MicOff,
   X,
   Reply as ReplyIcon,
+  Paperclip,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { ChatMessage } from '@/stores/chat-store';
+import { FileUploadButton, FilePreview, type UploadedFile } from './file-upload';
 
 interface MessageInputProps {
   onSend: (content: string) => void;
@@ -36,6 +36,7 @@ interface MessageInputProps {
   replyTo?: ChatMessage | null;
   onCancelReply?: () => void;
   disabled?: boolean;
+  projectId?: string;
 }
 
 export function MessageInput({
@@ -47,9 +48,12 @@ export function MessageInput({
   replyTo,
   onCancelReply,
   disabled,
+  projectId,
 }: MessageInputProps) {
   const [content, setContent] = useState('');
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const [attachedFiles, setAttachedFiles] = useState<UploadedFile[]>([]);
+  const [showVoice, setShowVoice] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const isGenerating = isLoading || isStreaming;
 
@@ -72,19 +76,35 @@ export function MessageInput({
     const trimmed = content.trim();
     if (!trimmed || !isConnected || isGenerating) return;
 
-    const message = replyTo
-      ? `> ${replyTo.content.split('\n')[0]?.slice(0, 100)}\n\n${trimmed}`
-      : trimmed;
+    // Build message with reply quote and attachments
+    let message = '';
+    if (replyTo) {
+      message += `> ${replyTo.content.split('\n')[0]?.slice(0, 100)}\n\n`;
+    }
+    message += trimmed;
+
+    // Append file references
+    if (attachedFiles.length > 0) {
+      message += '\n\n';
+      for (const file of attachedFiles) {
+        if (file.type.startsWith('image/')) {
+          message += `![${file.name}](${file.url})\n`;
+        } else {
+          message += `[📎 ${file.name}](${file.url})\n`;
+        }
+      }
+    }
 
     onSend(message);
     setContent('');
+    setAttachedFiles([]);
     onCancelReply?.();
 
     // Reset textarea height
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto';
     }
-  }, [content, isConnected, isGenerating, replyTo, onSend, onCancelReply]);
+  }, [content, isConnected, isGenerating, replyTo, attachedFiles, onSend, onCancelReply]);
 
   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -158,6 +178,39 @@ export function MessageInput({
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent>Emoji</TooltipContent>
+              </Tooltip>
+              {projectId && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span>
+                      <FileUploadButton
+                        projectId={projectId}
+                        onUpload={(f) =>
+                          setAttachedFiles((prev) => [...prev, f])
+                        }
+                        disabled={!isConnected || disabled}
+                      />
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent>Attach file</TooltipContent>
+                </Tooltip>
+              )}
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className={cn(
+                      'h-8 w-8 text-muted-foreground hover:text-foreground',
+                      showVoice && 'text-red-500',
+                    )}
+                    onClick={() => setShowVoice(!showVoice)}
+                    disabled={!isConnected || disabled}
+                  >
+                    <Mic className="h-4 w-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Voice message</TooltipContent>
               </Tooltip>
             </TooltipProvider>
           </div>
@@ -236,6 +289,36 @@ export function MessageInput({
           </div>
         </div>
 
+        {/* Attached files preview */}
+        {attachedFiles.length > 0 && (
+          <div className="mt-2 space-y-1">
+            {attachedFiles.map((file, i) => (
+              <FilePreview
+                key={`${file.name}-${i}`}
+                file={file}
+                onRemove={() =>
+                  setAttachedFiles((prev) =>
+                    prev.filter((_, j) => j !== i),
+                  )
+                }
+              />
+            ))}
+          </div>
+        )}
+
+        {/* Voice recorder */}
+        {showVoice && (
+          <div className="mt-2 rounded-lg border">
+            <VoiceRecorderInline
+              onSend={(text) => {
+                onSend(text);
+                setShowVoice(false);
+              }}
+              onCancel={() => setShowVoice(false)}
+            />
+          </div>
+        )}
+
         {/* Emoji picker */}
         {showEmojiPicker && (
           <EmojiPicker
@@ -244,6 +327,103 @@ export function MessageInput({
           />
         )}
       </div>
+    </div>
+  );
+}
+
+// ── Inline Voice Recorder ──
+
+function VoiceRecorderInline({
+  onSend,
+  onCancel,
+}: {
+  onSend: (message: string) => void;
+  onCancel: () => void;
+}) {
+  const [recording, setRecording] = useState(false);
+  const [duration, setDuration] = useState(0);
+  const [audioUrl, setAudioUrl] = useState<string | null>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const chunksRef = useRef<Blob[]>([]);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+
+  const startRecording = useCallback(async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      streamRef.current = stream;
+      const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
+        ? 'audio/webm;codecs=opus'
+        : 'audio/webm';
+      const recorder = new MediaRecorder(stream, { mimeType });
+      mediaRecorderRef.current = recorder;
+      chunksRef.current = [];
+
+      recorder.ondataavailable = (e) => {
+        if (e.data.size > 0) chunksRef.current.push(e.data);
+      };
+      recorder.onstop = () => {
+        const blob = new Blob(chunksRef.current, { type: mimeType });
+        setAudioUrl(URL.createObjectURL(blob));
+        stream.getTracks().forEach((t) => t.stop());
+      };
+
+      recorder.start(100);
+      setRecording(true);
+      setDuration(0);
+      timerRef.current = setInterval(() => setDuration((d) => d + 1), 1000);
+    } catch {
+      onCancel();
+    }
+  }, [onCancel]);
+
+  const stopRecording = useCallback(() => {
+    mediaRecorderRef.current?.stop();
+    if (timerRef.current) clearInterval(timerRef.current);
+    setRecording(false);
+  }, []);
+
+  const handleSendVoice = useCallback(() => {
+    // For now, voice messages inform the user; full voice transcription
+    // would require a speech-to-text service
+    onSend(`🎤 Voice message (${Math.floor(duration / 60)}:${(duration % 60).toString().padStart(2, '0')})`);
+  }, [duration, onSend]);
+
+  const formatDur = (s: number) =>
+    `${Math.floor(s / 60)}:${(s % 60).toString().padStart(2, '0')}`;
+
+  return (
+    <div className="flex items-center gap-2 px-3 py-2">
+      {!recording && !audioUrl && (
+        <>
+          <Button size="sm" onClick={startRecording} className="gap-2">
+            <Mic className="h-4 w-4" /> Start Recording
+          </Button>
+          <Button variant="ghost" size="sm" onClick={onCancel}>
+            Cancel
+          </Button>
+        </>
+      )}
+      {recording && (
+        <>
+          <span className="h-2 w-2 animate-pulse rounded-full bg-red-500" />
+          <span className="text-sm text-red-500">Recording {formatDur(duration)}</span>
+          <Button variant="destructive" size="sm" onClick={stopRecording} className="ml-auto gap-2">
+            <Square className="h-3 w-3" /> Stop
+          </Button>
+        </>
+      )}
+      {audioUrl && !recording && (
+        <>
+          <audio src={audioUrl} controls className="h-8 flex-1" />
+          <Button size="sm" onClick={handleSendVoice} className="gap-2">
+            <Send className="h-3 w-3" /> Send
+          </Button>
+          <Button variant="ghost" size="sm" onClick={onCancel}>
+            Cancel
+          </Button>
+        </>
+      )}
     </div>
   );
 }

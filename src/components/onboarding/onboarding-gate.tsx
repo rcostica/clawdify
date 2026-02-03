@@ -1,32 +1,29 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import {
-  OnboardingWizard,
-  isOnboardingComplete,
-} from './onboarding-wizard';
+import { OnboardingWizard, shouldShowOnboarding } from './onboarding-wizard';
 
 /**
- * Checks if onboarding should show and renders the wizard.
- * Mount this at the app layout level.
+ * Checks if the user should see the onboarding wizard.
+ * Shows it automatically on first login.
  */
 export function OnboardingGate() {
   const [showOnboarding, setShowOnboarding] = useState(false);
-  const [checked, setChecked] = useState(false);
 
   useEffect(() => {
-    // Only check on client side
-    const complete = isOnboardingComplete();
-    setShowOnboarding(!complete);
-    setChecked(true);
+    // Delay check slightly to avoid flash on returning users
+    const timer = setTimeout(() => {
+      if (shouldShowOnboarding()) {
+        setShowOnboarding(true);
+      }
+    }, 500);
+    return () => clearTimeout(timer);
   }, []);
-
-  if (!checked) return null;
 
   return (
     <OnboardingWizard
       open={showOnboarding}
-      onComplete={() => setShowOnboarding(false)}
+      onOpenChange={setShowOnboarding}
     />
   );
 }

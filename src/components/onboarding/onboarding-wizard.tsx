@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -10,240 +10,71 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { Skeleton } from '@/components/ui/skeleton';
 import {
   Loader2,
-  ArrowRight,
-  ArrowLeft,
-  Zap,
-  Wifi,
-  Download,
-  Rocket,
   CheckCircle2,
   XCircle,
   AlertTriangle,
+  ArrowRight,
+  ArrowLeft,
   Eye,
   EyeOff,
-  Check,
+  Sparkles,
+  Wifi,
+  Download,
+  Rocket,
+  MessageSquare,
+  Clock,
   SkipForward,
 } from 'lucide-react';
 import { toast } from 'sonner';
-import { createClient } from '@/lib/supabase/client';
 import { useGatewayStore } from '@/stores/gateway-store';
 import { useGatewayConnection } from '@/lib/gateway/hooks';
 import { validateGatewayUrl } from '@/lib/gateway/types';
+import { createClient } from '@/lib/supabase/client';
+import { createProject, fetchProjects } from '@/lib/projects';
+import { useProjectStore } from '@/stores/project-store';
 import {
   fetchGatewaySessions,
   importSessions,
   type GatewaySession,
   type ImportProgress,
-} from '@/lib/import-sessions';
-import { createProject, fetchProjects } from '@/lib/projects';
-import { useProjectStore } from '@/stores/project-store';
+} from '@/lib/gateway/importer';
 import { useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
 
-const ONBOARDING_FLAG = 'clawdify.onboarding_complete';
+const ONBOARDING_KEY = 'clawdify-onboarding-completed';
 
-/** Check if onboarding has been completed */
-export function isOnboardingComplete(): boolean {
-  if (typeof window === 'undefined') return true;
-  return localStorage.getItem(ONBOARDING_FLAG) === 'true';
+/** Check if onboarding should be shown */
+export function shouldShowOnboarding(): boolean {
+  if (typeof window === 'undefined') return false;
+  return localStorage.getItem(ONBOARDING_KEY) !== 'true';
 }
 
-/** Mark onboarding as complete */
-function markOnboardingComplete(): void {
-  localStorage.setItem(ONBOARDING_FLAG, 'true');
+/** Mark onboarding as completed */
+export function completeOnboarding(): void {
+  if (typeof window !== 'undefined') {
+    localStorage.setItem(ONBOARDING_KEY, 'true');
+  }
 }
+
+type Step = 'welcome' | 'connect' | 'import' | 'create' | 'done';
 
 interface OnboardingWizardProps {
   open: boolean;
-  onComplete: () => void;
+  onOpenChange: (open: boolean) => void;
 }
 
-type Step = 'welcome' | 'connect' | 'import' | 'first-project' | 'done';
-
-export function OnboardingWizard({
-  open,
-  onComplete,
-}: OnboardingWizardProps) {
+export function OnboardingWizard({ open, onOpenChange }: OnboardingWizardProps) {
   const [step, setStep] = useState<Step>('welcome');
+  const router = useRouter();
 
-  const handleComplete = useCallback(() => {
-    markOnboardingComplete();
-    onComplete();
-  }, [onComplete]);
-
-  const handleSkip = useCallback(() => {
-    markOnboardingComplete();
-    onComplete();
-    toast.info('You can configure your gateway in Settings anytime.');
-  }, [onComplete]);
-
-  return (
-    <Dialog open={open} onOpenChange={() => {}}>
-      <DialogContent
-        className="sm:max-w-lg gap-0 p-0 overflow-hidden"
-        onInteractOutside={(e) => e.preventDefault()}
-        showCloseButton={false}
-      >
-        {/* Progress indicator */}
-        <StepIndicator currentStep={step} />
-
-        {/* Steps */}
-        <div className="px-6 pb-6">
-          {step === 'welcome' && (
-            <WelcomeStep
-              onNext={() => setStep('connect')}
-              onSkip={handleSkip}
-            />
-          )}
-          {step === 'connect' && (
-            <ConnectStep
-              onNext={() => setStep('import')}
-              onBack={() => setStep('welcome')}
-              onSkip={handleSkip}
-            />
-          )}
-          {step === 'import' && (
-            <ImportStep
-              onNext={() => setStep('first-project')}
-              onBack={() => setStep('connect')}
-              onSkip={() => setStep('first-project')}
-            />
-          )}
-          {step === 'first-project' && (
-            <FirstProjectStep
-              onNext={() => setStep('done')}
-              onSkip={() => setStep('done')}
-            />
-          )}
-          {step === 'done' && <DoneStep onComplete={handleComplete} />}
-        </div>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-// ── Step indicator ──
-
-const STEPS: { key: Step; label: string }[] = [
-  { key: 'welcome', label: 'Welcome' },
-  { key: 'connect', label: 'Connect' },
-  { key: 'import', label: 'Import' },
-  { key: 'first-project', label: 'Project' },
-  { key: 'done', label: 'Done' },
-];
-
-function StepIndicator({ currentStep }: { currentStep: Step }) {
-  const currentIndex = STEPS.findIndex((s) => s.key === currentStep);
-
-  return (
-    <div className="flex items-center gap-1 px-6 pt-6 pb-2">
-      {STEPS.map((s, i) => (
-        <div key={s.key} className="flex items-center gap-1 flex-1">
-          <div
-            className={cn(
-              'h-1.5 w-full rounded-full transition-colors duration-300',
-              i <= currentIndex ? 'bg-primary' : 'bg-muted',
-            )}
-          />
-        </div>
-      ))}
-    </div>
-  );
-}
-
-// ── Step 1: Welcome ──
-
-function WelcomeStep({
-  onNext,
-  onSkip,
-}: {
-  onNext: () => void;
-  onSkip: () => void;
-}) {
-  return (
-    <div className="space-y-6 py-4">
-      <div className="text-center space-y-3">
-        <div className="text-5xl">🐾</div>
-        <h2 className="text-2xl font-bold">Welcome to Clawdify!</h2>
-        <p className="text-muted-foreground">
-          Your web workspace for OpenClaw. Let&apos;s get you set up in just
-          a few steps.
-        </p>
-      </div>
-
-      <div className="grid gap-3">
-        <FeatureCard
-          icon={<Wifi className="h-5 w-5 text-blue-500" />}
-          title="Connect your Gateway"
-          description="Securely link to your OpenClaw Gateway"
-        />
-        <FeatureCard
-          icon={<Download className="h-5 w-5 text-green-500" />}
-          title="Import conversations"
-          description="Bring in your existing chat sessions"
-        />
-        <FeatureCard
-          icon={<Zap className="h-5 w-5 text-yellow-500" />}
-          title="Start chatting"
-          description="Create projects and talk to your AI agent"
-        />
-      </div>
-
-      <div className="flex justify-between pt-2">
-        <Button variant="ghost" onClick={onSkip} className="text-muted-foreground">
-          <SkipForward className="mr-2 h-4 w-4" />
-          Skip setup
-        </Button>
-        <Button onClick={onNext} className="gap-2">
-          Get started
-          <ArrowRight className="h-4 w-4" />
-        </Button>
-      </div>
-    </div>
-  );
-}
-
-function FeatureCard({
-  icon,
-  title,
-  description,
-}: {
-  icon: React.ReactNode;
-  title: string;
-  description: string;
-}) {
-  return (
-    <div className="flex items-start gap-3 rounded-lg border p-3">
-      <div className="mt-0.5">{icon}</div>
-      <div>
-        <p className="text-sm font-medium">{title}</p>
-        <p className="text-xs text-muted-foreground">{description}</p>
-      </div>
-    </div>
-  );
-}
-
-// ── Step 2: Connect Gateway ──
-
-function ConnectStep({
-  onNext,
-  onBack,
-  onSkip,
-}: {
-  onNext: () => void;
-  onBack: () => void;
-  onSkip: () => void;
-}) {
-  const config = useGatewayStore((s) => s.config);
-  const status = useGatewayStore((s) => s.status);
-  const isConnected = status === 'connected';
-
+  // Connection state
   const [gatewayUrl, setGatewayUrl] = useState(
-    config?.url || process.env.NEXT_PUBLIC_DEFAULT_GATEWAY_URL || '',
+    process.env.NEXT_PUBLIC_DEFAULT_GATEWAY_URL || '',
   );
   const [gatewayToken, setGatewayToken] = useState('');
   const [showToken, setShowToken] = useState(false);
@@ -251,13 +82,27 @@ function ConnectStep({
   const [urlError, setUrlError] = useState<string | null>(null);
   const [urlInsecure, setUrlInsecure] = useState(false);
   const [testing, setTesting] = useState(false);
-  const [testResult, setTestResult] = useState<{
-    ok: boolean;
-    message: string;
-  } | null>(null);
+  const [connectionOk, setConnectionOk] = useState(false);
+
+  // Import state
+  const [sessions, setSessions] = useState<GatewaySession[]>([]);
+  const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
+  const [loadingSessions, setLoadingSessions] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const [importProgress, setImportProgress] = useState<ImportProgress | null>(null);
+  const [importDone, setImportDone] = useState(false);
+
+  // Create project state
+  const [projectName, setProjectName] = useState('');
+  const [creating, setCreating] = useState(false);
 
   const { connect, testConnection } = useGatewayConnection();
+  const isConnected = useGatewayStore((s) => s.status === 'connected');
+  const setProjects = useProjectStore((s) => s.setProjects);
+  const addProject = useProjectStore((s) => s.addProject);
+  const supabase = createClient();
 
+  // Validate URL
   useEffect(() => {
     if (!gatewayUrl) {
       setUrlError(null);
@@ -269,29 +114,39 @@ function ConnectStep({
     setUrlInsecure(result.isInsecure ?? false);
   }, [gatewayUrl]);
 
+  // Load sessions when reaching import step
+  useEffect(() => {
+    if (step === 'import' && isConnected && sessions.length === 0 && !loadingSessions) {
+      loadSessions();
+    }
+  }, [step, isConnected]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const loadSessions = useCallback(async () => {
+    setLoadingSessions(true);
+    try {
+      const result = await fetchGatewaySessions();
+      setSessions(result);
+      setSelectedKeys(new Set(result.map((s) => s.key)));
+    } catch {
+      // Sessions load failure is non-fatal for onboarding
+      setSessions([]);
+    } finally {
+      setLoadingSessions(false);
+    }
+  }, []);
+
   const handleTestAndConnect = async () => {
     setTesting(true);
-    setTestResult(null);
+    setConnectionOk(false);
     try {
-      const hello = await testConnection({
+      await testConnection({
         url: gatewayUrl,
         token: gatewayToken || undefined,
         insecureAuth,
       });
-      setTestResult({
-        ok: true,
-        message: `Connected! Server v${hello.server.version}`,
-      });
+      setConnectionOk(true);
 
-      // Actually connect
-      connect({
-        url: gatewayUrl,
-        token: gatewayToken || undefined,
-        insecureAuth,
-      });
-
-      // 🔒 SECURITY: Save token encrypted in Supabase
-      const supabase = createClient();
+      // Save to Supabase
       if (gatewayToken) {
         await supabase.rpc('save_gateway_connection', {
           p_name: 'Default',
@@ -304,446 +159,54 @@ function ConnectStep({
           p_gateway_url: gatewayUrl,
         });
       }
+
+      // Connect the main client
+      connect({
+        url: gatewayUrl,
+        token: gatewayToken || undefined,
+        insecureAuth,
+      });
+
+      toast.success('Connected to Gateway!');
     } catch (err) {
-      setTestResult({
-        ok: false,
-        message: err instanceof Error ? err.message : 'Connection failed',
+      toast.error('Connection failed', {
+        description: err instanceof Error ? err.message : 'Unknown error',
       });
     } finally {
       setTesting(false);
     }
   };
 
-  return (
-    <div className="space-y-4 py-4">
-      <div className="space-y-1">
-        <h2 className="text-xl font-bold flex items-center gap-2">
-          <Wifi className="h-5 w-5" />
-          Connect your Gateway
-        </h2>
-        <p className="text-sm text-muted-foreground">
-          Enter your OpenClaw Gateway URL and token to connect.
-        </p>
-      </div>
-
-      {/* Gateway URL */}
-      <div className="space-y-2">
-        <Label htmlFor="ob-gateway-url">Gateway URL</Label>
-        <Input
-          id="ob-gateway-url"
-          placeholder="ws://localhost:18789"
-          value={gatewayUrl}
-          onChange={(e) => setGatewayUrl(e.target.value)}
-          autoFocus
-        />
-        {urlError && (
-          <p className="flex items-center gap-1 text-xs text-destructive">
-            <XCircle className="h-3 w-3" />
-            {urlError}
-          </p>
-        )}
-        {urlInsecure && !urlError && (
-          <Alert className="border-yellow-500/50 bg-yellow-50 dark:bg-yellow-950/20 py-2">
-            <AlertTriangle className="h-3.5 w-3.5 text-yellow-600" />
-            <AlertDescription className="text-xs text-yellow-700 dark:text-yellow-300">
-              Unencrypted connection. Use wss:// for production.
-            </AlertDescription>
-          </Alert>
-        )}
-      </div>
-
-      {/* Token */}
-      <div className="space-y-2">
-        <Label htmlFor="ob-gateway-token">Gateway Token</Label>
-        <div className="relative">
-          <Input
-            id="ob-gateway-token"
-            type={showToken ? 'text' : 'password'}
-            placeholder="Enter your gateway token"
-            value={gatewayToken}
-            onChange={(e) => setGatewayToken(e.target.value)}
-            autoComplete="off"
-            className="pr-10"
-          />
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            className="absolute right-0 top-0 h-full px-3"
-            onClick={() => setShowToken(!showToken)}
-          >
-            {showToken ? (
-              <EyeOff className="h-4 w-4" />
-            ) : (
-              <Eye className="h-4 w-4" />
-            )}
-          </Button>
-        </div>
-        <p className="text-xs text-muted-foreground">
-          Token is encrypted and stored securely — never in browser storage.
-        </p>
-      </div>
-
-      {/* Insecure auth */}
-      <div className="flex items-center justify-between rounded-lg border p-3">
-        <div className="space-y-0.5">
-          <Label htmlFor="ob-insecure" className="text-sm">
-            Allow insecure auth
-          </Label>
-          <p className="text-xs text-muted-foreground">
-            Skip device identity. Only for trusted networks.
-          </p>
-        </div>
-        <Switch
-          id="ob-insecure"
-          checked={insecureAuth}
-          onCheckedChange={setInsecureAuth}
-        />
-      </div>
-
-      {/* Test result */}
-      {testResult && (
-        <div
-          className={cn(
-            'flex items-center gap-2 rounded-lg p-3 text-sm',
-            testResult.ok
-              ? 'bg-green-50 text-green-700 dark:bg-green-950/20 dark:text-green-300'
-              : 'bg-red-50 text-red-700 dark:bg-red-950/20 dark:text-red-300',
-          )}
-        >
-          {testResult.ok ? (
-            <CheckCircle2 className="h-4 w-4 shrink-0" />
-          ) : (
-            <XCircle className="h-4 w-4 shrink-0" />
-          )}
-          {testResult.message}
-        </div>
-      )}
-
-      {/* Tailscale hint */}
-      <div className="rounded-lg bg-muted/50 p-3 text-xs text-muted-foreground">
-        <p className="font-medium text-foreground mb-1">
-          💡 Don&apos;t have a Gateway URL?
-        </p>
-        <p>
-          Run{' '}
-          <code className="rounded bg-background px-1.5 py-0.5">
-            openclaw gateway start
-          </code>{' '}
-          on your machine, then use{' '}
-          <code className="rounded bg-background px-1.5 py-0.5">
-            ws://localhost:18789
-          </code>
-        </p>
-      </div>
-
-      <div className="flex justify-between pt-2">
-        <div className="flex gap-2">
-          <Button variant="ghost" onClick={onBack}>
-            <ArrowLeft className="mr-2 h-4 w-4" />
-            Back
-          </Button>
-          <Button
-            variant="ghost"
-            onClick={onSkip}
-            className="text-muted-foreground"
-          >
-            Skip
-          </Button>
-        </div>
-        <div className="flex gap-2">
-          {!isConnected ? (
-            <Button
-              onClick={handleTestAndConnect}
-              disabled={testing || !gatewayUrl || !!urlError}
-              className="gap-2"
-            >
-              {testing ? (
-                <>
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Connecting...
-                </>
-              ) : (
-                <>
-                  Connect
-                  <ArrowRight className="h-4 w-4" />
-                </>
-              )}
-            </Button>
-          ) : (
-            <Button onClick={onNext} className="gap-2">
-              Next
-              <ArrowRight className="h-4 w-4" />
-            </Button>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ── Step 3: Import ──
-
-function ImportStep({
-  onNext,
-  onBack,
-  onSkip,
-}: {
-  onNext: () => void;
-  onBack: () => void;
-  onSkip: () => void;
-}) {
-  const isConnected = useGatewayStore((s) => s.status === 'connected');
-  const setProjects = useProjectStore((s) => s.setProjects);
-  const [sessions, setSessions] = useState<GatewaySession[]>([]);
-  const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [loading, setLoading] = useState(false);
-  const [importing, setImporting] = useState(false);
-  const [progress, setProgress] = useState<ImportProgress | null>(null);
-  const [fetchError, setFetchError] = useState<string | null>(null);
-
-  // Fetch sessions
-  useEffect(() => {
-    if (!isConnected) return;
-    let mounted = true;
-    setLoading(true);
-    setFetchError(null);
-
-    fetchGatewaySessions()
-      .then((result) => {
-        if (!mounted) return;
-        setSessions(result);
-        setSelected(new Set(result.map((s) => s.key)));
-      })
-      .catch((err) => {
-        if (!mounted) return;
-        setFetchError(err instanceof Error ? err.message : 'Failed to fetch');
-      })
-      .finally(() => {
-        if (mounted) setLoading(false);
-      });
-
-    return () => {
-      mounted = false;
-    };
-  }, [isConnected]);
-
-  const toggleSession = useCallback((key: string) => {
-    setSelected((prev) => {
-      const next = new Set(prev);
-      if (next.has(key)) next.delete(key);
-      else next.add(key);
-      return next;
-    });
-  }, []);
-
   const handleImport = useCallback(async () => {
-    const toImport = sessions.filter((s) => selected.has(s.key));
-    if (toImport.length === 0) {
-      onNext();
-      return;
-    }
+    const selected = sessions.filter((s) => selectedKeys.has(s.key));
+    if (selected.length === 0) return;
 
     setImporting(true);
     try {
-      const result = await importSessions(toImport, setProgress);
-      toast.success(
-        `Imported ${result.imported} sessions (${result.totalMessages} messages)`,
-      );
-      // Reload projects
-      const projects = await fetchProjects();
-      setProjects(projects);
-      onNext();
+      const result = await importSessions(selected, (p) => setImportProgress(p));
+      if (result.imported > 0) {
+        const projects = await fetchProjects();
+        setProjects(projects);
+        toast.success(`Imported ${result.imported} conversation${result.imported > 1 ? 's' : ''}`);
+      }
+      setImportDone(true);
     } catch (err) {
       toast.error('Import failed', {
         description: err instanceof Error ? err.message : 'Unknown error',
       });
+    } finally {
       setImporting(false);
     }
-  }, [sessions, selected, setProjects, onNext]);
+  }, [sessions, selectedKeys, setProjects]);
 
-  if (!isConnected) {
-    return (
-      <div className="space-y-4 py-4">
-        <div className="space-y-1">
-          <h2 className="text-xl font-bold flex items-center gap-2">
-            <Download className="h-5 w-5" />
-            Import conversations
-          </h2>
-          <p className="text-sm text-muted-foreground">
-            Connect to a Gateway first to import existing conversations.
-          </p>
-        </div>
-        <div className="flex justify-between pt-2">
-          <Button variant="ghost" onClick={onBack}>
-            <ArrowLeft className="mr-2 h-4 w-4" />
-            Back
-          </Button>
-          <Button onClick={onSkip} className="gap-2">
-            Skip
-            <ArrowRight className="h-4 w-4" />
-          </Button>
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="space-y-4 py-4">
-      <div className="space-y-1">
-        <h2 className="text-xl font-bold flex items-center gap-2">
-          <Download className="h-5 w-5" />
-          Import conversations
-        </h2>
-        <p className="text-sm text-muted-foreground">
-          {loading
-            ? 'Finding your existing conversations...'
-            : sessions.length > 0
-              ? `We found ${sessions.length} conversation${sessions.length !== 1 ? 's' : ''}. Select which to import.`
-              : 'No existing conversations found.'}
-        </p>
-      </div>
-
-      {/* Loading */}
-      {loading && (
-        <div className="flex items-center justify-center py-6">
-          <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-        </div>
-      )}
-
-      {/* Error */}
-      {fetchError && (
-        <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-800 dark:bg-red-950/30 dark:text-red-300">
-          {fetchError}
-        </div>
-      )}
-
-      {/* Session list */}
-      {!loading && sessions.length > 0 && !importing && (
-        <ScrollArea className="max-h-48">
-          <div className="space-y-1 pr-3">
-            {sessions.map((session) => {
-              const name =
-                session.label ||
-                session.derivedTitle ||
-                session.key.split(':').pop() ||
-                session.key;
-              return (
-                <button
-                  key={session.key}
-                  className={cn(
-                    'flex w-full items-center gap-3 rounded-lg border p-2.5 text-left transition-colors',
-                    selected.has(session.key)
-                      ? 'border-primary/50 bg-primary/5'
-                      : 'border-transparent hover:bg-muted/50',
-                  )}
-                  onClick={() => toggleSession(session.key)}
-                >
-                  <div
-                    className={cn(
-                      'flex h-4 w-4 shrink-0 items-center justify-center rounded border',
-                      selected.has(session.key)
-                        ? 'border-primary bg-primary text-primary-foreground'
-                        : 'border-muted-foreground/30',
-                    )}
-                  >
-                    {selected.has(session.key) && (
-                      <Check className="h-2.5 w-2.5" />
-                    )}
-                  </div>
-                  <span className="min-w-0 flex-1 truncate text-sm">
-                    {name}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-        </ScrollArea>
-      )}
-
-      {/* Progress */}
-      {importing && progress && (
-        <div className="space-y-2">
-          <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
-            <div
-              className="h-full rounded-full bg-primary transition-all duration-300"
-              style={{
-                width: `${progress.total > 0 ? Math.round((progress.completed / progress.total) * 100) : 0}%`,
-              }}
-            />
-          </div>
-          <p className="text-xs text-muted-foreground">
-            Importing {progress.completed + 1} of {progress.total}
-            {progress.currentSession ? ` — ${progress.currentSession}` : ''}
-          </p>
-        </div>
-      )}
-
-      <div className="flex justify-between pt-2">
-        <div className="flex gap-2">
-          {!importing && (
-            <Button variant="ghost" onClick={onBack}>
-              <ArrowLeft className="mr-2 h-4 w-4" />
-              Back
-            </Button>
-          )}
-        </div>
-        <div className="flex gap-2">
-          {!importing && (
-            <>
-              <Button variant="ghost" onClick={onSkip} className="text-muted-foreground">
-                Skip
-              </Button>
-              <Button onClick={handleImport} className="gap-2">
-                {sessions.length > 0 && selected.size > 0 ? (
-                  <>
-                    Import {selected.size}
-                    <ArrowRight className="h-4 w-4" />
-                  </>
-                ) : (
-                  <>
-                    Next
-                    <ArrowRight className="h-4 w-4" />
-                  </>
-                )}
-              </Button>
-            </>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ── Step 4: First Project ──
-
-function FirstProjectStep({
-  onNext,
-  onSkip,
-}: {
-  onNext: () => void;
-  onSkip: () => void;
-}) {
-  const projects = useProjectStore((s) => s.projects);
-  const addProject = useProjectStore((s) => s.addProject);
-  const setActiveProject = useProjectStore((s) => s.setActiveProject);
-  const router = useRouter();
-
-  const [name, setName] = useState('');
-  const [creating, setCreating] = useState(false);
-
-  // If user already has projects (from import), skip to done
-  const hasProjects = projects.length > 0;
-
-  const handleCreate = async () => {
-    if (!name.trim()) return;
+  const handleCreateProject = async () => {
+    if (!projectName.trim()) return;
     setCreating(true);
     try {
-      const project = await createProject({ name: name.trim() });
+      const project = await createProject({ name: projectName.trim() });
       addProject(project);
-      setActiveProject(project.id);
       router.push(`/project/${project.id}`);
-      onNext();
+      finishOnboarding();
     } catch (err) {
       toast.error('Failed to create project', {
         description: err instanceof Error ? err.message : 'Unknown error',
@@ -753,120 +216,411 @@ function FirstProjectStep({
     }
   };
 
+  const finishOnboarding = () => {
+    completeOnboarding();
+    onOpenChange(false);
+  };
+
+  const skipToEnd = () => {
+    completeOnboarding();
+    onOpenChange(false);
+  };
+
+  const toggleSelection = (key: string) => {
+    setSelectedKeys((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
+
+  const formatTimeAgo = (dateStr?: string) => {
+    if (!dateStr) return '';
+    const date = new Date(dateStr);
+    if (isNaN(date.getTime())) return '';
+    const diffMs = Date.now() - date.getTime();
+    const diffMin = Math.floor(diffMs / 60000);
+    if (diffMin < 1) return 'just now';
+    if (diffMin < 60) return `${diffMin}m ago`;
+    const diffHrs = Math.floor(diffMin / 60);
+    if (diffHrs < 24) return `${diffHrs}h ago`;
+    const diffDays = Math.floor(diffHrs / 24);
+    if (diffDays < 30) return `${diffDays}d ago`;
+    return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+  };
+
+  // Step indicators
+  const steps: Step[] = ['welcome', 'connect', 'import', 'create', 'done'];
+  const currentIndex = steps.indexOf(step);
+
   return (
-    <div className="space-y-4 py-4">
-      <div className="space-y-1">
-        <h2 className="text-xl font-bold flex items-center gap-2">
-          <Rocket className="h-5 w-5" />
-          {hasProjects ? 'Ready to go!' : 'Create your first project'}
-        </h2>
-        <p className="text-sm text-muted-foreground">
-          {hasProjects
-            ? `You have ${projects.length} project${projects.length !== 1 ? 's' : ''} ready. Create another or get started!`
-            : 'Projects are separate chat spaces, each with their own conversation thread.'}
-        </p>
-      </div>
-
-      <div className="space-y-2">
-        <Label htmlFor="ob-project-name">Project name</Label>
-        <Input
-          id="ob-project-name"
-          placeholder="e.g. My coding assistant"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          autoFocus
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' && name.trim()) {
-              e.preventDefault();
-              handleCreate();
-            }
-          }}
-        />
-      </div>
-
-      <div className="rounded-lg bg-muted/50 p-3 text-xs text-muted-foreground space-y-1">
-        <p>💡 Project ideas:</p>
-        <div className="flex flex-wrap gap-1.5 pt-1">
-          {[
-            'Code review helper',
-            'Research assistant',
-            'Writing partner',
-            'DevOps tasks',
-          ].map((suggestion) => (
-            <button
-              key={suggestion}
-              className="rounded-full border bg-background px-2.5 py-1 text-xs hover:bg-accent transition-colors"
-              onClick={() => setName(suggestion)}
-            >
-              {suggestion}
-            </button>
+    <Dialog open={open} onOpenChange={(v) => { if (!v) skipToEnd(); else onOpenChange(v); }}>
+      <DialogContent className="sm:max-w-lg p-0 gap-0 overflow-hidden">
+        {/* Progress dots */}
+        <div className="flex items-center justify-center gap-2 pt-6 pb-2">
+          {steps.map((s, i) => (
+            <div
+              key={s}
+              className={cn(
+                'h-1.5 rounded-full transition-all duration-300',
+                i === currentIndex ? 'w-6 bg-primary' : 'w-1.5',
+                i < currentIndex ? 'bg-primary/60' : i > currentIndex ? 'bg-muted' : '',
+              )}
+            />
           ))}
         </div>
-      </div>
 
-      <div className="flex justify-between pt-2">
-        <Button
-          variant="ghost"
-          onClick={onSkip}
-          className="text-muted-foreground"
-        >
-          {hasProjects ? 'Skip' : 'Skip for now'}
-        </Button>
-        <Button
-          onClick={handleCreate}
-          disabled={!name.trim() || creating}
-          className="gap-2"
-        >
-          {creating ? (
-            <>
-              <Loader2 className="h-4 w-4 animate-spin" />
-              Creating...
-            </>
-          ) : (
-            <>
-              Create & finish
-              <ArrowRight className="h-4 w-4" />
-            </>
+        {/* Step content */}
+        <div className="px-6 pb-6 min-h-[300px]">
+          {/* ── Step 1: Welcome ── */}
+          {step === 'welcome' && (
+            <div className="flex flex-col items-center justify-center gap-4 py-8 text-center">
+              <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-primary/10 text-3xl">
+                🐾
+              </div>
+              <h2 className="text-2xl font-bold">Welcome to Clawdify!</h2>
+              <p className="max-w-sm text-muted-foreground">
+                Your workspace for OpenClaw conversations. Let&apos;s get you connected to your AI Gateway.
+              </p>
+              <div className="flex gap-3 mt-4">
+                <Button variant="outline" onClick={skipToEnd} className="gap-2">
+                  <SkipForward className="h-4 w-4" />
+                  Skip Setup
+                </Button>
+                <Button onClick={() => setStep('connect')} className="gap-2">
+                  Get Started
+                  <ArrowRight className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
           )}
-        </Button>
-      </div>
-    </div>
-  );
-}
 
-// ── Step 5: Done ──
+          {/* ── Step 2: Gateway Connection ── */}
+          {step === 'connect' && (
+            <div className="space-y-4 py-4">
+              <div className="text-center mb-4">
+                <div className="flex h-10 w-10 mx-auto items-center justify-center rounded-xl bg-blue-100 dark:bg-blue-950 mb-3">
+                  <Wifi className="h-5 w-5 text-blue-600" />
+                </div>
+                <h3 className="text-lg font-semibold">Connect your Gateway</h3>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Enter your OpenClaw Gateway URL and token
+                </p>
+              </div>
 
-function DoneStep({ onComplete }: { onComplete: () => void }) {
-  return (
-    <div className="space-y-6 py-4 text-center">
-      <div className="space-y-3">
-        <div className="text-5xl">🎉</div>
-        <h2 className="text-2xl font-bold">You&apos;re all set!</h2>
-        <p className="text-muted-foreground">
-          Start chatting with your AI agent. You can always adjust settings
-          and import more sessions later.
-        </p>
-      </div>
+              <div className="space-y-3">
+                <div className="space-y-1.5">
+                  <Label htmlFor="ob-url">Gateway URL</Label>
+                  <Input
+                    id="ob-url"
+                    placeholder="ws://localhost:18789"
+                    value={gatewayUrl}
+                    onChange={(e) => setGatewayUrl(e.target.value)}
+                  />
+                  {urlError && (
+                    <p className="flex items-center gap-1 text-xs text-destructive">
+                      <XCircle className="h-3 w-3" /> {urlError}
+                    </p>
+                  )}
+                  {urlInsecure && !urlError && (
+                    <p className="flex items-center gap-1 text-xs text-yellow-600 dark:text-yellow-400">
+                      <AlertTriangle className="h-3 w-3" /> Unencrypted connection — consider wss://
+                    </p>
+                  )}
+                </div>
 
-      <div className="grid gap-2 text-left text-sm">
-        <div className="flex items-center gap-2 rounded-lg border p-3">
-          <CheckCircle2 className="h-4 w-4 text-green-500 shrink-0" />
-          <span>Gateway connection configured</span>
+                <div className="space-y-1.5">
+                  <Label htmlFor="ob-token">Gateway Token</Label>
+                  <div className="relative">
+                    <Input
+                      id="ob-token"
+                      type={showToken ? 'text' : 'password'}
+                      placeholder="Your gateway token"
+                      value={gatewayToken}
+                      onChange={(e) => setGatewayToken(e.target.value)}
+                      autoComplete="off"
+                      className="pr-10"
+                    />
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="absolute right-0 top-0 h-full px-3"
+                      onClick={() => setShowToken(!showToken)}
+                    >
+                      {showToken ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between rounded-lg border p-2.5">
+                  <div>
+                    <Label htmlFor="ob-insecure" className="text-xs">Allow insecure auth</Label>
+                    <p className="text-[10px] text-muted-foreground">For trusted local networks only</p>
+                  </div>
+                  <Switch id="ob-insecure" checked={insecureAuth} onCheckedChange={setInsecureAuth} />
+                </div>
+
+                {connectionOk && (
+                  <Alert className="border-green-500/50 bg-green-50 dark:bg-green-950/20">
+                    <CheckCircle2 className="h-4 w-4 text-green-600" />
+                    <AlertDescription className="text-green-700 dark:text-green-300">
+                      Connected successfully!
+                    </AlertDescription>
+                  </Alert>
+                )}
+              </div>
+
+              {/* No gateway? */}
+              <details className="text-xs text-muted-foreground">
+                <summary className="cursor-pointer hover:text-foreground">
+                  Don&apos;t have an OpenClaw Gateway yet?
+                </summary>
+                <div className="mt-2 rounded-lg border bg-muted/30 p-3 space-y-2">
+                  <p>Install OpenClaw and start the Gateway:</p>
+                  <code className="block rounded bg-background px-2 py-1 text-[11px]">
+                    npm install -g openclaw<br />
+                    openclaw gateway start
+                  </code>
+                  <p>Then use <code className="bg-background px-1 rounded">ws://localhost:18789</code> as your URL.</p>
+                </div>
+              </details>
+
+              <div className="flex justify-between pt-2">
+                <Button variant="ghost" onClick={() => setStep('welcome')} className="gap-2">
+                  <ArrowLeft className="h-4 w-4" /> Back
+                </Button>
+                <div className="flex gap-2">
+                  <Button variant="outline" onClick={skipToEnd}>Skip</Button>
+                  {!connectionOk ? (
+                    <Button
+                      onClick={handleTestAndConnect}
+                      disabled={testing || !gatewayUrl || !!urlError}
+                    >
+                      {testing ? (
+                        <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Testing...</>
+                      ) : (
+                        'Test & Connect'
+                      )}
+                    </Button>
+                  ) : (
+                    <Button onClick={() => setStep('import')} className="gap-2">
+                      Next <ArrowRight className="h-4 w-4" />
+                    </Button>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ── Step 3: Import ── */}
+          {step === 'import' && (
+            <div className="space-y-4 py-4">
+              <div className="text-center mb-2">
+                <div className="flex h-10 w-10 mx-auto items-center justify-center rounded-xl bg-purple-100 dark:bg-purple-950 mb-3">
+                  <Download className="h-5 w-5 text-purple-600" />
+                </div>
+                <h3 className="text-lg font-semibold">Import Conversations</h3>
+                <p className="text-sm text-muted-foreground mt-1">
+                  {sessions.length > 0
+                    ? `Found ${sessions.length} existing conversation${sessions.length > 1 ? 's' : ''}`
+                    : 'Looking for existing conversations...'}
+                </p>
+              </div>
+
+              {loadingSessions && (
+                <div className="space-y-2">
+                  {[1, 2, 3].map((i) => (
+                    <Skeleton key={i} className="h-12 w-full" />
+                  ))}
+                </div>
+              )}
+
+              {!loadingSessions && sessions.length > 0 && !importDone && (
+                <>
+                  <div className="flex items-center justify-between text-xs text-muted-foreground">
+                    <span>{selectedKeys.size} of {sessions.length} selected</span>
+                    <div className="flex gap-2">
+                      <button className="hover:underline" onClick={() => setSelectedKeys(new Set(sessions.map((s) => s.key)))}>All</button>
+                      <button className="hover:underline" onClick={() => setSelectedKeys(new Set())}>None</button>
+                    </div>
+                  </div>
+                  <ScrollArea className="max-h-[200px]">
+                    <div className="space-y-1">
+                      {sessions.map((session) => (
+                        <button
+                          key={session.key}
+                          className={cn(
+                            'flex w-full items-center gap-2.5 rounded-lg border px-2.5 py-2 text-left transition-colors',
+                            selectedKeys.has(session.key)
+                              ? 'border-primary/50 bg-primary/5'
+                              : 'border-transparent hover:bg-muted/50',
+                          )}
+                          onClick={() => toggleSelection(session.key)}
+                          disabled={importing}
+                        >
+                          <div className={cn(
+                            'flex h-4 w-4 shrink-0 items-center justify-center rounded border transition-colors',
+                            selectedKeys.has(session.key)
+                              ? 'border-primary bg-primary text-primary-foreground'
+                              : 'border-muted-foreground/30',
+                          )}>
+                            {selectedKeys.has(session.key) && (
+                              <svg className="h-2.5 w-2.5" viewBox="0 0 12 12" fill="none">
+                                <path d="M2 6l3 3 5-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                              </svg>
+                            )}
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <span className="truncate text-xs font-medium block">
+                              {session.label || session.key.split(':').pop() || session.key}
+                            </span>
+                            <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
+                              {session.messageCount !== undefined && (
+                                <span className="flex items-center gap-0.5">
+                                  <MessageSquare className="h-2.5 w-2.5" /> {session.messageCount}
+                                </span>
+                              )}
+                              {session.lastActivity && (
+                                <span className="flex items-center gap-0.5">
+                                  <Clock className="h-2.5 w-2.5" /> {formatTimeAgo(session.lastActivity)}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  </ScrollArea>
+                </>
+              )}
+
+              {importing && importProgress && (
+                <div className="space-y-2 py-2">
+                  <div className="flex items-center gap-2 text-sm">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Importing {importProgress.completed + 1} of {importProgress.total}...
+                  </div>
+                  <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
+                    <div
+                      className="h-full rounded-full bg-primary transition-all duration-300"
+                      style={{ width: `${importProgress.total > 0 ? ((importProgress.completed / importProgress.total) * 100) : 0}%` }}
+                    />
+                  </div>
+                </div>
+              )}
+
+              {importDone && (
+                <div className="flex items-center gap-2 text-sm text-green-700 dark:text-green-400 py-2">
+                  <CheckCircle2 className="h-4 w-4" />
+                  Import complete!
+                </div>
+              )}
+
+              {!loadingSessions && sessions.length === 0 && (
+                <div className="py-6 text-center text-sm text-muted-foreground">
+                  No existing conversations found. That&apos;s okay — let&apos;s create your first project!
+                </div>
+              )}
+
+              <div className="flex justify-between pt-2">
+                <Button variant="ghost" onClick={() => setStep('connect')} className="gap-2" disabled={importing}>
+                  <ArrowLeft className="h-4 w-4" /> Back
+                </Button>
+                <div className="flex gap-2">
+                  {!importDone && sessions.length > 0 && (
+                    <Button variant="outline" onClick={() => setStep('create')} disabled={importing}>
+                      Skip
+                    </Button>
+                  )}
+                  {!importDone && sessions.length > 0 ? (
+                    <Button onClick={handleImport} disabled={importing || selectedKeys.size === 0}>
+                      {importing ? (
+                        <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Importing...</>
+                      ) : (
+                        <>Import {selectedKeys.size}</>
+                      )}
+                    </Button>
+                  ) : (
+                    <Button onClick={() => setStep(importDone ? 'done' : 'create')} className="gap-2">
+                      {importDone ? 'Finish' : 'Next'} <ArrowRight className="h-4 w-4" />
+                    </Button>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ── Step 4: Create first project ── */}
+          {step === 'create' && (
+            <div className="space-y-4 py-4">
+              <div className="text-center mb-4">
+                <div className="flex h-10 w-10 mx-auto items-center justify-center rounded-xl bg-green-100 dark:bg-green-950 mb-3">
+                  <Sparkles className="h-5 w-5 text-green-600" />
+                </div>
+                <h3 className="text-lg font-semibold">Create your first project</h3>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Projects are separate chat spaces with their own context.
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="ob-project">Project name</Label>
+                <Input
+                  id="ob-project"
+                  placeholder="My first project"
+                  value={projectName}
+                  onChange={(e) => setProjectName(e.target.value)}
+                  maxLength={100}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && projectName.trim()) {
+                      e.preventDefault();
+                      handleCreateProject();
+                    }
+                  }}
+                  autoFocus
+                />
+              </div>
+
+              <div className="flex justify-between pt-2">
+                <Button variant="ghost" onClick={() => setStep('import')} className="gap-2">
+                  <ArrowLeft className="h-4 w-4" /> Back
+                </Button>
+                <div className="flex gap-2">
+                  <Button variant="outline" onClick={() => setStep('done')}>Skip</Button>
+                  <Button
+                    onClick={handleCreateProject}
+                    disabled={creating || !projectName.trim()}
+                  >
+                    {creating ? (
+                      <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Creating...</>
+                    ) : (
+                      'Create & Go'
+                    )}
+                  </Button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ── Step 5: Done ── */}
+          {step === 'done' && (
+            <div className="flex flex-col items-center justify-center gap-4 py-8 text-center">
+              <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-green-100 dark:bg-green-950 text-3xl">
+                <Rocket className="h-8 w-8 text-green-600" />
+              </div>
+              <h2 className="text-2xl font-bold">You&apos;re all set!</h2>
+              <p className="max-w-sm text-muted-foreground">
+                Start chatting with your AI agent. Create projects to organize different conversations.
+              </p>
+              <Button onClick={finishOnboarding} size="lg" className="mt-2 gap-2">
+                Let&apos;s Go! <ArrowRight className="h-4 w-4" />
+              </Button>
+            </div>
+          )}
         </div>
-        <div className="flex items-center gap-2 rounded-lg border p-3">
-          <CheckCircle2 className="h-4 w-4 text-green-500 shrink-0" />
-          <span>Projects ready to use</span>
-        </div>
-        <div className="flex items-center gap-2 rounded-lg border p-3">
-          <CheckCircle2 className="h-4 w-4 text-green-500 shrink-0" />
-          <span>Secure token storage enabled</span>
-        </div>
-      </div>
-
-      <Button onClick={onComplete} size="lg" className="gap-2 w-full">
-        <Zap className="h-4 w-4" />
-        Start chatting
-      </Button>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }

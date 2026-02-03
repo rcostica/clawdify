@@ -13,7 +13,6 @@ import {
   Copy,
   Check,
   Reply,
-  CornerUpRight,
 } from 'lucide-react';
 import {
   Tooltip,
@@ -21,6 +20,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
+import { LinkPreview, extractUrls } from './link-preview';
 
 interface MessageBubbleProps {
   message: ChatMessage;
@@ -106,7 +106,13 @@ export function MessageBubble({
           }
         >
           {isUser ? (
-            <p className="whitespace-pre-wrap break-words">{message.content}</p>
+            <div>
+              <p className="whitespace-pre-wrap break-words">{message.content}</p>
+              {/* Inline image previews for uploaded images */}
+              {message.content.includes('![') && (
+                <ImagePreviews content={message.content} />
+              )}
+            </div>
           ) : (
             <div className="prose prose-sm dark:prose-invert max-w-none break-words text-left">
               <ReactMarkdown
@@ -157,6 +163,8 @@ export function MessageBubble({
               >
                 {message.content}
               </ReactMarkdown>
+              {/* Link previews for assistant messages */}
+              <LinkPreviews content={message.content} />
             </div>
           )}
         </div>
@@ -207,6 +215,61 @@ export function MessageBubble({
           </TooltipProvider>
         </div>
       </div>
+    </div>
+  );
+}
+
+/** Extract and display link previews from content */
+function LinkPreviews({ content }: { content: string }) {
+  const urls = useMemo(() => extractUrls(content), [content]);
+  if (urls.length === 0) return null;
+
+  // Show max 3 link previews
+  return (
+    <div className="mt-2 space-y-1">
+      {urls.slice(0, 3).map((url) => (
+        <LinkPreview key={url} url={url} />
+      ))}
+    </div>
+  );
+}
+
+/** Extract and display inline images from markdown image syntax */
+function ImagePreviews({ content }: { content: string }) {
+  const images = useMemo(() => {
+    const regex = /!\[([^\]]*)\]\(([^)]+)\)/g;
+    const results: { alt: string; url: string }[] = [];
+    let match: RegExpExecArray | null;
+    while ((match = regex.exec(content)) !== null) {
+      const url = match[2]!;
+      // 🔒 SECURITY: Only render http/https images, not data: or javascript:
+      if (url.startsWith('http://') || url.startsWith('https://')) {
+        results.push({ alt: match[1] ?? 'Image', url });
+      }
+    }
+    return results;
+  }, [content]);
+
+  if (images.length === 0) return null;
+
+  return (
+    <div className="mt-2 space-y-2">
+      {images.map((img, i) => (
+        <a
+          key={`${img.url}-${i}`}
+          href={img.url}
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={img.url}
+            alt={img.alt}
+            className="max-h-60 max-w-full rounded-lg"
+            loading="lazy"
+          />
+        </a>
+      ))}
     </div>
   );
 }

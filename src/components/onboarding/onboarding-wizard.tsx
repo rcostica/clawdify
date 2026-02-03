@@ -1,7 +1,8 @@
 'use client';
 
 import { useState, useCallback, useEffect, useRef } from 'react';
-import { Dialog, DialogContent } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
+import { VisuallyHidden } from '@radix-ui/react-visually-hidden';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -309,6 +310,16 @@ export function OnboardingWizard({ open, onOpenChange }: OnboardingWizardProps) 
   return (
     <Dialog open={open} onOpenChange={(v) => { if (!v) skipToEnd(); else onOpenChange(v); }}>
       <DialogContent className="sm:max-w-lg p-0 gap-0 overflow-hidden">
+        <VisuallyHidden>
+          <DialogTitle>
+            {step === 'welcome' && 'Welcome to Clawdify'}
+            {step === 'choose-path' && 'Choose your plan'}
+            {step === 'pro-setup' && 'Pro Setup'}
+            {step === 'gateway-connect' && 'Connect your Gateway'}
+            {step === 'create-project' && 'Create your first project'}
+            {step === 'done' && 'Setup complete'}
+          </DialogTitle>
+        </VisuallyHidden>
         {/* Progress dots */}
         <div className="flex items-center justify-center gap-2 pt-6 pb-2">
           {Array.from({ length: totalSteps }).map((_, i) => (

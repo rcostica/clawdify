@@ -1,27 +1,26 @@
-const testimonials = [
+import { Badge } from '@/components/ui/badge';
+
+const trustBadges = [
   {
-    quote:
-      "Clawdify replaced 3 different tools for me. The workspace concept with private gateway is exactly what I needed.",
-    author: 'Alex Chen',
-    role: 'Senior Developer',
-    company: 'Startup',
-    avatar: 'AC',
+    icon: '🔓',
+    title: 'Open Source',
+    description:
+      'The OpenClaw relay is fully open source. Inspect the code, run it yourself, contribute back.',
+    badge: 'GitHub',
   },
   {
-    quote:
-      "Finally an AI workspace that doesn't require a VPN to access my home server. Works perfectly from my phone too.",
-    author: 'Sarah Kim',
-    role: 'Indie Hacker',
-    company: 'Solo',
-    avatar: 'SK',
+    icon: '🔐',
+    title: 'E2E Encryption Planned',
+    description:
+      'End-to-end encryption is on the roadmap. Your conversations will be encrypted at rest and in transit.',
+    badge: 'Roadmap',
   },
   {
-    quote:
-      "The artifacts panel is a game changer. Live code preview while chatting with Claude? Yes please.",
-    author: 'Marcus Rivera',
-    role: 'Full-Stack Dev',
-    company: 'Agency',
-    avatar: 'MR',
+    icon: '🤖',
+    title: 'Multi-Model',
+    description:
+      'Access Claude, GPT-4, and Gemini from one workspace. Switch models per conversation.',
+    badge: 'Live',
   },
 ];
 
@@ -33,45 +32,35 @@ export function Testimonials() {
       <div className="mx-auto max-w-6xl px-6">
         <div className="text-center">
           <p className="text-sm font-semibold uppercase tracking-widest text-violet-400">
-            Testimonials
+            Trusted in Open Beta
           </p>
           <h2 className="mt-4 text-3xl font-bold tracking-tight sm:text-4xl">
-            Loved by developers
+            Built on transparency
           </h2>
+          <p className="mx-auto mt-4 max-w-2xl text-muted-foreground">
+            Clawdify is built in the open. No black boxes, no data lock-in.
+          </p>
         </div>
 
         <div className="mt-16 grid gap-6 md:grid-cols-3">
-          {testimonials.map((testimonial) => (
+          {trustBadges.map((item) => (
             <div
-              key={testimonial.author}
-              className="relative rounded-xl border border-border/50 bg-card/50 p-6 transition-all duration-300 hover:border-violet-500/20 hover:bg-card/80"
+              key={item.title}
+              className="relative rounded-xl border border-border/50 bg-card/50 p-6 text-center transition-all duration-300 hover:border-violet-500/20 hover:bg-card/80"
             >
-              {/* Quote icon */}
-              <svg
-                className="mb-4 h-8 w-8 text-violet-500/20"
-                fill="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path d="M14.017 21v-7.391c0-5.704 3.731-9.57 8.983-10.609l.995 2.151c-2.432.917-3.995 3.638-3.995 5.849h4v10H14.017zM0 21v-7.391c0-5.704 3.731-9.57 8.983-10.609l.995 2.151C7.546 6.068 5.983 8.789 5.983 11H10v10H0z" />
-              </svg>
-
-              <p className="text-sm leading-relaxed text-muted-foreground">
-                &ldquo;{testimonial.quote}&rdquo;
-              </p>
-
-              <div className="mt-6 flex items-center gap-3">
-                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-violet-500 to-indigo-500 text-xs font-bold text-white">
-                  {testimonial.avatar}
-                </div>
-                <div>
-                  <div className="text-sm font-medium">
-                    {testimonial.author}
-                  </div>
-                  <div className="text-xs text-muted-foreground">
-                    {testimonial.role} @ {testimonial.company}
-                  </div>
-                </div>
+              <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-violet-500/10 text-3xl">
+                {item.icon}
               </div>
+              <Badge
+                variant="secondary"
+                className="mb-3 text-[10px] uppercase tracking-wider"
+              >
+                {item.badge}
+              </Badge>
+              <h3 className="font-semibold">{item.title}</h3>
+              <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
+                {item.description}
+              </p>
             </div>
           ))}
         </div>

@@ -27,15 +27,15 @@ export function Hero() {
         </div>
 
         <h1 className="mx-auto max-w-4xl text-4xl font-bold tracking-tight sm:text-5xl md:text-6xl lg:text-7xl">
-          Your AI workspace,{' '}
+          Stop juggling{' '}
           <span className="bg-gradient-to-r from-violet-400 via-indigo-400 to-purple-400 bg-clip-text text-transparent">
-            beautifully crafted
+            AI tabs.
           </span>
         </h1>
 
         <p className="mx-auto mt-6 max-w-2xl text-lg text-muted-foreground md:text-xl">
-          Clawdify gives you a premium AI workspace that works from any device.
-          Private, fast, and built for people who ship.
+          One workspace for Claude, GPT-4, and Gemini — private,
+          project-organized, and accessible from any device.
         </p>
 
         <div className="mt-10 flex flex-col items-center gap-4 sm:flex-row sm:justify-center">
@@ -47,7 +47,7 @@ export function Hero() {
               Start Building — It&apos;s Free
             </Button>
           </Link>
-          <Link href="#features">
+          <Link href="#how-it-works">
             <Button variant="outline" size="lg" className="h-12 px-8 text-base">
               See How It Works
             </Button>

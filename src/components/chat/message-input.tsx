@@ -216,7 +216,9 @@ export function MessageInput({
           </div>
 
           {/* Textarea */}
+          <label htmlFor="chat-message-input" className="sr-only">Message</label>
           <textarea
+            id="chat-message-input"
             ref={textareaRef}
             value={content}
             onChange={(e) => setContent(e.target.value)}

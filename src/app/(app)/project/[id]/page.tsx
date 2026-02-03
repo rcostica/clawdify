@@ -19,7 +19,7 @@ import {
 } from '@/components/ui/resizable';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { WifiOff, Search, PanelRightClose, PanelRightOpen } from 'lucide-react';
+import { WifiOff, Search, PanelRightClose, PanelRightOpen, FolderOpen, ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
 import { toast } from 'sonner';
 import { MessageSearch } from '@/components/chat/message-search';
@@ -152,10 +152,32 @@ export default function ProjectPage() {
     setShowArtifacts(true);
   }, []);
 
+  // Handle suggestion chip click — send the suggestion directly
+  const handleSuggestionClick = useCallback(
+    (text: string) => {
+      void handleSend(text);
+    },
+    [handleSend],
+  );
+
   if (!project) {
     return (
-      <div className="flex h-full items-center justify-center text-muted-foreground">
-        <p>Project not found</p>
+      <div className="flex h-full flex-col items-center justify-center gap-4 p-8 text-center">
+        <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-muted">
+          <FolderOpen className="h-6 w-6 text-muted-foreground" />
+        </div>
+        <div>
+          <h3 className="font-semibold">Project not found</h3>
+          <p className="mt-1 text-sm text-muted-foreground">
+            This project may have been deleted or the link is incorrect.
+          </p>
+        </div>
+        <Link href="/dashboard">
+          <Button variant="outline" className="gap-2">
+            <ArrowLeft className="h-4 w-4" />
+            Back to Dashboard
+          </Button>
+        </Link>
       </div>
     );
   }
@@ -242,6 +264,7 @@ export default function ProjectPage() {
         loading={loading}
         projectColor={project.color}
         onReply={setReplyTo}
+        onSuggestionClick={handleSuggestionClick}
       />
 
       {/* Input */}

@@ -10,6 +10,7 @@ const tiers = [
     description: 'Perfect for getting started and personal projects.',
     cta: 'Get Started Free',
     ctaVariant: 'outline' as const,
+    ctaHref: '/signup',
     highlighted: false,
     features: [
       'Gemini Flash model',
@@ -27,6 +28,7 @@ const tiers = [
     description: 'For developers who need the best models and full features.',
     cta: 'Start Pro Trial',
     ctaVariant: 'default' as const,
+    ctaHref: '/signup',
     highlighted: true,
     badge: 'Most Popular',
     features: [
@@ -45,8 +47,9 @@ const tiers = [
     price: '$25',
     period: '/seat/mo',
     description: 'Collaboration features for teams that build together.',
-    cta: 'Contact Sales',
+    cta: 'Join Waitlist',
     ctaVariant: 'outline' as const,
+    ctaHref: 'mailto:hello@clawdify.app',
     highlighted: false,
     features: [
       'Everything in Pro',
@@ -136,7 +139,7 @@ export function PricingTable() {
                 ))}
               </ul>
 
-              <Link href="/signup" className="mt-auto">
+              <Link href={tier.ctaHref} className="mt-auto">
                 <Button
                   variant={tier.ctaVariant}
                   className={`w-full ${
@@ -150,6 +153,22 @@ export function PricingTable() {
               </Link>
             </div>
           ))}
+        </div>
+
+        {/* Self-hosted footnote */}
+        <div className="mt-10 rounded-xl border border-border/50 bg-card/50 p-6 text-center">
+          <p className="text-sm font-medium">
+            🔌 Already running OpenClaw?{' '}
+            <span className="text-muted-foreground">
+              Connect your own Gateway — free. No subscription required for
+              self-hosted setups.
+            </span>
+          </p>
+          <Link href="/signup" className="mt-3 inline-block">
+            <Button variant="outline" size="sm">
+              Connect Your Gateway
+            </Button>
+          </Link>
         </div>
       </div>
     </section>

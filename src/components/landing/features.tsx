@@ -1,51 +1,51 @@
 const features = [
   {
     icon: '🔒',
-    title: 'End-to-end privacy',
+    title: 'Your conversations never leave your machine',
     description:
       'Your AI, your data. Conversations stay on your gateway — we never see them.',
   },
   {
     icon: '⚡',
-    title: 'Works from any device',
+    title: 'Start on laptop, finish on phone',
     description:
       'No VPN, no Tailscale, no port forwarding. Just open your browser and go.',
   },
   {
     icon: '📁',
-    title: 'Project-based workspaces',
+    title: 'Stop losing conversations in endless chat history',
     description:
       'Organize conversations by project. Each workspace has its own context and history.',
   },
   {
     icon: '🎨',
-    title: 'Artifacts & code preview',
+    title: 'See your code running before you copy-paste',
     description:
       'Live preview for HTML, code, and markdown artifacts right in the chat.',
   },
   {
     icon: '🔌',
-    title: 'Bring your own Gateway',
+    title: 'Run everything on your own hardware',
     description:
       'Connect your own OpenClaw gateway or use our hosted option. Your choice.',
   },
   {
     icon: '🌙',
-    title: 'Dark mode & shortcuts',
+    title: 'Built for all-day use — dark by default, keyboard-first',
     description:
-      'Built for developers. Dark-first design with keyboard shortcuts for everything.',
+      'Dark-first design with keyboard shortcuts for everything. Work comfortably for hours.',
   },
   {
     icon: '📱',
-    title: 'Mobile responsive',
+    title: 'Full-power AI from your pocket',
     description:
       'Full experience on every screen size. Chat with AI from your phone, tablet, or desktop.',
   },
   {
     icon: '🆓',
-    title: 'Free tier included',
+    title: 'Try everything free. Upgrade when you\u2019re ready.',
     description:
-      'Get started with Gemini Flash and 3 projects at no cost. Upgrade when you need more.',
+      'Get started with Gemini Flash and 3 projects at no cost. No credit card required.',
   },
 ];
 
@@ -58,7 +58,7 @@ export function Features() {
             Features
           </p>
           <h2 className="mt-4 text-3xl font-bold tracking-tight sm:text-4xl">
-            Everything you need to ship with AI
+            What makes Clawdify different
           </h2>
           <p className="mx-auto mt-4 max-w-2xl text-muted-foreground">
             A premium workspace designed for developers and creators who want

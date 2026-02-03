@@ -5,19 +5,10 @@ const footerLinks = {
   Product: [
     { label: 'Features', href: '#features' },
     { label: 'Pricing', href: '/pricing' },
-    { label: 'Changelog', href: '#' },
-    { label: 'Docs', href: '#' },
-  ],
-  Company: [
-    { label: 'About', href: '#' },
-    { label: 'Blog', href: '#' },
-    { label: 'Careers', href: '#' },
-    { label: 'Contact', href: '#' },
   ],
   Legal: [
     { label: 'Privacy', href: '#' },
     { label: 'Terms', href: '#' },
-    { label: 'Security', href: '#' },
   ],
 };
 
@@ -36,8 +27,8 @@ export function Footer() {
               <span>Clawdify</span>
             </Link>
             <p className="mt-4 text-sm leading-relaxed text-muted-foreground">
-              Your AI workspace, beautifully crafted. Private, fast, and built
-              for people who ship.
+              One workspace for Claude, GPT-4, and Gemini. Private,
+              project-organized, and accessible from any device.
             </p>
           </div>
 

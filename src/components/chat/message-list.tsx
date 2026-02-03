@@ -14,6 +14,7 @@ interface MessageListProps {
   loading: boolean;
   projectColor?: string;
   onReply?: (message: ChatMessage) => void;
+  onSuggestionClick?: (text: string) => void;
 }
 
 export function MessageList({
@@ -22,6 +23,7 @@ export function MessageList({
   loading,
   projectColor,
   onReply,
+  onSuggestionClick,
 }: MessageListProps) {
   const bottomRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -61,6 +63,7 @@ export function MessageList({
           ].map((suggestion) => (
             <button
               key={suggestion}
+              onClick={() => onSuggestionClick?.(suggestion)}
               className="rounded-full border bg-background px-3 py-1.5 text-xs transition-colors hover:bg-accent"
             >
               {suggestion}

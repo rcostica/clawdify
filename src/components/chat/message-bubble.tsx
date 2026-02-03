@@ -174,7 +174,8 @@ export function MessageBubble({
           className={cn(
             'mt-1 flex items-center gap-1 text-xs text-muted-foreground',
             isUser ? 'justify-end' : 'justify-start',
-            !hovered && 'opacity-0',
+            'opacity-0 group-hover:opacity-100 group-focus-within:opacity-100',
+            hovered && 'opacity-100',
             'transition-opacity',
           )}
         >

@@ -2,7 +2,8 @@
 
 import { Suspense, useState } from 'react';
 import { Sidebar } from '@/components/sidebar/sidebar';
-import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
+import { Sheet, SheetContent, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
+import { VisuallyHidden } from '@radix-ui/react-visually-hidden';
 import { Button } from '@/components/ui/button';
 import { Menu } from 'lucide-react';
 import { GatewayProvider } from '@/components/gateway-provider';
@@ -38,11 +39,15 @@ export default function AppLayout({
               variant="ghost"
               size="icon"
               className="fixed left-2 top-2 z-40 md:hidden"
+              aria-label="Open navigation menu"
             >
               <Menu className="h-5 w-5" />
             </Button>
           </SheetTrigger>
           <SheetContent side="left" className="w-64 p-0">
+            <VisuallyHidden>
+              <SheetTitle>Navigation</SheetTitle>
+            </VisuallyHidden>
             <Sidebar />
           </SheetContent>
         </Sheet>

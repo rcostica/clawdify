@@ -3,21 +3,21 @@ import { LandingNav } from '@/components/landing/nav';
 import { Footer } from '@/components/landing/footer';
 
 export const metadata: Metadata = {
-  title: 'Clawdify — Your AI Workspace, Beautifully Crafted',
+  title: 'Clawdify — One AI Workspace for Claude, GPT-4 & Gemini',
   description:
-    'A premium AI workspace that works from any device. Private, fast, and built for developers who ship. Start free.',
+    'One workspace for Claude, GPT-4, and Gemini — private, project-organized, and accessible from any device. Start free.',
   openGraph: {
-    title: 'Clawdify — Your AI Workspace, Beautifully Crafted',
+    title: 'Clawdify — One AI Workspace for Claude, GPT-4 & Gemini',
     description:
-      'A premium AI workspace that works from any device. Private, fast, and built for developers who ship.',
+      'One workspace for Claude, GPT-4, and Gemini — private, project-organized, and accessible from any device.',
     type: 'website',
     siteName: 'Clawdify',
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'Clawdify — Your AI Workspace, Beautifully Crafted',
+    title: 'Clawdify — One AI Workspace for Claude, GPT-4 & Gemini',
     description:
-      'A premium AI workspace that works from any device. Private, fast, and built for developers who ship.',
+      'One workspace for Claude, GPT-4, and Gemini — private, project-organized, and accessible from any device.',
   },
 };
 

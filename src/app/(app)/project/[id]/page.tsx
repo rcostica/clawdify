@@ -1,20 +1,29 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useMemo } from 'react';
 import { useParams } from 'next/navigation';
 import { useProjectStore } from '@/stores/project-store';
 import { useChatStore, type ChatMessage } from '@/stores/chat-store';
 import { useGatewayStore } from '@/stores/gateway-store';
 import { useChat } from '@/lib/gateway/hooks';
 import { loadPersistedMessages, persistMessage } from '@/lib/messages';
+import { detectArtifacts, type DetectedArtifact } from '@/lib/artifacts/detector';
+import { persistArtifacts } from '@/lib/artifacts/persistence';
 import { MessageList } from '@/components/chat/message-list';
 import { MessageInput } from '@/components/chat/message-input';
+import { ArtifactPanel } from '@/components/artifacts/artifact-panel';
+import {
+  ResizablePanelGroup,
+  ResizablePanel,
+  ResizableHandle,
+} from '@/components/ui/resizable';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { WifiOff, Settings, Search } from 'lucide-react';
+import { WifiOff, Search, PanelRightClose, PanelRightOpen } from 'lucide-react';
 import Link from 'next/link';
 import { toast } from 'sonner';
 import { MessageSearch } from '@/components/chat/message-search';
+import { cn } from '@/lib/utils';
 
 export default function ProjectPage() {
   const { id: projectId } = useParams<{ id: string }>();
@@ -30,6 +39,11 @@ export default function ProjectPage() {
   const [initialized, setInitialized] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
 
+  // Artifact panel state
+  const [showArtifacts, setShowArtifacts] = useState(false);
+  const [selectedArtifactId, setSelectedArtifactId] = useState<string | undefined>();
+  const [allArtifacts, setAllArtifacts] = useState<DetectedArtifact[]>([]);
+
   const sessionKey = project?.sessionKey ?? '';
   const {
     messages,
@@ -37,7 +51,6 @@ export default function ProjectPage() {
     loading,
     sendMessage,
     abortGeneration,
-    loadHistory,
   } = useChat(projectId, sessionKey);
 
   // Set active project
@@ -65,6 +78,26 @@ export default function ProjectPage() {
       mounted = false;
     };
   }, [projectId, initialized, setMessages]);
+
+  // Detect artifacts from all messages
+  const detectedArtifacts = useMemo(() => {
+    const artifacts: DetectedArtifact[] = [];
+    for (const msg of messages) {
+      if (msg.role === 'assistant') {
+        artifacts.push(...detectArtifacts(msg.content));
+      }
+    }
+    // Also detect from streaming content
+    if (streaming?.content) {
+      artifacts.push(...detectArtifacts(streaming.content));
+    }
+    return artifacts;
+  }, [messages, streaming?.content]);
+
+  // Update allArtifacts when detection changes
+  useEffect(() => {
+    setAllArtifacts(detectedArtifacts);
+  }, [detectedArtifacts]);
 
   const handleSend = useCallback(
     async (content: string) => {
@@ -97,16 +130,27 @@ export default function ProjectPage() {
     }
   }, [abortGeneration]);
 
-  // Persist assistant messages when they finalize
+  // Persist assistant messages when they finalize + detect artifacts
   const lastMessageCount = messages.length;
   useEffect(() => {
     if (lastMessageCount > 0) {
       const lastMsg = messages[lastMessageCount - 1];
       if (lastMsg && lastMsg.role === 'assistant' && !lastMsg.isStreaming) {
         persistMessage(projectId, lastMsg).catch(console.error);
+        // Persist artifacts
+        const artifacts = detectArtifacts(lastMsg.content);
+        if (artifacts.length > 0) {
+          persistArtifacts(projectId, lastMsg.id, artifacts).catch(console.error);
+        }
       }
     }
   }, [lastMessageCount, messages, projectId]);
+
+  // Open artifact when clicking on one in chat
+  const handleOpenArtifact = useCallback((artifact: DetectedArtifact) => {
+    setSelectedArtifactId(artifact.id);
+    setShowArtifacts(true);
+  }, []);
 
   if (!project) {
     return (
@@ -116,7 +160,7 @@ export default function ProjectPage() {
     );
   }
 
-  return (
+  const chatContent = (
     <div className="flex h-full flex-col">
       {/* Chat header */}
       <div className="flex items-center gap-3 border-b px-4 py-3">
@@ -129,7 +173,7 @@ export default function ProjectPage() {
             </p>
           )}
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5">
           <Button
             variant="ghost"
             size="icon"
@@ -138,6 +182,22 @@ export default function ProjectPage() {
           >
             <Search className="h-4 w-4" />
           </Button>
+
+          {allArtifacts.length > 0 && (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8"
+              onClick={() => setShowArtifacts(!showArtifacts)}
+            >
+              {showArtifacts ? (
+                <PanelRightClose className="h-4 w-4" />
+              ) : (
+                <PanelRightOpen className="h-4 w-4" />
+              )}
+            </Button>
+          )}
+
           {!isConnected && (
             <Link href="/settings">
               <Badge
@@ -197,4 +257,26 @@ export default function ProjectPage() {
       />
     </div>
   );
+
+  // Desktop: split pane with artifacts
+  if (showArtifacts && allArtifacts.length > 0) {
+    return (
+      <ResizablePanelGroup direction="horizontal">
+        <ResizablePanel defaultSize={60} minSize={30}>
+          {chatContent}
+        </ResizablePanel>
+        <ResizableHandle withHandle />
+        <ResizablePanel defaultSize={40} minSize={25}>
+          <ArtifactPanel
+            artifacts={allArtifacts}
+            selectedId={selectedArtifactId}
+            onSelect={setSelectedArtifactId}
+            onClose={() => setShowArtifacts(false)}
+          />
+        </ResizablePanel>
+      </ResizablePanelGroup>
+    );
+  }
+
+  return chatContent;
 }

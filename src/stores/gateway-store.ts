@@ -1,5 +1,9 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import type {
+  GatewayConnectionConfig,
+  HelloOk,
+} from '@/lib/gateway/types';
 
 export type ConnectionStatus =
   | 'disconnected'
@@ -7,39 +11,6 @@ export type ConnectionStatus =
   | 'handshaking'
   | 'connected'
   | 'error';
-
-export interface GatewayConnectionConfig {
-  url: string;
-  token?: string;
-  password?: string;
-  insecureAuth?: boolean;
-}
-
-export interface HelloOk {
-  type: 'hello-ok';
-  protocol: number;
-  server: {
-    version: string;
-    commit?: string;
-    host?: string;
-    connId: string;
-  };
-  features: {
-    methods: string[];
-    events: string[];
-  };
-  snapshot: unknown;
-  auth?: {
-    deviceToken: string;
-    role: string;
-    scopes: string[];
-  };
-  policy: {
-    maxPayload: number;
-    maxBufferedBytes: number;
-    tickIntervalMs: number;
-  };
-}
 
 interface GatewayState {
   status: ConnectionStatus;
@@ -51,6 +22,8 @@ interface GatewayState {
   setConfig: (config: GatewayConnectionConfig | null) => void;
   setHello: (hello: HelloOk | null) => void;
   setError: (message: string | null) => void;
+  /** Load connection config from Supabase (decrypts token server-side) */
+  loadFromSupabase: () => Promise<void>;
 }
 
 export const useGatewayStore = create<GatewayState>()(
@@ -62,10 +35,45 @@ export const useGatewayStore = create<GatewayState>()(
       errorMessage: null,
 
       setStatus: (status) =>
-        set({ status, errorMessage: status === 'error' ? undefined : null }),
+        set({
+          status,
+          errorMessage: status === 'error' ? undefined : null,
+        }),
       setConfig: (config) => set({ config }),
       setHello: (hello) => set({ hello }),
-      setError: (errorMessage) => set({ errorMessage }),
+      setError: (errorMessage) => set({ errorMessage, status: 'error' }),
+
+      loadFromSupabase: async () => {
+        try {
+          const { createClient } = await import('@/lib/supabase/client');
+          const supabase = createClient();
+          const { data, error } = await supabase.rpc(
+            'get_gateway_connection',
+            { p_name: 'Default' },
+          );
+          if (
+            !error &&
+            data &&
+            Array.isArray(data) &&
+            data.length > 0
+          ) {
+            const conn = data[0] as {
+              gateway_url: string;
+              gateway_token?: string | null;
+            };
+            if (conn.gateway_url) {
+              set({
+                config: {
+                  url: conn.gateway_url,
+                  token: conn.gateway_token ?? undefined,
+                },
+              });
+            }
+          }
+        } catch (err) {
+          console.warn('[gateway-store] Failed to load from Supabase:', err);
+        }
+      },
     }),
     {
       name: 'clawdify-gateway',

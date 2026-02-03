@@ -1,13 +1,13 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { createServerClient } from '@supabase/ssr';
 
-const publicPaths = ['/login', '/signup', '/api/auth/callback'];
+const publicPaths = ['/login', '/signup', '/api/auth/callback', '/pricing'];
 
 export async function updateSession(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
-  // Allow public paths
-  if (publicPaths.some((p) => pathname.startsWith(p))) {
+  // Allow public paths (exact or prefix match)
+  if (publicPaths.some((p) => pathname === p || pathname.startsWith(p + '/'))) {
     return NextResponse.next();
   }
 
@@ -37,6 +37,16 @@ export async function updateSession(request: NextRequest) {
   const {
     data: { user },
   } = await supabase.auth.getUser();
+
+  // Root path: unauthenticated → marketing page, authenticated → dashboard
+  if (pathname === '/') {
+    if (user) {
+      const url = request.nextUrl.clone();
+      url.pathname = '/dashboard';
+      return NextResponse.redirect(url);
+    }
+    return supabaseResponse;
+  }
 
   if (!user) {
     const url = request.nextUrl.clone();

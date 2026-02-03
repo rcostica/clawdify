@@ -1,0 +1,19 @@
+app = "clawdify-relay"
+primary_region = "iad"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = false
+  auto_start_machines = true
+  min_machines_running = 1
+
+[env]
+  PORT = "8080"
+  ROOM_TTL_MS = "86400000"
+  GRACE_PERIOD_MS = "30000"
+  MAX_MESSAGE_SIZE = "1048576"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "256mb"

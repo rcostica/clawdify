@@ -1,18 +1,20 @@
 'use client';
 
-import { useState, useCallback, useEffect } from 'react';
-import {
-  Dialog,
-  DialogContent,
-} from '@/components/ui/dialog';
+import { useState, useCallback, useEffect, useRef } from 'react';
+import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
-import { ScrollArea } from '@/components/ui/scroll-area';
-import { Skeleton } from '@/components/ui/skeleton';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import {
   Loader2,
   CheckCircle2,
@@ -24,11 +26,10 @@ import {
   EyeOff,
   Sparkles,
   Wifi,
-  Download,
   Rocket,
-  MessageSquare,
-  Clock,
-  SkipForward,
+  Star,
+  Key,
+  CreditCard,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useGatewayStore } from '@/stores/gateway-store';
@@ -37,12 +38,8 @@ import { validateGatewayUrl } from '@/lib/gateway/types';
 import { createClient } from '@/lib/supabase/client';
 import { createProject, fetchProjects } from '@/lib/projects';
 import { useProjectStore } from '@/stores/project-store';
-import {
-  fetchGatewaySessions,
-  importSessions,
-  type GatewaySession,
-  type ImportProgress,
-} from '@/lib/gateway/importer';
+import { useUserStore } from '@/stores/user-store';
+import { API_PROVIDERS, type ApiProviderId } from '@/lib/billing/plans';
 import { useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
 
@@ -61,18 +58,32 @@ export function completeOnboarding(): void {
   }
 }
 
-type Step = 'welcome' | 'connect' | 'import' | 'create' | 'done';
+type Step = 'welcome' | 'choose-path' | 'pro-setup' | 'gateway-connect' | 'create-project' | 'done';
+type OnboardingPath = 'free' | 'pro' | 'gateway';
 
 interface OnboardingWizardProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }
 
+// Emoji options for project creation
+const EMOJI_OPTIONS = ['📁', '🚀', '💡', '🎨', '🔬', '📊', '🤖', '✨', '🐾', '🌟', '🔧', '📝'];
+
 export function OnboardingWizard({ open, onOpenChange }: OnboardingWizardProps) {
   const [step, setStep] = useState<Step>('welcome');
+  const [path, setPath] = useState<OnboardingPath | null>(null);
+  const [direction, setDirection] = useState<'forward' | 'backward'>('forward');
   const router = useRouter();
 
-  // Connection state
+  // Pro setup state
+  const [proOption, setProOption] = useState<'api-key' | 'credits' | null>(null);
+  const [apiProvider, setApiProvider] = useState<ApiProviderId>('anthropic');
+  const [apiKey, setApiKey] = useState('');
+  const [showApiKey, setShowApiKey] = useState(false);
+  const [validatingKey, setValidatingKey] = useState(false);
+  const [keyValid, setKeyValid] = useState<boolean | null>(null);
+
+  // Gateway connection state
   const [gatewayUrl, setGatewayUrl] = useState(
     process.env.NEXT_PUBLIC_DEFAULT_GATEWAY_URL || '',
   );
@@ -84,25 +95,27 @@ export function OnboardingWizard({ open, onOpenChange }: OnboardingWizardProps) 
   const [testing, setTesting] = useState(false);
   const [connectionOk, setConnectionOk] = useState(false);
 
-  // Import state
-  const [sessions, setSessions] = useState<GatewaySession[]>([]);
-  const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
-  const [loadingSessions, setLoadingSessions] = useState(false);
-  const [importing, setImporting] = useState(false);
-  const [importProgress, setImportProgress] = useState<ImportProgress | null>(null);
-  const [importDone, setImportDone] = useState(false);
-
   // Create project state
-  const [projectName, setProjectName] = useState('');
+  const [projectName, setProjectName] = useState('My Workspace');
+  const [projectEmoji, setProjectEmoji] = useState('🐾');
   const [creating, setCreating] = useState(false);
+
+  // Done state
+  const doneTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const { connect, testConnection } = useGatewayConnection();
   const isConnected = useGatewayStore((s) => s.status === 'connected');
   const setProjects = useProjectStore((s) => s.setProjects);
   const addProject = useProjectStore((s) => s.addProject);
+  const setUserPlan = useUserStore((s) => s.setPlan);
+  const setOnboardingCompleted = useUserStore((s) => s.setOnboardingCompleted);
+  const setOnboardingPath = useUserStore((s) => s.setOnboardingPath);
+  const setApiProviderStore = useUserStore((s) => s.setApiProvider);
+  const setApiKeySet = useUserStore((s) => s.setApiKeySet);
+  const setGatewayMode = useUserStore((s) => s.setGatewayMode);
   const supabase = createClient();
 
-  // Validate URL
+  // Validate gateway URL
   useEffect(() => {
     if (!gatewayUrl) {
       setUrlError(null);
@@ -114,26 +127,80 @@ export function OnboardingWizard({ open, onOpenChange }: OnboardingWizardProps) 
     setUrlInsecure(result.isInsecure ?? false);
   }, [gatewayUrl]);
 
-  // Load sessions when reaching import step
+  // Auto-redirect on done
   useEffect(() => {
-    if (step === 'import' && isConnected && sessions.length === 0 && !loadingSessions) {
-      loadSessions();
+    if (step === 'done') {
+      doneTimerRef.current = setTimeout(() => {
+        finishOnboarding();
+      }, 2000);
     }
-  }, [step, isConnected]); // eslint-disable-line react-hooks/exhaustive-deps
+    return () => {
+      if (doneTimerRef.current) clearTimeout(doneTimerRef.current);
+    };
+  }, [step]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const loadSessions = useCallback(async () => {
-    setLoadingSessions(true);
+  // ─── Navigation helpers ────────────────────────────────────────────────────
+
+  const goTo = (nextStep: Step, dir: 'forward' | 'backward' = 'forward') => {
+    setDirection(dir);
+    setStep(nextStep);
+  };
+
+  const handleChooseFree = () => {
+    setPath('free');
+    setUserPlan('free');
+    setGatewayMode('hosted');
+    goTo('create-project');
+  };
+
+  const handleChoosePro = () => {
+    setPath('pro');
+    setGatewayMode('hosted');
+    goTo('pro-setup');
+  };
+
+  const handleChooseGateway = () => {
+    setPath('gateway');
+    setGatewayMode('byog');
+    goTo('gateway-connect');
+  };
+
+  // ─── Pro setup handlers ────────────────────────────────────────────────────
+
+  const handleValidateApiKey = async () => {
+    if (!apiKey.trim()) return;
+    setValidatingKey(true);
+    setKeyValid(null);
     try {
-      const result = await fetchGatewaySessions();
-      setSessions(result);
-      setSelectedKeys(new Set(result.map((s) => s.key)));
+      // Mock validation: check if key starts with expected prefix
+      const provider = API_PROVIDERS.find((p) => p.id === apiProvider);
+      await new Promise((resolve) => setTimeout(resolve, 1000)); // simulate network delay
+
+      if (provider && apiKey.startsWith(provider.keyPrefix)) {
+        setKeyValid(true);
+        setApiProviderStore(apiProvider);
+        setApiKeySet(true);
+        setUserPlan('pro');
+        toast.success('API key validated!');
+      } else {
+        setKeyValid(false);
+        toast.error('Invalid API key', {
+          description: `Expected key starting with "${provider?.keyPrefix ?? ''}"`,
+        });
+      }
     } catch {
-      // Sessions load failure is non-fatal for onboarding
-      setSessions([]);
+      setKeyValid(false);
+      toast.error('Validation failed');
     } finally {
-      setLoadingSessions(false);
+      setValidatingKey(false);
     }
-  }, []);
+  };
+
+  const handleProContinue = () => {
+    goTo('create-project');
+  };
+
+  // ─── Gateway connection handlers ───────────────────────────────────────────
 
   const handleTestAndConnect = async () => {
     setTesting(true);
@@ -160,7 +227,6 @@ export function OnboardingWizard({ open, onOpenChange }: OnboardingWizardProps) 
         });
       }
 
-      // Connect the main client
       connect({
         url: gatewayUrl,
         token: gatewayToken || undefined,
@@ -177,36 +243,21 @@ export function OnboardingWizard({ open, onOpenChange }: OnboardingWizardProps) 
     }
   };
 
-  const handleImport = useCallback(async () => {
-    const selected = sessions.filter((s) => selectedKeys.has(s.key));
-    if (selected.length === 0) return;
-
-    setImporting(true);
-    try {
-      const result = await importSessions(selected, (p) => setImportProgress(p));
-      if (result.imported > 0) {
-        const projects = await fetchProjects();
-        setProjects(projects);
-        toast.success(`Imported ${result.imported} conversation${result.imported > 1 ? 's' : ''}`);
-      }
-      setImportDone(true);
-    } catch (err) {
-      toast.error('Import failed', {
-        description: err instanceof Error ? err.message : 'Unknown error',
-      });
-    } finally {
-      setImporting(false);
-    }
-  }, [sessions, selectedKeys, setProjects]);
+  // ─── Create project handler ────────────────────────────────────────────────
 
   const handleCreateProject = async () => {
     if (!projectName.trim()) return;
     setCreating(true);
     try {
-      const project = await createProject({ name: projectName.trim() });
+      const project = await createProject({
+        name: projectName.trim(),
+        icon: projectEmoji,
+      });
       addProject(project);
+      const projects = await fetchProjects();
+      setProjects(projects);
       router.push(`/project/${project.id}`);
-      finishOnboarding();
+      goTo('done');
     } catch (err) {
       toast.error('Failed to create project', {
         description: err instanceof Error ? err.message : 'Unknown error',
@@ -216,52 +267,53 @@ export function OnboardingWizard({ open, onOpenChange }: OnboardingWizardProps) 
     }
   };
 
-  const finishOnboarding = () => {
+  // ─── Finish ────────────────────────────────────────────────────────────────
+
+  const finishOnboarding = useCallback(() => {
     completeOnboarding();
+    setOnboardingCompleted(true);
+    if (path) setOnboardingPath(path);
     onOpenChange(false);
-  };
+  }, [onOpenChange, path, setOnboardingCompleted, setOnboardingPath]);
 
   const skipToEnd = () => {
     completeOnboarding();
+    setOnboardingCompleted(true);
     onOpenChange(false);
   };
 
-  const toggleSelection = (key: string) => {
-    setSelectedKeys((prev) => {
-      const next = new Set(prev);
-      if (next.has(key)) next.delete(key);
-      else next.add(key);
-      return next;
-    });
-  };
+  // ─── Step progress ─────────────────────────────────────────────────────────
 
-  const formatTimeAgo = (dateStr?: string) => {
-    if (!dateStr) return '';
-    const date = new Date(dateStr);
-    if (isNaN(date.getTime())) return '';
-    const diffMs = Date.now() - date.getTime();
-    const diffMin = Math.floor(diffMs / 60000);
-    if (diffMin < 1) return 'just now';
-    if (diffMin < 60) return `${diffMin}m ago`;
-    const diffHrs = Math.floor(diffMin / 60);
-    if (diffHrs < 24) return `${diffHrs}h ago`;
-    const diffDays = Math.floor(diffHrs / 24);
-    if (diffDays < 30) return `${diffDays}d ago`;
-    return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+  const getStepIndex = (): number => {
+    switch (step) {
+      case 'welcome': return 0;
+      case 'choose-path': return 1;
+      case 'pro-setup':
+      case 'gateway-connect': return 2;
+      case 'create-project': return 3;
+      case 'done': return 4;
+      default: return 0;
+    }
   };
+  const totalSteps = 5;
+  const currentIndex = getStepIndex();
 
-  // Step indicators
-  const steps: Step[] = ['welcome', 'connect', 'import', 'create', 'done'];
-  const currentIndex = steps.indexOf(step);
+  // Transition class based on direction
+  const contentClass = cn(
+    'transition-all duration-300 ease-out',
+    direction === 'forward'
+      ? 'animate-in fade-in slide-in-from-right-4'
+      : 'animate-in fade-in slide-in-from-left-4',
+  );
 
   return (
     <Dialog open={open} onOpenChange={(v) => { if (!v) skipToEnd(); else onOpenChange(v); }}>
       <DialogContent className="sm:max-w-lg p-0 gap-0 overflow-hidden">
         {/* Progress dots */}
         <div className="flex items-center justify-center gap-2 pt-6 pb-2">
-          {steps.map((s, i) => (
+          {Array.from({ length: totalSteps }).map((_, i) => (
             <div
-              key={s}
+              key={i}
               className={cn(
                 'h-1.5 rounded-full transition-all duration-300',
                 i === currentIndex ? 'w-6 bg-primary' : 'w-1.5',
@@ -272,33 +324,278 @@ export function OnboardingWizard({ open, onOpenChange }: OnboardingWizardProps) 
         </div>
 
         {/* Step content */}
-        <div className="px-6 pb-6 min-h-[300px]">
+        <div className="px-6 pb-6 min-h-[340px]">
+
           {/* ── Step 1: Welcome ── */}
           {step === 'welcome' && (
-            <div className="flex flex-col items-center justify-center gap-4 py-8 text-center">
+            <div className={cn('flex flex-col items-center justify-center gap-4 py-8 text-center', contentClass)}>
               <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-primary/10 text-3xl">
                 🐾
               </div>
-              <h2 className="text-2xl font-bold">Welcome to Clawdify!</h2>
+              <h2 className="text-2xl font-bold">Welcome to Clawdify 🐾</h2>
               <p className="max-w-sm text-muted-foreground">
-                Your workspace for OpenClaw conversations. Let&apos;s get you connected to your AI Gateway.
+                Your private AI workspace
               </p>
-              <div className="flex gap-3 mt-4">
-                <Button variant="outline" onClick={skipToEnd} className="gap-2">
-                  <SkipForward className="h-4 w-4" />
-                  Skip Setup
-                </Button>
-                <Button onClick={() => setStep('connect')} className="gap-2">
-                  Get Started
-                  <ArrowRight className="h-4 w-4" />
+              <Button onClick={() => goTo('choose-path')} size="lg" className="mt-4 gap-2">
+                Get Started
+                <ArrowRight className="h-4 w-4" />
+              </Button>
+            </div>
+          )}
+
+          {/* ── Step 2: Choose Your Path ── */}
+          {step === 'choose-path' && (
+            <div className={cn('space-y-4 py-4', contentClass)}>
+              <div className="text-center mb-4">
+                <h3 className="text-lg font-semibold">Choose your path</h3>
+                <p className="text-sm text-muted-foreground mt-1">
+                  How would you like to use Clawdify?
+                </p>
+              </div>
+
+              <div className="grid gap-3">
+                {/* Free Card */}
+                <button
+                  onClick={handleChooseFree}
+                  className="group flex items-start gap-4 rounded-xl border p-4 text-left transition-all hover:border-primary/50 hover:bg-primary/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                >
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-green-100 text-lg dark:bg-green-950">
+                    🆓
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      <h4 className="font-semibold">Free</h4>
+                    </div>
+                    <p className="mt-0.5 text-sm text-muted-foreground">
+                      Try Clawdify with Gemini Flash. No credit card needed.
+                    </p>
+                    <div className="mt-2 flex flex-wrap gap-1.5">
+                      <Badge variant="secondary" className="text-[10px]">Gemini Flash</Badge>
+                      <Badge variant="secondary" className="text-[10px]">3 projects</Badge>
+                    </div>
+                  </div>
+                  <ArrowRight className="mt-1 h-4 w-4 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />
+                </button>
+
+                {/* Pro Card */}
+                <button
+                  onClick={handleChoosePro}
+                  className="group relative flex items-start gap-4 rounded-xl border border-primary/30 p-4 text-left transition-all hover:border-primary hover:bg-primary/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                >
+                  <Badge variant="default" className="absolute -top-2 right-3 text-[10px]">
+                    Popular
+                  </Badge>
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-yellow-100 text-lg dark:bg-yellow-950">
+                    ⭐
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      <h4 className="font-semibold">Pro</h4>
+                      <span className="text-sm font-medium text-primary">$15/mo</span>
+                    </div>
+                    <p className="mt-0.5 text-sm text-muted-foreground">
+                      Claude, GPT-4, unlimited projects, voice &amp; artifacts
+                    </p>
+                    <div className="mt-2 flex flex-wrap gap-1.5">
+                      <Badge variant="secondary" className="text-[10px]">Claude</Badge>
+                      <Badge variant="secondary" className="text-[10px]">GPT-4</Badge>
+                      <Badge variant="secondary" className="text-[10px]">Unlimited</Badge>
+                    </div>
+                  </div>
+                  <ArrowRight className="mt-1 h-4 w-4 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />
+                </button>
+
+                {/* Self-Hosted Card */}
+                <button
+                  onClick={handleChooseGateway}
+                  className="group flex items-start gap-4 rounded-xl border p-4 text-left transition-all hover:border-primary/50 hover:bg-primary/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                >
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-100 text-lg dark:bg-blue-950">
+                    🔧
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      <h4 className="font-semibold">Self-Hosted</h4>
+                    </div>
+                    <p className="mt-0.5 text-sm text-muted-foreground">
+                      Connect your own OpenClaw Gateway
+                    </p>
+                    <div className="mt-2 flex flex-wrap gap-1.5">
+                      <Badge variant="secondary" className="text-[10px]">BYOG</Badge>
+                      <Badge variant="secondary" className="text-[10px]">Any model</Badge>
+                    </div>
+                  </div>
+                  <ArrowRight className="mt-1 h-4 w-4 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />
+                </button>
+              </div>
+
+              <div className="flex justify-start pt-2">
+                <Button variant="ghost" onClick={() => goTo('welcome', 'backward')} className="gap-2">
+                  <ArrowLeft className="h-4 w-4" /> Back
                 </Button>
               </div>
             </div>
           )}
 
-          {/* ── Step 2: Gateway Connection ── */}
-          {step === 'connect' && (
-            <div className="space-y-4 py-4">
+          {/* ── Step 3a: Pro Setup ── */}
+          {step === 'pro-setup' && (
+            <div className={cn('space-y-4 py-4', contentClass)}>
+              <div className="text-center mb-4">
+                <div className="flex h-10 w-10 mx-auto items-center justify-center rounded-xl bg-yellow-100 dark:bg-yellow-950 mb-3">
+                  <Star className="h-5 w-5 text-yellow-600" />
+                </div>
+                <h3 className="text-lg font-semibold">Pro Setup</h3>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Choose how to power your AI models
+                </p>
+              </div>
+
+              {/* Sub-option selection */}
+              {!proOption && (
+                <div className="grid gap-3">
+                  <button
+                    onClick={() => setProOption('api-key')}
+                    className="group flex items-center gap-3 rounded-xl border p-4 text-left transition-all hover:border-primary/50 hover:bg-primary/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                  >
+                    <Key className="h-5 w-5 shrink-0 text-muted-foreground" />
+                    <div className="flex-1">
+                      <h4 className="text-sm font-semibold">Use your own API key</h4>
+                      <p className="text-xs text-muted-foreground">
+                        Connect Anthropic, OpenAI, or Google API key
+                      </p>
+                    </div>
+                    <ArrowRight className="h-4 w-4 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />
+                  </button>
+
+                  <button
+                    disabled
+                    className="flex items-center gap-3 rounded-xl border border-dashed p-4 text-left opacity-60 cursor-not-allowed"
+                  >
+                    <CreditCard className="h-5 w-5 shrink-0 text-muted-foreground" />
+                    <div className="flex-1">
+                      <h4 className="flex items-center gap-2 text-sm font-semibold">
+                        Use Clawdify credits
+                        <Badge variant="secondary" className="text-[10px]">Coming Soon</Badge>
+                      </h4>
+                      <p className="text-xs text-muted-foreground">
+                        Pay per token — no API keys needed
+                      </p>
+                    </div>
+                  </button>
+                </div>
+              )}
+
+              {/* API Key form */}
+              {proOption === 'api-key' && (
+                <div className="space-y-3">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="ob-provider">AI Provider</Label>
+                    <Select
+                      value={apiProvider}
+                      onValueChange={(v) => {
+                        setApiProvider(v as ApiProviderId);
+                        setApiKey('');
+                        setKeyValid(null);
+                      }}
+                    >
+                      <SelectTrigger className="w-full" id="ob-provider">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {API_PROVIDERS.map((p) => (
+                          <SelectItem key={p.id} value={p.id}>
+                            {p.name} — {p.models.join(', ')}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label htmlFor="ob-api-key">API Key</Label>
+                    <div className="relative">
+                      <Input
+                        id="ob-api-key"
+                        type={showApiKey ? 'text' : 'password'}
+                        placeholder={`Enter your ${API_PROVIDERS.find((p) => p.id === apiProvider)?.name ?? ''} API key`}
+                        value={apiKey}
+                        onChange={(e) => { setApiKey(e.target.value); setKeyValid(null); }}
+                        autoComplete="off"
+                        className="pr-10"
+                      />
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="absolute right-0 top-0 h-full px-3"
+                        onClick={() => setShowApiKey(!showApiKey)}
+                      >
+                        {showApiKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                      </Button>
+                    </div>
+                    <p className="text-[11px] text-muted-foreground">
+                      🔒 Your key is encrypted and stored securely. Never stored in the browser.
+                    </p>
+                  </div>
+
+                  {keyValid === true && (
+                    <Alert className="border-green-500/50 bg-green-50 dark:bg-green-950/20">
+                      <CheckCircle2 className="h-4 w-4 text-green-600" />
+                      <AlertDescription className="text-green-700 dark:text-green-300">
+                        API key validated successfully!
+                      </AlertDescription>
+                    </Alert>
+                  )}
+                  {keyValid === false && (
+                    <Alert className="border-red-500/50 bg-red-50 dark:bg-red-950/20">
+                      <XCircle className="h-4 w-4 text-red-600" />
+                      <AlertDescription className="text-red-700 dark:text-red-300">
+                        Invalid API key. Please check and try again.
+                      </AlertDescription>
+                    </Alert>
+                  )}
+
+                  <Button
+                    onClick={handleValidateApiKey}
+                    disabled={validatingKey || !apiKey.trim()}
+                    className="w-full"
+                  >
+                    {validatingKey ? (
+                      <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Validating...</>
+                    ) : (
+                      'Validate Key'
+                    )}
+                  </Button>
+                </div>
+              )}
+
+              <div className="flex justify-between pt-2">
+                <Button
+                  variant="ghost"
+                  onClick={() => {
+                    if (proOption) {
+                      setProOption(null);
+                      setKeyValid(null);
+                    } else {
+                      goTo('choose-path', 'backward');
+                    }
+                  }}
+                  className="gap-2"
+                >
+                  <ArrowLeft className="h-4 w-4" /> Back
+                </Button>
+                {keyValid === true && (
+                  <Button onClick={handleProContinue} className="gap-2">
+                    Next <ArrowRight className="h-4 w-4" />
+                  </Button>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* ── Step 3b: Gateway Connection ── */}
+          {step === 'gateway-connect' && (
+            <div className={cn('space-y-4 py-4', contentClass)}>
               <div className="text-center mb-4">
                 <div className="flex h-10 w-10 mx-auto items-center justify-center rounded-xl bg-blue-100 dark:bg-blue-950 mb-3">
                   <Wifi className="h-5 w-5 text-blue-600" />
@@ -319,7 +616,7 @@ export function OnboardingWizard({ open, onOpenChange }: OnboardingWizardProps) 
                     onChange={(e) => setGatewayUrl(e.target.value)}
                   />
                   <p className="text-[11px] text-muted-foreground">
-                    Find this by running <code className="rounded bg-muted px-1 py-0.5 text-[10px]">openclaw status</code> on your Gateway host. Default is <code className="rounded bg-muted px-1 py-0.5 text-[10px]">ws://localhost:18789</code>. For remote access, use <code className="rounded bg-muted px-1 py-0.5 text-[10px]">wss://</code> via Tailscale.
+                    Find this by running <code className="rounded bg-muted px-1 py-0.5 text-[10px]">openclaw status</code> on your Gateway host.
                   </p>
                   {urlError && (
                     <p className="flex items-center gap-1 text-xs text-destructive">
@@ -355,9 +652,6 @@ export function OnboardingWizard({ open, onOpenChange }: OnboardingWizardProps) 
                       {showToken ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                     </Button>
                   </div>
-                  <p className="text-[11px] text-muted-foreground">
-                    Found in your OpenClaw config file at <code className="rounded bg-muted px-1 py-0.5 text-[10px]">~/.openclaw/openclaw.json</code> → <code className="rounded bg-muted px-1 py-0.5 text-[10px]">gateway.auth.token</code>. You can also run <code className="rounded bg-muted px-1 py-0.5 text-[10px]">openclaw status</code> to see it.
-                  </p>
                 </div>
 
                 <div className="flex items-center justify-between rounded-lg border p-2.5">
@@ -378,54 +672,11 @@ export function OnboardingWizard({ open, onOpenChange }: OnboardingWizardProps) 
                 )}
               </div>
 
-              {/* No gateway? */}
-              <details className="text-xs text-muted-foreground">
-                <summary className="cursor-pointer hover:text-foreground font-medium">
-                  📖 Don&apos;t have an OpenClaw Gateway yet?
-                </summary>
-                <div className="mt-2 rounded-lg border bg-muted/30 p-3 space-y-3">
-                  <div>
-                    <p className="font-medium text-foreground mb-1">1. Install OpenClaw</p>
-                    <code className="block rounded bg-background px-2 py-1.5 text-[11px]">
-                      npm install -g openclaw
-                    </code>
-                  </div>
-                  <div>
-                    <p className="font-medium text-foreground mb-1">2. Run the setup wizard</p>
-                    <code className="block rounded bg-background px-2 py-1.5 text-[11px]">
-                      openclaw onboard
-                    </code>
-                    <p className="mt-1">This will configure your AI provider (Anthropic, OpenAI, etc.) and generate your gateway token.</p>
-                  </div>
-                  <div>
-                    <p className="font-medium text-foreground mb-1">3. Start the Gateway</p>
-                    <code className="block rounded bg-background px-2 py-1.5 text-[11px]">
-                      openclaw gateway start
-                    </code>
-                    <p className="mt-1">Default URL: <code className="bg-background px-1 rounded">ws://localhost:18789</code></p>
-                  </div>
-                  <div>
-                    <p className="font-medium text-foreground mb-1">4. For remote access (recommended)</p>
-                    <p>Install <a href="https://tailscale.com" target="_blank" rel="noopener noreferrer" className="text-primary underline">Tailscale</a> on both machines, then use:</p>
-                    <code className="block rounded bg-background px-2 py-1.5 text-[11px]">
-                      openclaw gateway --tailscale serve
-                    </code>
-                    <p className="mt-1">This gives you a secure <code className="bg-background px-1 rounded">wss://</code> URL accessible from anywhere.</p>
-                  </div>
-                  <p className="pt-1">
-                    <a href="https://docs.openclaw.ai" target="_blank" rel="noopener noreferrer" className="text-primary underline">
-                      Full documentation →
-                    </a>
-                  </p>
-                </div>
-              </details>
-
               <div className="flex justify-between pt-2">
-                <Button variant="ghost" onClick={() => setStep('welcome')} className="gap-2">
+                <Button variant="ghost" onClick={() => goTo('choose-path', 'backward')} className="gap-2">
                   <ArrowLeft className="h-4 w-4" /> Back
                 </Button>
                 <div className="flex gap-2">
-                  <Button variant="outline" onClick={skipToEnd}>Skip</Button>
                   {!connectionOk ? (
                     <Button
                       onClick={handleTestAndConnect}
@@ -438,7 +689,7 @@ export function OnboardingWizard({ open, onOpenChange }: OnboardingWizardProps) 
                       )}
                     </Button>
                   ) : (
-                    <Button onClick={() => setStep('import')} className="gap-2">
+                    <Button onClick={() => goTo('create-project')} className="gap-2">
                       Next <ArrowRight className="h-4 w-4" />
                     </Button>
                   )}
@@ -447,209 +698,111 @@ export function OnboardingWizard({ open, onOpenChange }: OnboardingWizardProps) 
             </div>
           )}
 
-          {/* ── Step 3: Import ── */}
-          {step === 'import' && (
-            <div className="space-y-4 py-4">
-              <div className="text-center mb-2">
-                <div className="flex h-10 w-10 mx-auto items-center justify-center rounded-xl bg-purple-100 dark:bg-purple-950 mb-3">
-                  <Download className="h-5 w-5 text-purple-600" />
-                </div>
-                <h3 className="text-lg font-semibold">Import Conversations</h3>
-                <p className="text-sm text-muted-foreground mt-1">
-                  {sessions.length > 0
-                    ? `Found ${sessions.length} existing conversation${sessions.length > 1 ? 's' : ''}`
-                    : 'Looking for existing conversations...'}
-                </p>
-              </div>
-
-              {loadingSessions && (
-                <div className="space-y-2">
-                  {[1, 2, 3].map((i) => (
-                    <Skeleton key={i} className="h-12 w-full" />
-                  ))}
-                </div>
-              )}
-
-              {!loadingSessions && sessions.length > 0 && !importDone && (
-                <>
-                  <div className="flex items-center justify-between text-xs text-muted-foreground">
-                    <span>{selectedKeys.size} of {sessions.length} selected</span>
-                    <div className="flex gap-2">
-                      <button className="hover:underline" onClick={() => setSelectedKeys(new Set(sessions.map((s) => s.key)))}>All</button>
-                      <button className="hover:underline" onClick={() => setSelectedKeys(new Set())}>None</button>
-                    </div>
-                  </div>
-                  <ScrollArea className="max-h-[200px]">
-                    <div className="space-y-1">
-                      {sessions.map((session) => (
-                        <button
-                          key={session.key}
-                          className={cn(
-                            'flex w-full items-center gap-2.5 rounded-lg border px-2.5 py-2 text-left transition-colors',
-                            selectedKeys.has(session.key)
-                              ? 'border-primary/50 bg-primary/5'
-                              : 'border-transparent hover:bg-muted/50',
-                          )}
-                          onClick={() => toggleSelection(session.key)}
-                          disabled={importing}
-                        >
-                          <div className={cn(
-                            'flex h-4 w-4 shrink-0 items-center justify-center rounded border transition-colors',
-                            selectedKeys.has(session.key)
-                              ? 'border-primary bg-primary text-primary-foreground'
-                              : 'border-muted-foreground/30',
-                          )}>
-                            {selectedKeys.has(session.key) && (
-                              <svg className="h-2.5 w-2.5" viewBox="0 0 12 12" fill="none">
-                                <path d="M2 6l3 3 5-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                              </svg>
-                            )}
-                          </div>
-                          <div className="min-w-0 flex-1">
-                            <span className="truncate text-xs font-medium block">
-                              {session.label || session.key.split(':').pop() || session.key}
-                            </span>
-                            <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
-                              {session.messageCount !== undefined && (
-                                <span className="flex items-center gap-0.5">
-                                  <MessageSquare className="h-2.5 w-2.5" /> {session.messageCount}
-                                </span>
-                              )}
-                              {session.lastActivity && (
-                                <span className="flex items-center gap-0.5">
-                                  <Clock className="h-2.5 w-2.5" /> {formatTimeAgo(session.lastActivity)}
-                                </span>
-                              )}
-                            </div>
-                          </div>
-                        </button>
-                      ))}
-                    </div>
-                  </ScrollArea>
-                </>
-              )}
-
-              {importing && importProgress && (
-                <div className="space-y-2 py-2">
-                  <div className="flex items-center gap-2 text-sm">
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    Importing {importProgress.completed + 1} of {importProgress.total}...
-                  </div>
-                  <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
-                    <div
-                      className="h-full rounded-full bg-primary transition-all duration-300"
-                      style={{ width: `${importProgress.total > 0 ? ((importProgress.completed / importProgress.total) * 100) : 0}%` }}
-                    />
-                  </div>
-                </div>
-              )}
-
-              {importDone && (
-                <div className="flex items-center gap-2 text-sm text-green-700 dark:text-green-400 py-2">
-                  <CheckCircle2 className="h-4 w-4" />
-                  Import complete!
-                </div>
-              )}
-
-              {!loadingSessions && sessions.length === 0 && (
-                <div className="py-6 text-center text-sm text-muted-foreground">
-                  No existing conversations found. That&apos;s okay — let&apos;s create your first project!
-                </div>
-              )}
-
-              <div className="flex justify-between pt-2">
-                <Button variant="ghost" onClick={() => setStep('connect')} className="gap-2" disabled={importing}>
-                  <ArrowLeft className="h-4 w-4" /> Back
-                </Button>
-                <div className="flex gap-2">
-                  {!importDone && sessions.length > 0 && (
-                    <Button variant="outline" onClick={() => setStep('create')} disabled={importing}>
-                      Skip
-                    </Button>
-                  )}
-                  {!importDone && sessions.length > 0 ? (
-                    <Button onClick={handleImport} disabled={importing || selectedKeys.size === 0}>
-                      {importing ? (
-                        <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Importing...</>
-                      ) : (
-                        <>Import {selectedKeys.size}</>
-                      )}
-                    </Button>
-                  ) : (
-                    <Button onClick={() => setStep(importDone ? 'done' : 'create')} className="gap-2">
-                      {importDone ? 'Finish' : 'Next'} <ArrowRight className="h-4 w-4" />
-                    </Button>
-                  )}
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* ── Step 4: Create first project ── */}
-          {step === 'create' && (
-            <div className="space-y-4 py-4">
+          {/* ── Step 4: Create First Project ── */}
+          {step === 'create-project' && (
+            <div className={cn('space-y-4 py-4', contentClass)}>
               <div className="text-center mb-4">
                 <div className="flex h-10 w-10 mx-auto items-center justify-center rounded-xl bg-green-100 dark:bg-green-950 mb-3">
                   <Sparkles className="h-5 w-5 text-green-600" />
                 </div>
                 <h3 className="text-lg font-semibold">Create your first project</h3>
                 <p className="text-sm text-muted-foreground mt-1">
-                  Projects are separate chat spaces with their own context.
+                  Projects are separate workspaces with their own context.
                 </p>
               </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="ob-project">Project name</Label>
-                <Input
-                  id="ob-project"
-                  placeholder="My first project"
-                  value={projectName}
-                  onChange={(e) => setProjectName(e.target.value)}
-                  maxLength={100}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' && projectName.trim()) {
-                      e.preventDefault();
-                      handleCreateProject();
-                    }
-                  }}
-                  autoFocus
-                />
+              <div className="space-y-3">
+                <div className="space-y-1.5">
+                  <Label htmlFor="ob-project">Project name</Label>
+                  <Input
+                    id="ob-project"
+                    placeholder="My Workspace"
+                    value={projectName}
+                    onChange={(e) => setProjectName(e.target.value)}
+                    maxLength={100}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && projectName.trim()) {
+                        e.preventDefault();
+                        void handleCreateProject();
+                      }
+                    }}
+                    autoFocus
+                  />
+                </div>
+
+                {/* Emoji picker */}
+                <div className="space-y-1.5">
+                  <Label>Icon</Label>
+                  <div className="flex flex-wrap gap-1.5">
+                    {EMOJI_OPTIONS.map((emoji) => (
+                      <button
+                        key={emoji}
+                        type="button"
+                        onClick={() => setProjectEmoji(emoji)}
+                        className={cn(
+                          'flex h-9 w-9 items-center justify-center rounded-lg border text-lg transition-all',
+                          projectEmoji === emoji
+                            ? 'border-primary bg-primary/10 ring-1 ring-primary/20'
+                            : 'border-transparent hover:bg-muted',
+                        )}
+                      >
+                        {emoji}
+                      </button>
+                    ))}
+                  </div>
+                </div>
               </div>
 
               <div className="flex justify-between pt-2">
-                <Button variant="ghost" onClick={() => setStep('import')} className="gap-2">
+                <Button
+                  variant="ghost"
+                  onClick={() => {
+                    const backStep: Step =
+                      path === 'free' ? 'choose-path' :
+                      path === 'pro' ? 'pro-setup' :
+                      'gateway-connect';
+                    goTo(backStep, 'backward');
+                  }}
+                  className="gap-2"
+                >
                   <ArrowLeft className="h-4 w-4" /> Back
                 </Button>
-                <div className="flex gap-2">
-                  <Button variant="outline" onClick={() => setStep('done')}>Skip</Button>
-                  <Button
-                    onClick={handleCreateProject}
-                    disabled={creating || !projectName.trim()}
-                  >
-                    {creating ? (
-                      <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Creating...</>
-                    ) : (
-                      'Create & Go'
-                    )}
-                  </Button>
-                </div>
+                <Button
+                  onClick={() => void handleCreateProject()}
+                  disabled={creating || !projectName.trim()}
+                  size="lg"
+                  className="gap-2"
+                >
+                  {creating ? (
+                    <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Creating...</>
+                  ) : (
+                    <>Let&apos;s Go! <Rocket className="h-4 w-4" /></>
+                  )}
+                </Button>
               </div>
             </div>
           )}
 
           {/* ── Step 5: Done ── */}
           {step === 'done' && (
-            <div className="flex flex-col items-center justify-center gap-4 py-8 text-center">
-              <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-green-100 dark:bg-green-950 text-3xl">
-                <Rocket className="h-8 w-8 text-green-600" />
+            <div className={cn('flex flex-col items-center justify-center gap-4 py-8 text-center', contentClass)}>
+              {/* Animated checkmark */}
+              <div className="flex h-16 w-16 items-center justify-center rounded-full bg-green-100 dark:bg-green-950 animate-in zoom-in-50 duration-500">
+                <CheckCircle2 className="h-8 w-8 text-green-600 animate-in zoom-in-0 duration-700 delay-200" />
               </div>
-              <h2 className="text-2xl font-bold">You&apos;re all set!</h2>
-              <p className="max-w-sm text-muted-foreground">
-                Start chatting with your AI agent. Create projects to organize different conversations.
+              <h2 className="text-2xl font-bold animate-in fade-in slide-in-from-bottom-2 duration-500 delay-300">
+                You&apos;re all set!
+              </h2>
+              <p className="max-w-sm text-muted-foreground animate-in fade-in slide-in-from-bottom-2 duration-500 delay-500">
+                {path === 'free' && 'Start chatting with Gemini Flash. Upgrade anytime.'}
+                {path === 'pro' && 'Your Pro workspace is ready. Enjoy Claude and GPT-4!'}
+                {path === 'gateway' && 'Connected to your Gateway. Start chatting!'}
+                {!path && 'Start chatting with your AI workspace.'}
               </p>
-              <Button onClick={finishOnboarding} size="lg" className="mt-2 gap-2">
-                Let&apos;s Go! <ArrowRight className="h-4 w-4" />
-              </Button>
+              <div className="mt-2 flex items-center gap-1 text-xs text-muted-foreground animate-in fade-in duration-500 delay-700">
+                <Loader2 className="h-3 w-3 animate-spin" />
+                Redirecting to your workspace...
+              </div>
             </div>
           )}
         </div>

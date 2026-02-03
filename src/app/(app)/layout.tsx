@@ -8,6 +8,7 @@ import { Menu } from 'lucide-react';
 import { useState } from 'react';
 import { GatewayProvider } from '@/components/gateway-provider';
 import { QuickConnectHandler } from '@/components/quick-connect-handler';
+import { OnboardingGate } from '@/components/onboarding/onboarding-gate';
 
 export default function AppLayout({
   children,
@@ -21,6 +22,7 @@ export default function AppLayout({
       <Suspense fallback={null}>
         <QuickConnectHandler />
       </Suspense>
+      <OnboardingGate />
       <div className="flex h-dvh overflow-hidden">
         {/* Desktop sidebar */}
         <div className="hidden md:flex">

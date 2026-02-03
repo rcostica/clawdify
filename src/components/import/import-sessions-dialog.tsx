@@ -63,7 +63,6 @@ export function ImportSessionsDialog({
       .then((result) => {
         if (!mounted) return;
         setSessions(result);
-        // Auto-select all
         setSelected(new Set(result.map((s) => s.key)));
       })
       .catch((err) => {
@@ -130,7 +129,7 @@ export function ImportSessionsDialog({
     }
   }, [sessions, selected, setProjects, onOpenChange]);
 
-  const getSessionDisplayName = (s: GatewaySession) =>
+  const getDisplayName = (s: GatewaySession) =>
     s.label || s.derivedTitle || s.key.split(':').pop() || s.key;
 
   const formatAge = (dateStr?: string) => {
@@ -138,8 +137,9 @@ export function ImportSessionsDialog({
     try {
       const date = new Date(dateStr);
       const now = new Date();
-      const diffMs = now.getTime() - date.getTime();
-      const diffDays = Math.floor(diffMs / 86400000);
+      const diffDays = Math.floor(
+        (now.getTime() - date.getTime()) / 86400000,
+      );
       if (diffDays < 1) return 'today';
       if (diffDays === 1) return 'yesterday';
       if (diffDays < 30) return `${diffDays}d ago`;
@@ -166,7 +166,7 @@ export function ImportSessionsDialog({
           </DialogDescription>
         </DialogHeader>
 
-        {/* Loading state */}
+        {/* Loading */}
         {loading && (
           <div className="flex items-center justify-center py-8">
             <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
@@ -176,7 +176,7 @@ export function ImportSessionsDialog({
           </div>
         )}
 
-        {/* Error state */}
+        {/* Error */}
         {error && (
           <div className="flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-800 dark:bg-red-950/30 dark:text-red-300">
             <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
@@ -203,31 +203,108 @@ export function ImportSessionsDialog({
 
             <ScrollArea className="max-h-72">
               <div className="space-y-1 pr-3">
-                {sessions.map((session) => (
-                  <SessionRow
-                    key={session.key}
-                    session={session}
-                    selected={selected.has(session.key)}
-                    onToggle={() => toggleSession(session.key)}
-                    displayName={getSessionDisplayName(session)}
-                    age={formatAge(session.updatedAt)}
-                  />
-                ))}
+                {sessions.map((session) => {
+                  const icon = session.key.includes('discord')
+                    ? '💬'
+                    : session.key.includes('slack')
+                      ? '💼'
+                      : session.key.includes('telegram')
+                        ? '📱'
+                        : '🤖';
+                  return (
+                    <button
+                      key={session.key}
+                      className={cn(
+                        'flex w-full items-center gap-3 rounded-lg border p-3 text-left transition-colors',
+                        selected.has(session.key)
+                          ? 'border-primary/50 bg-primary/5'
+                          : 'border-transparent hover:bg-muted/50',
+                      )}
+                      onClick={() => toggleSession(session.key)}
+                    >
+                      <div
+                        className={cn(
+                          'flex h-5 w-5 shrink-0 items-center justify-center rounded border transition-colors',
+                          selected.has(session.key)
+                            ? 'border-primary bg-primary text-primary-foreground'
+                            : 'border-muted-foreground/30',
+                        )}
+                      >
+                        {selected.has(session.key) && (
+                          <Check className="h-3 w-3" />
+                        )}
+                      </div>
+                      <span className="text-lg">{icon}</span>
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-medium">
+                          {getDisplayName(session)}
+                        </p>
+                        <p className="truncate text-xs text-muted-foreground">
+                          {session.key}
+                        </p>
+                      </div>
+                      {formatAge(session.updatedAt) && (
+                        <span className="shrink-0 text-xs text-muted-foreground">
+                          {formatAge(session.updatedAt)}
+                        </span>
+                      )}
+                      {session.lastMessage && (
+                        <Badge
+                          variant="secondary"
+                          className="text-xs shrink-0"
+                        >
+                          has messages
+                        </Badge>
+                      )}
+                    </button>
+                  );
+                })}
               </div>
             </ScrollArea>
           </>
         )}
 
-        {/* Empty state */}
+        {/* Empty */}
         {!loading && !error && sessions.length === 0 && !importing && (
           <div className="py-8 text-center text-sm text-muted-foreground">
-            No sessions found on the Gateway. Start a conversation first!
+            No sessions found on the Gateway.
           </div>
         )}
 
-        {/* Import progress */}
+        {/* Progress */}
         {importing && progress && (
-          <ImportProgressView progress={progress} />
+          <div className="space-y-3 py-4">
+            <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
+              <div
+                className={cn(
+                  'h-full rounded-full transition-all duration-300',
+                  progress.phase === 'done' ? 'bg-green-500' : 'bg-primary',
+                )}
+                style={{
+                  width: `${progress.total > 0 ? Math.round((progress.completed / progress.total) * 100) : 0}%`,
+                }}
+              />
+            </div>
+            <div className="flex items-center gap-2 text-sm">
+              {progress.phase === 'importing' && (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  <span>
+                    Importing {progress.completed + 1} of {progress.total}
+                    {progress.currentSession
+                      ? ` — ${progress.currentSession}`
+                      : ''}
+                  </span>
+                </>
+              )}
+              {progress.phase === 'done' && (
+                <>
+                  <CheckCircle2 className="h-4 w-4 text-green-500" />
+                  <span>Done!</span>
+                </>
+              )}
+            </div>
+          </div>
         )}
 
         <DialogFooter>
@@ -255,132 +332,5 @@ export function ImportSessionsDialog({
         </DialogFooter>
       </DialogContent>
     </Dialog>
-  );
-}
-
-// ── Sub-components ──
-
-function SessionRow({
-  session,
-  selected,
-  onToggle,
-  displayName,
-  age,
-}: {
-  session: GatewaySession;
-  selected: boolean;
-  onToggle: () => void;
-  displayName: string;
-  age: string;
-}) {
-  const icon = session.key.includes('discord')
-    ? '💬'
-    : session.key.includes('slack')
-      ? '💼'
-      : session.key.includes('telegram')
-        ? '📱'
-        : '🤖';
-
-  return (
-    <button
-      className={cn(
-        'flex w-full items-center gap-3 rounded-lg border p-3 text-left transition-colors',
-        selected
-          ? 'border-primary/50 bg-primary/5'
-          : 'border-transparent hover:bg-muted/50',
-      )}
-      onClick={onToggle}
-    >
-      {/* Checkbox */}
-      <div
-        className={cn(
-          'flex h-5 w-5 shrink-0 items-center justify-center rounded border transition-colors',
-          selected
-            ? 'border-primary bg-primary text-primary-foreground'
-            : 'border-muted-foreground/30',
-        )}
-      >
-        {selected && <Check className="h-3 w-3" />}
-      </div>
-
-      {/* Icon */}
-      <span className="text-lg">{icon}</span>
-
-      {/* Info */}
-      <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-medium">{displayName}</p>
-        <p className="truncate text-xs text-muted-foreground">
-          {session.key}
-        </p>
-      </div>
-
-      {/* Age */}
-      {age && (
-        <span className="shrink-0 text-xs text-muted-foreground">{age}</span>
-      )}
-
-      {/* Last message preview */}
-      {session.lastMessage && (
-        <Badge variant="secondary" className="text-xs shrink-0">
-          has messages
-        </Badge>
-      )}
-    </button>
-  );
-}
-
-function ImportProgressView({ progress }: { progress: ImportProgress }) {
-  const percentage =
-    progress.total > 0
-      ? Math.round((progress.completed / progress.total) * 100)
-      : 0;
-
-  return (
-    <div className="space-y-3 py-4">
-      {/* Progress bar */}
-      <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
-        <div
-          className={cn(
-            'h-full rounded-full transition-all duration-300',
-            progress.phase === 'done' ? 'bg-green-500' : 'bg-primary',
-            progress.phase === 'error' && 'bg-red-500',
-          )}
-          style={{ width: `${percentage}%` }}
-        />
-      </div>
-
-      {/* Status text */}
-      <div className="flex items-center gap-2 text-sm">
-        {progress.phase === 'importing' && (
-          <>
-            <Loader2 className="h-4 w-4 animate-spin" />
-            <span>
-              Importing {progress.completed + 1} of {progress.total}
-              {progress.currentSession && (
-                <span className="text-muted-foreground">
-                  {' — '}
-                  {progress.currentSession}
-                </span>
-              )}
-            </span>
-          </>
-        )}
-        {progress.phase === 'done' && (
-          <>
-            <CheckCircle2 className="h-4 w-4 text-green-500" />
-            <span>
-              Successfully imported {progress.completed} session
-              {progress.completed !== 1 ? 's' : ''}!
-            </span>
-          </>
-        )}
-        {progress.phase === 'error' && (
-          <>
-            <AlertTriangle className="h-4 w-4 text-red-500" />
-            <span className="text-red-600">{progress.error}</span>
-          </>
-        )}
-      </div>
-    </div>
   );
 }

@@ -38,15 +38,15 @@ export function QuickConnectHandler() {
 
         // 🔒 SECURITY: Persist to Supabase encrypted so token doesn't stay in URL/memory
         if (token) {
-          import('@/lib/supabase/client').then(({ createClient }) => {
+          import('@/lib/supabase/client').then(async ({ createClient }) => {
             const supabase = createClient();
-            supabase
+            const { error } = await supabase
               .rpc('save_gateway_connection', {
                 p_name: 'Default',
                 p_gateway_url: gatewayUrl,
                 p_gateway_token: token,
-              })
-              .catch(console.error);
+              });
+            if (error) console.error('Failed to save connection:', error);
           });
         }
       }

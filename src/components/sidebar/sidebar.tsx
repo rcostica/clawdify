@@ -1,18 +1,46 @@
 'use client';
 
+import { useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { ProjectList } from './project-list';
 import { ConnectionStatus } from './connection-status';
+import { NewProjectDialog } from './new-project-dialog';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
-import { Plus, Settings, LogOut } from 'lucide-react';
+import { Settings, LogOut, Wifi } from 'lucide-react';
 import { toast } from 'sonner';
+import { useProjectStore } from '@/stores/project-store';
+import { fetchProjects } from '@/lib/projects';
 
 export function Sidebar() {
   const router = useRouter();
   const supabase = createClient();
+  const setProjects = useProjectStore((s) => s.setProjects);
+  const setLoading = useProjectStore((s) => s.setLoading);
+
+  // Load projects on mount
+  useEffect(() => {
+    let mounted = true;
+    setLoading(true);
+    fetchProjects()
+      .then((projects) => {
+        if (mounted) {
+          setProjects(projects);
+          setLoading(false);
+        }
+      })
+      .catch((err) => {
+        if (mounted) {
+          console.error('Failed to load projects:', err);
+          setLoading(false);
+        }
+      });
+    return () => {
+      mounted = false;
+    };
+  }, [setProjects, setLoading]);
 
   const handleSignOut = async () => {
     const { error } = await supabase.auth.signOut();
@@ -36,10 +64,7 @@ export function Sidebar() {
 
       {/* New Project Button */}
       <div className="px-3 py-3">
-        <Button variant="outline" className="w-full justify-start gap-2" size="sm">
-          <Plus className="h-4 w-4" />
-          New Project
-        </Button>
+        <NewProjectDialog />
       </div>
 
       {/* Project List */}
@@ -56,6 +81,16 @@ export function Sidebar() {
 
       {/* Footer */}
       <div className="flex flex-col gap-1 px-2 py-2">
+        <Link href="/connect">
+          <Button
+            variant="ghost"
+            className="w-full justify-start gap-2"
+            size="sm"
+          >
+            <Wifi className="h-4 w-4" />
+            Connection
+          </Button>
+        </Link>
         <Link href="/settings">
           <Button
             variant="ghost"

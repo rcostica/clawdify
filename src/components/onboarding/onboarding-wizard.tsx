@@ -318,6 +318,9 @@ export function OnboardingWizard({ open, onOpenChange }: OnboardingWizardProps) 
                     value={gatewayUrl}
                     onChange={(e) => setGatewayUrl(e.target.value)}
                   />
+                  <p className="text-[11px] text-muted-foreground">
+                    Find this by running <code className="rounded bg-muted px-1 py-0.5 text-[10px]">openclaw status</code> on your Gateway host. Default is <code className="rounded bg-muted px-1 py-0.5 text-[10px]">ws://localhost:18789</code>. For remote access, use <code className="rounded bg-muted px-1 py-0.5 text-[10px]">wss://</code> via Tailscale.
+                  </p>
                   {urlError && (
                     <p className="flex items-center gap-1 text-xs text-destructive">
                       <XCircle className="h-3 w-3" /> {urlError}
@@ -352,6 +355,9 @@ export function OnboardingWizard({ open, onOpenChange }: OnboardingWizardProps) 
                       {showToken ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                     </Button>
                   </div>
+                  <p className="text-[11px] text-muted-foreground">
+                    Found in your OpenClaw config file at <code className="rounded bg-muted px-1 py-0.5 text-[10px]">~/.openclaw/openclaw.json</code> → <code className="rounded bg-muted px-1 py-0.5 text-[10px]">gateway.auth.token</code>. You can also run <code className="rounded bg-muted px-1 py-0.5 text-[10px]">openclaw status</code> to see it.
+                  </p>
                 </div>
 
                 <div className="flex items-center justify-between rounded-lg border p-2.5">
@@ -374,16 +380,43 @@ export function OnboardingWizard({ open, onOpenChange }: OnboardingWizardProps) 
 
               {/* No gateway? */}
               <details className="text-xs text-muted-foreground">
-                <summary className="cursor-pointer hover:text-foreground">
-                  Don&apos;t have an OpenClaw Gateway yet?
+                <summary className="cursor-pointer hover:text-foreground font-medium">
+                  📖 Don&apos;t have an OpenClaw Gateway yet?
                 </summary>
-                <div className="mt-2 rounded-lg border bg-muted/30 p-3 space-y-2">
-                  <p>Install OpenClaw and start the Gateway:</p>
-                  <code className="block rounded bg-background px-2 py-1 text-[11px]">
-                    npm install -g openclaw<br />
-                    openclaw gateway start
-                  </code>
-                  <p>Then use <code className="bg-background px-1 rounded">ws://localhost:18789</code> as your URL.</p>
+                <div className="mt-2 rounded-lg border bg-muted/30 p-3 space-y-3">
+                  <div>
+                    <p className="font-medium text-foreground mb-1">1. Install OpenClaw</p>
+                    <code className="block rounded bg-background px-2 py-1.5 text-[11px]">
+                      npm install -g openclaw
+                    </code>
+                  </div>
+                  <div>
+                    <p className="font-medium text-foreground mb-1">2. Run the setup wizard</p>
+                    <code className="block rounded bg-background px-2 py-1.5 text-[11px]">
+                      openclaw onboard
+                    </code>
+                    <p className="mt-1">This will configure your AI provider (Anthropic, OpenAI, etc.) and generate your gateway token.</p>
+                  </div>
+                  <div>
+                    <p className="font-medium text-foreground mb-1">3. Start the Gateway</p>
+                    <code className="block rounded bg-background px-2 py-1.5 text-[11px]">
+                      openclaw gateway start
+                    </code>
+                    <p className="mt-1">Default URL: <code className="bg-background px-1 rounded">ws://localhost:18789</code></p>
+                  </div>
+                  <div>
+                    <p className="font-medium text-foreground mb-1">4. For remote access (recommended)</p>
+                    <p>Install <a href="https://tailscale.com" target="_blank" rel="noopener noreferrer" className="text-primary underline">Tailscale</a> on both machines, then use:</p>
+                    <code className="block rounded bg-background px-2 py-1.5 text-[11px]">
+                      openclaw gateway --tailscale serve
+                    </code>
+                    <p className="mt-1">This gives you a secure <code className="bg-background px-1 rounded">wss://</code> URL accessible from anywhere.</p>
+                  </div>
+                  <p className="pt-1">
+                    <a href="https://docs.openclaw.ai" target="_blank" rel="noopener noreferrer" className="text-primary underline">
+                      Full documentation →
+                    </a>
+                  </p>
                 </div>
               </details>
 

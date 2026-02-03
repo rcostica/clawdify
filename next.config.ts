@@ -1,7 +1,7 @@
 import type { NextConfig } from 'next';
 
 const nextConfig: NextConfig = {
-  output: 'standalone',
+  // output: 'standalone', // Enable only for Docker self-hosting, not Vercel
 
   async headers() {
     return [

@@ -3,66 +3,72 @@ import { NextRequest, NextResponse } from 'next/server';
 /**
  * POST /api/billing/webhook
  * Handle Stripe webhooks.
- * MOCKED for now — logs the event and returns 200.
  *
- * In production:
- * 1. Verify webhook signature with Stripe SDK
- * 2. Handle events: checkout.session.completed, customer.subscription.updated, etc.
- * 3. Update user plan in Supabase profiles table
+ * 🔒 SECURITY: This endpoint is NOT production-ready.
+ * Stripe webhook signature verification is required before enabling.
+ * The endpoint returns 503 to prevent exploitation if accidentally deployed.
+ *
+ * Production implementation checklist:
+ * 1. Install Stripe SDK: `npm install stripe`
+ * 2. Set STRIPE_WEBHOOK_SECRET in environment variables
+ * 3. Use stripe.webhooks.constructEvent() to verify signatures
+ * 4. Handle events: checkout.session.completed, customer.subscription.updated, etc.
+ * 5. Update user plan in Supabase profiles table
  */
 export async function POST(request: NextRequest) {
+  // 🔒 SECURITY: Reject all webhook requests until Stripe signature
+  // verification is implemented. This prevents fake webhook attacks.
+  const isStripeConfigured = !!process.env.STRIPE_WEBHOOK_SECRET;
+
+  if (!isStripeConfigured) {
+    return NextResponse.json(
+      {
+        error: 'Webhook endpoint not configured',
+        message: 'Stripe webhook signature verification is not set up. ' +
+          'Set STRIPE_WEBHOOK_SECRET environment variable.',
+      },
+      { status: 503 },
+    );
+  }
+
+  // When Stripe is configured, verify the webhook signature
   try {
     const body = await request.text();
-    const signature = request.headers.get('stripe-signature') ?? '';
+    const signature = request.headers.get('stripe-signature');
 
-    // Mock: In production, verify signature
-    console.log('[billing/webhook] Received webhook:', {
-      bodyLength: body.length,
-      signature: signature.slice(0, 20) || '(none)',
-    });
-
-    // Mock: Parse event and handle
-    let event: { type?: string; data?: { object?: Record<string, unknown> } };
-    try {
-      event = JSON.parse(body) as typeof event;
-    } catch {
+    if (!signature) {
       return NextResponse.json(
-        { error: 'Invalid JSON payload' },
+        { error: 'Missing stripe-signature header' },
         { status: 400 },
       );
     }
 
-    const eventType = event.type ?? 'unknown';
+    // TODO: Implement actual Stripe signature verification:
+    //
+    // import Stripe from 'stripe';
+    // const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
+    // const event = stripe.webhooks.constructEvent(
+    //   body,
+    //   signature,
+    //   process.env.STRIPE_WEBHOOK_SECRET!,
+    // );
+    //
+    // switch (event.type) {
+    //   case 'checkout.session.completed': { ... }
+    //   case 'customer.subscription.updated': { ... }
+    //   case 'customer.subscription.deleted': { ... }
+    // }
 
-    switch (eventType) {
-      case 'checkout.session.completed':
-        console.log('[billing/webhook] Checkout completed:', event.data?.object);
-        // TODO: Update user plan in Supabase
-        // const userId = event.data.object.client_reference_id;
-        // const subscriptionId = event.data.object.subscription;
-        // await supabase.from('profiles').update({ plan: 'pro', stripe_subscription_id: subscriptionId }).eq('id', userId);
-        break;
-
-      case 'customer.subscription.updated':
-        console.log('[billing/webhook] Subscription updated:', event.data?.object);
-        // TODO: Handle plan changes, cancellations
-        break;
-
-      case 'customer.subscription.deleted':
-        console.log('[billing/webhook] Subscription deleted:', event.data?.object);
-        // TODO: Downgrade user to free plan
-        break;
-
-      default:
-        console.log(`[billing/webhook] Unhandled event type: ${eventType}`);
-    }
-
-    return NextResponse.json({ received: true });
-  } catch (err) {
-    console.error('[billing/webhook] Error:', err);
     return NextResponse.json(
-      { error: 'Webhook handler failed' },
-      { status: 500 },
+      { error: 'Webhook handler not yet implemented' },
+      { status: 503 },
+    );
+  } catch (err) {
+    // 🔒 SECURITY: Don't leak internal error details
+    console.error('[billing/webhook] Error processing webhook');
+    return NextResponse.json(
+      { error: 'Webhook processing failed' },
+      { status: 400 },
     );
   }
 }

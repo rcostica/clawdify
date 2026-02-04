@@ -26,8 +26,8 @@ export function StreamingText({ content, className }: StreamingTextProps) {
           <ReactMarkdown
             remarkPlugins={[remarkGfm]}
             rehypePlugins={[
-              [rehypeSanitize, sanitizeSchema],
               rehypeHighlight,
+              [rehypeSanitize, sanitizeSchema],
             ]}
             components={{
               // 🔒 SECURITY: External links open in new tab with noopener

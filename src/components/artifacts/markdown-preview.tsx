@@ -17,8 +17,8 @@ export function MarkdownPreview({ content }: MarkdownPreviewProps) {
         <ReactMarkdown
           remarkPlugins={[remarkGfm]}
           rehypePlugins={[
-            [rehypeSanitize, sanitizeSchema],
             rehypeHighlight,
+            [rehypeSanitize, sanitizeSchema],
           ]}
           components={{
             a: ({ href, children }) => (

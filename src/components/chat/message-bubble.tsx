@@ -118,8 +118,8 @@ export function MessageBubble({
               <ReactMarkdown
                 remarkPlugins={[remarkGfm]}
                 rehypePlugins={[
-                  [rehypeSanitize, sanitizeSchema],
                   rehypeHighlight,
+                  [rehypeSanitize, sanitizeSchema],
                 ]}
                 components={{
                   // 🔒 SECURITY: External links with noopener

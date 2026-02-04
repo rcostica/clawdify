@@ -1,0 +1,22 @@
+app = "openclaw-gateway"
+primary_region = "iad"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  CLAWDIFY_RELAY_URL = "wss://relay.clawdify.app"
+
+[http_service]
+  internal_port = 18789
+  force_https = true
+  auto_stop_machines = false
+  auto_start_machines = true
+
+[processes]
+  app = "./entrypoint.sh"
+
+[[vm]]
+  cpu_kind = "shared"
+  cpus = 1
+  memory_mb = 512

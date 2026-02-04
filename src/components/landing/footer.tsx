@@ -4,6 +4,7 @@ import { Separator } from '@/components/ui/separator';
 const footerLinks = {
   Product: [
     { label: 'Features', href: '#features' },
+    { label: 'How It Works', href: '#how-it-works' },
     { label: 'Pricing', href: '/pricing' },
   ],
   Legal: [
@@ -18,7 +19,7 @@ export function Footer() {
       <div className="mx-auto max-w-6xl px-6 py-16">
         <div className="grid gap-12 md:grid-cols-4">
           {/* Brand */}
-          <div className="md:col-span-1">
+          <div className="md:col-span-2">
             <Link
               href="/"
               className="flex items-center gap-2 text-lg font-bold"
@@ -26,9 +27,9 @@ export function Footer() {
               <span className="text-2xl">🐾</span>
               <span>Clawdify</span>
             </Link>
-            <p className="mt-4 text-sm leading-relaxed text-muted-foreground">
-              One workspace for Claude, GPT-4, and Gemini. Private,
-              project-organized, and accessible from any device.
+            <p className="mt-4 max-w-sm text-sm leading-relaxed text-muted-foreground">
+              Mission Control for AI agents. Deploy, manage, and monitor your
+              AI agents from one dashboard. Built on OpenClaw.
             </p>
           </div>
 

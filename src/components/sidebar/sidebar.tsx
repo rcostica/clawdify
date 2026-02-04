@@ -8,9 +8,10 @@ import { ProjectList } from './project-list';
 import { ConnectionStatus } from './connection-status';
 import { NewProjectDialog } from './new-project-dialog';
 import { ImportSessionsDialog } from '@/components/import/import-sessions-dialog';
+import { AgentStatus } from '@/components/activity/agent-status';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
-import { Settings, LogOut, Wifi, Download } from 'lucide-react';
+import { Settings, LogOut, Wifi, Download, Rocket } from 'lucide-react';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { toast } from 'sonner';
 import { useProjectStore } from '@/stores/project-store';
@@ -67,6 +68,13 @@ export function Sidebar() {
 
       <Separator />
 
+      {/* Agent Status */}
+      <div className="px-3 py-2">
+        <AgentStatus compact />
+      </div>
+
+      <Separator />
+
       {/* New Project + Import */}
       <div className="space-y-1 px-3 py-3">
         <NewProjectDialog />
@@ -101,6 +109,16 @@ export function Sidebar() {
           <span className="text-xs text-muted-foreground">Theme</span>
           <ThemeToggle />
         </div>
+        <Link href="/deploy">
+          <Button
+            variant="ghost"
+            className="w-full justify-start gap-2"
+            size="sm"
+          >
+            <Rocket className="h-4 w-4" />
+            Deploy
+          </Button>
+        </Link>
         <Link href="/connect">
           <Button
             variant="ghost"

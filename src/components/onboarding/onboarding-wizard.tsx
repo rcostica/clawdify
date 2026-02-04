@@ -378,11 +378,11 @@ export function OnboardingWizard({ open, onOpenChange }: OnboardingWizardProps) 
                       <h4 className="font-semibold">Free</h4>
                     </div>
                     <p className="mt-0.5 text-sm text-muted-foreground">
-                      Try Clawdify with Gemini Flash. No credit card needed.
+                      Connect your own Gateway. 2 projects, free forever.
                     </p>
                     <div className="mt-2 flex flex-wrap gap-1.5">
-                      <Badge variant="secondary" className="text-[10px]">Gemini Flash</Badge>
-                      <Badge variant="secondary" className="text-[10px]">3 projects</Badge>
+                      <Badge variant="secondary" className="text-[10px]">BYOG</Badge>
+                      <Badge variant="secondary" className="text-[10px]">2 projects</Badge>
                     </div>
                   </div>
                   <ArrowRight className="mt-1 h-4 w-4 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />
@@ -402,15 +402,45 @@ export function OnboardingWizard({ open, onOpenChange }: OnboardingWizardProps) 
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
                       <h4 className="font-semibold">Pro</h4>
-                      <span className="text-sm font-medium text-primary">$15/mo</span>
+                      <span className="text-sm font-medium text-primary">$12/mo</span>
                     </div>
                     <p className="mt-0.5 text-sm text-muted-foreground">
-                      Claude, GPT-4, unlimited projects, voice &amp; artifacts
+                      One-click deploy, unlimited projects, notifications &amp; analytics
                     </p>
                     <div className="mt-2 flex flex-wrap gap-1.5">
-                      <Badge variant="secondary" className="text-[10px]">Claude</Badge>
-                      <Badge variant="secondary" className="text-[10px]">GPT-4</Badge>
+                      <Badge variant="secondary" className="text-[10px]">Deploy</Badge>
                       <Badge variant="secondary" className="text-[10px]">Unlimited</Badge>
+                      <Badge variant="secondary" className="text-[10px]">BYOK</Badge>
+                    </div>
+                  </div>
+                  <ArrowRight className="mt-1 h-4 w-4 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />
+                </button>
+
+                {/* Deploy Card */}
+                <button
+                  onClick={() => {
+                    completeOnboarding();
+                    setOnboardingCompleted(true);
+                    onOpenChange(false);
+                    router.push('/deploy');
+                  }}
+                  className="group flex items-start gap-4 rounded-xl border border-green-500/30 p-4 text-left transition-all hover:border-green-500/50 hover:bg-green-50/50 dark:hover:bg-green-950/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                >
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-green-100 text-lg dark:bg-green-950">
+                    🚀
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      <h4 className="font-semibold">Deploy Agent</h4>
+                      <Badge variant="secondary" className="text-[10px]">New</Badge>
+                    </div>
+                    <p className="mt-0.5 text-sm text-muted-foreground">
+                      One-click deploy to Railway or Fly.io
+                    </p>
+                    <div className="mt-2 flex flex-wrap gap-1.5">
+                      <Badge variant="secondary" className="text-[10px]">Railway</Badge>
+                      <Badge variant="secondary" className="text-[10px]">Fly.io</Badge>
+                      <Badge variant="secondary" className="text-[10px]">Docker</Badge>
                     </div>
                   </div>
                   <ArrowRight className="mt-1 h-4 w-4 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />
@@ -805,10 +835,10 @@ export function OnboardingWizard({ open, onOpenChange }: OnboardingWizardProps) 
                 You&apos;re all set!
               </h2>
               <p className="max-w-sm text-muted-foreground animate-in fade-in slide-in-from-bottom-2 duration-500 delay-500">
-                {path === 'free' && 'Start chatting with Gemini Flash. Upgrade anytime.'}
-                {path === 'pro' && 'Your Pro workspace is ready. Enjoy Claude and GPT-4!'}
-                {path === 'gateway' && 'Connected to your Gateway. Start chatting!'}
-                {!path && 'Start chatting with your AI workspace.'}
+                {path === 'free' && 'Your workspace is ready. Create your first task!'}
+                {path === 'pro' && 'Pro activated! Deploy an agent or connect your Gateway.'}
+                {path === 'gateway' && 'Gateway connected. Create your first task!'}
+                {!path && 'Your workspace is ready. Let\u0027s build something.'}
               </p>
               <div className="mt-2 flex items-center gap-1 text-xs text-muted-foreground animate-in fade-in duration-500 delay-700">
                 <Loader2 className="h-3 w-3 animate-spin" />

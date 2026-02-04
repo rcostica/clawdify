@@ -1,26 +1,33 @@
-import { Badge } from '@/components/ui/badge';
+import { Code2, Clock, Laptop, Briefcase } from 'lucide-react';
 
-const trustBadges = [
+const personas = [
   {
-    icon: '🔓',
-    title: 'Open Source',
+    icon: Code2,
+    title: 'Freelance developers',
     description:
-      'The OpenClaw relay is fully open source. Inspect the code, run it yourself, contribute back.',
-    badge: 'GitHub',
+      'Ship client projects faster. Give your agent the task, review the output, deliver the work. More projects, less grind.',
+    highlight: '"I used to spend 3 hours on boilerplate. Now my agent does it while I write the proposal."',
   },
   {
-    icon: '🔐',
-    title: 'E2E Encryption Planned',
+    icon: Clock,
+    title: 'Side-project builders',
     description:
-      'End-to-end encryption is on the roadmap. Your conversations will be encrypted at rest and in transit.',
-    badge: 'Roadmap',
+      'Got an idea at 11pm? Queue up the tasks. Check your phone in the morning. Your agent worked while you slept.',
+    highlight: '"I launched my SaaS MVP in a weekend. The agent handled the boring parts."',
   },
   {
-    icon: '🤖',
-    title: 'Multi-Model',
+    icon: Briefcase,
+    title: 'Startup engineers',
     description:
-      'Access Claude, GPT-4, and Gemini from one workspace. Switch models per conversation.',
-    badge: 'Live',
+      'Move fast without breaking things. Your agent writes tests, refactors code, and handles the PRs you never get to.',
+    highlight: '"Our 3-person team ships like a 10-person team. The agent is our secret weapon."',
+  },
+  {
+    icon: Laptop,
+    title: 'AI-curious developers',
+    description:
+      "Heard about AI agents but found setup too complex? One click deploys your own agent. See what the fuss is about.",
+    highlight: '"I went from zero to watching an agent build a React app in under 5 minutes."',
   },
 ];
 
@@ -32,35 +39,37 @@ export function Testimonials() {
       <div className="mx-auto max-w-6xl px-6">
         <div className="text-center">
           <p className="text-sm font-semibold uppercase tracking-widest text-violet-400">
-            Trusted in Open Beta
+            Built For
           </p>
           <h2 className="mt-4 text-3xl font-bold tracking-tight sm:text-4xl">
-            Built on transparency
+            Developers who ship
           </h2>
           <p className="mx-auto mt-4 max-w-2xl text-muted-foreground">
-            Clawdify is built in the open. No black boxes, no data lock-in.
+            Whether you&apos;re building for clients, side projects, or your startup
+            — Clawdify puts an AI agent on your team.
           </p>
         </div>
 
-        <div className="mt-16 grid gap-6 md:grid-cols-3">
-          {trustBadges.map((item) => (
+        <div className="mt-16 grid gap-6 md:grid-cols-2">
+          {personas.map((persona) => (
             <div
-              key={item.title}
-              className="relative rounded-xl border border-border/50 bg-card/50 p-6 text-center transition-all duration-300 hover:border-violet-500/20 hover:bg-card/80"
+              key={persona.title}
+              className="relative rounded-xl border border-border/50 bg-card/50 p-6 transition-all duration-300 hover:border-violet-500/20 hover:bg-card/80"
             >
-              <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-violet-500/10 text-3xl">
-                {item.icon}
+              <div className="flex items-start gap-4">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-violet-500/10">
+                  <persona.icon className="h-5 w-5 text-violet-400" />
+                </div>
+                <div>
+                  <h3 className="font-semibold">{persona.title}</h3>
+                  <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
+                    {persona.description}
+                  </p>
+                </div>
               </div>
-              <Badge
-                variant="secondary"
-                className="mb-3 text-[10px] uppercase tracking-wider"
-              >
-                {item.badge}
-              </Badge>
-              <h3 className="font-semibold">{item.title}</h3>
-              <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
-                {item.description}
-              </p>
+              <blockquote className="mt-4 border-l-2 border-violet-500/30 pl-4 text-sm italic text-muted-foreground">
+                {persona.highlight}
+              </blockquote>
             </div>
           ))}
         </div>

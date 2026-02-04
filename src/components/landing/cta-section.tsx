@@ -13,11 +13,11 @@ export function CtaSection() {
           <div className="pointer-events-none absolute -bottom-20 -left-20 h-60 w-60 rounded-full bg-indigo-500/10 blur-3xl" />
 
           <h2 className="relative text-3xl font-bold tracking-tight sm:text-4xl">
-            Ready to build something amazing?
+            Your AI agent is 5 minutes away
           </h2>
           <p className="relative mx-auto mt-4 max-w-xl text-muted-foreground">
-            Join developers who are already using Clawdify to ship faster with
-            AI. Free to start, no credit card required.
+            Deploy an agent. Create a task. Watch it build. No terminal, no
+            server setup, no DevOps degree required.
           </p>
           <div className="relative mt-8 flex flex-col items-center gap-4 sm:flex-row sm:justify-center">
             <Link href="/signup">
@@ -25,15 +25,22 @@ export function CtaSection() {
                 size="lg"
                 className="h-12 px-8 text-base bg-gradient-to-r from-violet-600 to-indigo-600 text-white shadow-lg shadow-violet-500/25 hover:from-violet-500 hover:to-indigo-500 hover:shadow-violet-500/40 border-0"
               >
-                Get Started Free
+                Deploy Your Agent
               </Button>
             </Link>
             <Link href="/pricing">
-              <Button variant="outline" size="lg" className="h-12 px-8 text-base">
+              <Button
+                variant="outline"
+                size="lg"
+                className="h-12 px-8 text-base"
+              >
                 View Pricing
               </Button>
             </Link>
           </div>
+          <p className="relative mt-6 text-sm text-muted-foreground">
+            Free tier available · No credit card required
+          </p>
         </div>
       </div>
     </section>

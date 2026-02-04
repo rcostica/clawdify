@@ -27,15 +27,15 @@ export function Hero() {
         </div>
 
         <h1 className="mx-auto max-w-4xl text-4xl font-bold tracking-tight sm:text-5xl md:text-6xl lg:text-7xl">
-          Stop juggling{' '}
+          Mission Control for{' '}
           <span className="bg-gradient-to-r from-violet-400 via-indigo-400 to-purple-400 bg-clip-text text-transparent">
-            AI tabs.
+            AI Agents
           </span>
         </h1>
 
         <p className="mx-auto mt-6 max-w-2xl text-lg text-muted-foreground md:text-xl">
-          One workspace for Claude, GPT-4, and Gemini — private,
-          project-organized, and accessible from any device.
+          Deploy your own AI agent in 5 minutes. Create tasks, watch it work in
+          real-time, and see results — all from your browser.
         </p>
 
         <div className="mt-10 flex flex-col items-center gap-4 sm:flex-row sm:justify-center">
@@ -44,19 +44,29 @@ export function Hero() {
               size="lg"
               className="h-12 px-8 text-base bg-gradient-to-r from-violet-600 to-indigo-600 text-white shadow-lg shadow-violet-500/25 hover:from-violet-500 hover:to-indigo-500 hover:shadow-violet-500/40 border-0"
             >
-              Start Building — It&apos;s Free
+              Deploy Your Agent
             </Button>
           </Link>
           <Link href="#how-it-works">
-            <Button variant="outline" size="lg" className="h-12 px-8 text-base">
+            <Button
+              variant="outline"
+              size="lg"
+              className="h-12 px-8 text-base"
+            >
               See How It Works
             </Button>
           </Link>
         </div>
 
-        {/* Product mockup area */}
-        <div className="relative mx-auto mt-20 max-w-4xl">
+        <p className="mt-4 text-sm text-muted-foreground">
+          Free tier available · No credit card required · Your API keys, your
+          infrastructure
+        </p>
+
+        {/* Mission Control mockup */}
+        <div className="relative mx-auto mt-20 max-w-5xl">
           <div className="rounded-xl border border-border/50 bg-card/50 shadow-2xl shadow-violet-500/5 backdrop-blur-sm overflow-hidden">
+            {/* Window chrome */}
             <div className="flex items-center gap-2 border-b border-border/50 px-4 py-3">
               <div className="h-3 w-3 rounded-full bg-red-500/60" />
               <div className="h-3 w-3 rounded-full bg-yellow-500/60" />
@@ -65,55 +75,157 @@ export function Hero() {
                 clawdify.app — Project: landing-page
               </span>
             </div>
-            <div className="grid grid-cols-12 min-h-[300px] md:min-h-[400px]">
-              {/* Fake sidebar */}
-              <div className="col-span-3 border-r border-border/50 p-4 hidden sm:block">
+
+            <div className="grid grid-cols-12 min-h-[340px] md:min-h-[420px]">
+              {/* Sidebar */}
+              <div className="col-span-2 border-r border-border/50 p-3 hidden md:block">
                 <div className="space-y-3">
-                  <div className="h-4 w-20 rounded bg-muted/50" />
-                  <div className="space-y-2 pt-2">
-                    <div className="flex items-center gap-2">
-                      <div className="h-2 w-2 rounded-full bg-violet-500/60" />
-                      <div className="h-3 w-24 rounded bg-violet-500/20" />
+                  {/* Agent status */}
+                  <div className="flex items-center gap-2 rounded-lg bg-green-500/10 px-2 py-1.5">
+                    <div className="h-2 w-2 rounded-full bg-green-500" />
+                    <span className="text-[10px] font-medium text-green-400">
+                      Agent Online
+                    </span>
+                  </div>
+                  {/* Projects */}
+                  <div className="space-y-1.5 pt-2">
+                    <div className="text-[9px] font-semibold uppercase tracking-wider text-muted-foreground/60">
+                      Projects
                     </div>
-                    <div className="flex items-center gap-2">
-                      <div className="h-2 w-2 rounded-full bg-muted-foreground/30" />
-                      <div className="h-3 w-20 rounded bg-muted/50" />
+                    <div className="flex items-center gap-2 rounded bg-violet-500/15 px-2 py-1">
+                      <div className="h-1.5 w-1.5 rounded-full bg-violet-500" />
+                      <div className="h-2.5 w-16 rounded bg-violet-500/30" />
                     </div>
-                    <div className="flex items-center gap-2">
-                      <div className="h-2 w-2 rounded-full bg-muted-foreground/30" />
-                      <div className="h-3 w-16 rounded bg-muted/50" />
+                    <div className="flex items-center gap-2 px-2 py-1">
+                      <div className="h-1.5 w-1.5 rounded-full bg-muted-foreground/30" />
+                      <div className="h-2.5 w-12 rounded bg-muted/40" />
+                    </div>
+                    <div className="flex items-center gap-2 px-2 py-1">
+                      <div className="h-1.5 w-1.5 rounded-full bg-muted-foreground/30" />
+                      <div className="h-2.5 w-14 rounded bg-muted/40" />
                     </div>
                   </div>
                 </div>
               </div>
-              {/* Fake chat area */}
-              <div className="col-span-12 sm:col-span-9 p-6 flex flex-col justify-between">
-                <div className="space-y-4">
-                  <div className="flex gap-3">
-                    <div className="h-8 w-8 shrink-0 rounded-full bg-violet-500/20" />
-                    <div className="space-y-2">
-                      <div className="h-3 w-64 rounded bg-muted/60" />
-                      <div className="h-3 w-48 rounded bg-muted/40" />
+
+              {/* Task list panel */}
+              <div className="col-span-4 md:col-span-3 border-r border-border/50 p-3">
+                <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/60 mb-3">
+                  Tasks
+                </div>
+                {/* Active task */}
+                <div className="rounded-lg border border-green-500/30 bg-green-500/5 p-2.5 mb-2">
+                  <div className="flex items-center gap-1.5 mb-1">
+                    <div className="relative h-2 w-2">
+                      <div className="absolute inset-0 rounded-full bg-green-500 animate-ping opacity-50" />
+                      <div className="relative h-2 w-2 rounded-full bg-green-500" />
                     </div>
+                    <span className="text-[10px] font-medium text-green-400">
+                      Active
+                    </span>
                   </div>
-                  <div className="flex gap-3 justify-end">
-                    <div className="space-y-2 text-right">
-                      <div className="h-3 w-40 rounded bg-violet-500/20 ml-auto" />
+                  <div className="h-3 w-full rounded bg-foreground/10" />
+                  <div className="h-2 w-2/3 rounded bg-foreground/5 mt-1" />
+                </div>
+                {/* Done task */}
+                <div className="rounded-lg border border-border/30 bg-muted/20 p-2.5 mb-2 opacity-70">
+                  <div className="flex items-center gap-1.5 mb-1">
+                    <span className="text-[10px]">✅</span>
+                    <span className="text-[10px] font-medium text-muted-foreground">
+                      Done
+                    </span>
+                  </div>
+                  <div className="h-3 w-4/5 rounded bg-muted/50" />
+                </div>
+                {/* Queued task */}
+                <div className="rounded-lg border border-border/30 bg-muted/10 p-2.5 mb-3 opacity-50">
+                  <div className="flex items-center gap-1.5 mb-1">
+                    <span className="text-[10px]">📋</span>
+                    <span className="text-[10px] font-medium text-muted-foreground">
+                      Queued
+                    </span>
+                  </div>
+                  <div className="h-3 w-3/4 rounded bg-muted/40" />
+                </div>
+                {/* New task button */}
+                <div className="rounded-lg border border-dashed border-border/40 px-2.5 py-2 text-center">
+                  <span className="text-[10px] text-muted-foreground">
+                    + New Task
+                  </span>
+                </div>
+              </div>
+
+              {/* Activity feed + Result */}
+              <div className="col-span-8 md:col-span-7 flex flex-col">
+                {/* Activity feed */}
+                <div className="flex-1 p-3 border-b border-border/50">
+                  <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/60 mb-3">
+                    Activity
+                  </div>
+                  <div className="space-y-2">
+                    <div className="flex items-start gap-2">
+                      <span className="text-[9px] font-mono text-muted-foreground/60 mt-0.5 shrink-0">
+                        14:32
+                      </span>
+                      <span className="text-[10px]">🔍</span>
+                      <div className="h-2.5 w-36 rounded bg-muted/50" />
                     </div>
-                    <div className="h-8 w-8 shrink-0 rounded-full bg-indigo-500/20" />
-                  </div>
-                  <div className="flex gap-3">
-                    <div className="h-8 w-8 shrink-0 rounded-full bg-violet-500/20" />
-                    <div className="space-y-2">
-                      <div className="h-3 w-72 rounded bg-muted/60" />
-                      <div className="h-3 w-56 rounded bg-muted/40" />
-                      <div className="h-3 w-32 rounded bg-muted/40" />
+                    <div className="flex items-start gap-2">
+                      <span className="text-[9px] font-mono text-muted-foreground/60 mt-0.5 shrink-0">
+                        14:33
+                      </span>
+                      <span className="text-[10px]">📝</span>
+                      <div className="h-2.5 w-44 rounded bg-muted/50" />
+                    </div>
+                    <div className="flex items-start gap-2">
+                      <span className="text-[9px] font-mono text-muted-foreground/60 mt-0.5 shrink-0">
+                        14:34
+                      </span>
+                      <span className="text-[10px]">⚡</span>
+                      <div className="h-2.5 w-32 rounded bg-muted/50" />
+                    </div>
+                    <div className="flex items-start gap-2">
+                      <span className="text-[9px] font-mono text-muted-foreground/60 mt-0.5 shrink-0">
+                        14:35
+                      </span>
+                      <span className="text-[10px]">📝</span>
+                      <div className="h-2.5 w-40 rounded bg-violet-500/20" />
+                    </div>
+                    <div className="flex items-start gap-2 opacity-60">
+                      <span className="text-[9px] font-mono text-muted-foreground/60 mt-0.5 shrink-0">
+                        14:35
+                      </span>
+                      <span className="text-[10px]">💭</span>
+                      <div className="flex gap-1 items-center">
+                        <div className="h-1.5 w-1.5 rounded-full bg-violet-400 animate-pulse" />
+                        <div className="h-1.5 w-1.5 rounded-full bg-violet-400 animate-pulse [animation-delay:0.2s]" />
+                        <div className="h-1.5 w-1.5 rounded-full bg-violet-400 animate-pulse [animation-delay:0.4s]" />
+                      </div>
                     </div>
                   </div>
                 </div>
-                <div className="mt-6 flex items-center gap-2">
-                  <div className="h-10 flex-1 rounded-lg border border-border/50 bg-muted/30" />
-                  <div className="h-10 w-10 rounded-lg bg-violet-500/20" />
+
+                {/* Result panel */}
+                <div className="p-3 h-[140px] md:h-[160px]">
+                  <div className="flex items-center gap-2 mb-2">
+                    <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/60">
+                      Result
+                    </div>
+                    <div className="flex gap-1">
+                      <div className="rounded bg-violet-500/20 px-1.5 py-0.5 text-[9px] text-violet-400 font-medium">
+                        Preview
+                      </div>
+                      <div className="rounded bg-muted/30 px-1.5 py-0.5 text-[9px] text-muted-foreground">
+                        Code
+                      </div>
+                    </div>
+                  </div>
+                  <div className="rounded-lg border border-border/30 bg-muted/10 p-2 h-[calc(100%-24px)]">
+                    <div className="h-3 w-1/3 rounded bg-muted/40 mb-2" />
+                    <div className="h-2 w-full rounded bg-muted/30 mb-1" />
+                    <div className="h-2 w-4/5 rounded bg-muted/25 mb-1" />
+                    <div className="h-2 w-2/3 rounded bg-muted/20" />
+                  </div>
                 </div>
               </div>
             </div>

@@ -1,7 +1,8 @@
 import { Hero } from '@/components/landing/hero';
 import { Features } from '@/components/landing/features';
-import { Comparison } from '@/components/landing/comparison';
+import { DemoPreview } from '@/components/landing/demo-preview';
 import { HowItWorks } from '@/components/landing/how-it-works';
+import { Comparison } from '@/components/landing/comparison';
 import { PricingTable } from '@/components/landing/pricing-table';
 import { Testimonials } from '@/components/landing/testimonials';
 import { CtaSection } from '@/components/landing/cta-section';
@@ -12,10 +13,11 @@ export default function LandingPage() {
     <>
       <Hero />
       <Features />
-      <Comparison />
+      <DemoPreview />
       <HowItWorks />
-      <PricingTable />
+      <Comparison />
       <Testimonials />
+      <PricingTable />
       <CtaSection />
       <Faq />
     </>

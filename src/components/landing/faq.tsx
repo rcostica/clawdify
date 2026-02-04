@@ -6,34 +6,54 @@ import { ChevronDown } from 'lucide-react';
 
 const faqs = [
   {
-    question: 'How is this different from ChatGPT?',
+    question: 'What is Clawdify?',
     answer:
-      'Clawdify gives you access to Claude, GPT-4, and Gemini in one organized workspace — not just a single model. Your conversations are organized by project instead of a flat list, and you can self-host for full privacy. All of this for $15/mo, less than ChatGPT Plus or Claude Pro alone.',
+      'Clawdify is a Mission Control dashboard for AI coding agents powered by OpenClaw. You create tasks, your AI agent executes them — reading files, writing code, running commands — and you watch it all happen in real-time from your browser.',
+  },
+  {
+    question: 'How is this different from ChatGPT or Claude?',
+    answer:
+      'ChatGPT and Claude are chat interfaces. Clawdify is a task-centric dashboard for autonomous AI agents. Instead of back-and-forth conversation, you give your agent a task ("Build a login page") and watch it actually do the work — creating files, installing dependencies, running your dev server. Think of it as giving an AI developer a ticket, not a prompt.',
+  },
+  {
+    question: 'Do I need to set up a server?',
+    answer:
+      'No. With one-click deploy, you can have an agent running in 5 minutes on Railway or Fly.io — without touching a terminal. The agent runs on your cloud account (not ours), so you keep full control. Alternatively, if you already run an OpenClaw Gateway, you can connect it directly.',
+  },
+  {
+    question: 'What does "Bring Your Own Gateway" (BYOG) mean?',
+    answer:
+      'If you already have an OpenClaw Gateway running on your own server, you can connect it to Clawdify by entering your WebSocket URL and token. This gives you the full dashboard experience with zero additional infrastructure. The Free plan supports BYOG.',
+  },
+  {
+    question: 'Where do my API keys go?',
+    answer:
+      'Your API keys stay on your Gateway — on YOUR server or YOUR Railway/Fly.io account. Clawdify never sees, stores, or touches your API keys. You pay Anthropic or OpenAI directly.',
+  },
+  {
+    question: 'What does the agent actually run on?',
+    answer:
+      'The AI agent (OpenClaw Gateway) runs on infrastructure you control. With one-click deploy, that means a container on your Railway or Fly.io account (typically $3-5/mo). With BYOG, it runs wherever you already have it — your laptop, a VPS, a home server. Clawdify itself is just the dashboard.',
   },
   {
     question: 'Is my data safe?',
     answer:
-      'Yes. With the self-hosted option, conversations never leave your own server. The OpenClaw relay is open source so you can inspect the code. Even with our hosted mode, we use encrypted connections and never train on your data. End-to-end encryption is on our roadmap.',
+      'Yes. Your code, conversations, and API keys never touch our servers. The OpenClaw Gateway processes everything locally on your infrastructure. Clawdify connects via WebSocket to display the activity feed and results — but the actual work happens on your machine.',
   },
   {
-    question: 'Do I need to run my own server?',
+    question: 'What AI models does it support?',
     answer:
-      'No. Clawdify works in hosted mode with zero setup — just sign up and start chatting. Self-hosting via the OpenClaw Gateway is entirely optional for users who want maximum privacy and control.',
-  },
-  {
-    question: 'What AI models are included?',
-    answer:
-      'The free tier includes Gemini Flash. The Pro plan ($15/mo) unlocks Claude (Anthropic), GPT-4 (OpenAI), and Gemini Pro (Google). You can switch models per conversation.',
+      'Any model supported by OpenClaw — including Claude (Anthropic), GPT-4 (OpenAI), and others. You configure the model on your Gateway and bring your own API key. Clawdify is model-agnostic.',
   },
   {
     question: 'Can I cancel anytime?',
     answer:
-      'Yes. There are no contracts or commitments. Cancel your Pro subscription anytime and you\'ll keep access until the end of your billing period. Your data is always exportable.',
+      "Yes. No contracts, no commitments. Cancel your Pro subscription anytime and you'll keep access until the end of your billing period. The free tier is always available.",
   },
   {
     question: 'What is OpenClaw?',
     answer:
-      'OpenClaw is the open-source AI engine that powers Clawdify\'s backend. It handles the connection between your browser and AI models. You can run it on your own hardware for full privacy, or use Clawdify\'s hosted version.',
+      "OpenClaw is an open-source AI agent runtime — the engine that powers the agent behind Clawdify. It handles tool execution, file operations, shell commands, and communication with AI models. Think of OpenClaw as the engine and Clawdify as the cockpit.",
   },
 ];
 

@@ -7,61 +7,43 @@ const tiers = [
     name: 'Free',
     price: '$0',
     period: '/mo',
-    description: 'Try Clawdify with Gemini Flash — no API key needed.',
+    description: 'Connect your own Gateway and start building. No strings.',
     cta: 'Get Started Free',
     ctaVariant: 'outline' as const,
     ctaHref: '/signup',
     highlighted: false,
     features: [
-      'Gemini Flash model (included)',
-      '3 projects',
-      'Basic chat interface',
-      'Dark mode',
-      'Mobile access',
+      'Connect your own Gateway (BYOG)',
+      '2 projects',
+      'Basic activity feed',
+      '7-day task history',
+      'Artifact preview',
+      'Multi-device access',
       'Community support',
     ],
   },
   {
     name: 'Pro',
-    price: '$15',
+    price: '$12',
     period: '/mo',
-    description: 'Use any model with your own API key. Full workspace features.',
+    description:
+      'Full Mission Control. Deploy-button agents, unlimited projects, and more.',
     cta: 'Start Pro Trial',
     ctaVariant: 'default' as const,
     ctaHref: '/signup',
     highlighted: true,
     badge: 'Most Popular',
     features: [
-      'Any model (bring your API key)',
-      'Claude, GPT-4, Gemini & more',
+      'Everything in Free',
+      'BYOG or one-click deploy Gateway',
       'Unlimited projects',
-      'Voice input & output',
-      'Artifacts & code preview',
-      'File uploads',
-      'Keyboard shortcuts',
-      'Import existing sessions',
+      'Full task history',
+      'Push notifications',
+      'Scheduled tasks',
+      'Agent analytics',
+      'Priority support',
     ],
-    note: 'API costs billed by your provider',
-  },
-  {
-    name: 'Self-Hosted',
-    price: '$0',
-    period: '',
-    description: 'Connect your own OpenClaw Gateway — full control, zero cost.',
-    cta: 'Connect Gateway',
-    ctaVariant: 'outline' as const,
-    ctaHref: '/signup',
-    highlighted: false,
-    features: [
-      'Your Gateway, your rules',
-      'All Pro features included',
-      'Complete privacy',
-      'No data leaves your server',
-      'Unlimited everything',
-      'Works with any model',
-      'Community support',
-      'No subscription needed',
-    ],
+    note: 'Deploy-button Gateways run on your Railway/Fly.io account (billed separately, ~$3-5/mo)',
   },
 ];
 
@@ -70,20 +52,20 @@ export function PricingTable() {
     <section id="pricing" className="relative py-24 md:py-32">
       <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-violet-500/20 to-transparent" />
 
-      <div className="mx-auto max-w-6xl px-6">
+      <div className="mx-auto max-w-4xl px-6">
         <div className="text-center">
           <p className="text-sm font-semibold uppercase tracking-widest text-violet-400">
             Pricing
           </p>
           <h2 className="mt-4 text-3xl font-bold tracking-tight sm:text-4xl">
-            Simple, transparent pricing
+            From $0/mo. Seriously.
           </h2>
           <p className="mx-auto mt-4 max-w-2xl text-muted-foreground">
-            Start free with Gemini Flash. Bring your own API key for any model. Self-host for complete control.
+            Bring your own Gateway for free. Upgrade to Pro for one-click deploy, unlimited projects, and cloud features.
           </p>
         </div>
 
-        <div className="mt-16 grid gap-6 md:grid-cols-3">
+        <div className="mt-16 grid gap-6 md:grid-cols-2 md:max-w-3xl md:mx-auto">
           {tiers.map((tier) => (
             <div
               key={tier.name}
@@ -169,7 +151,7 @@ export function PricingTable() {
           <p className="text-sm font-medium">
             🔑 Bring Your Own Key{' '}
             <span className="text-muted-foreground">
-              — Clawdify connects to models through your API keys. You pay your provider directly (OpenAI, Anthropic, Google) and keep full control of your usage and costs.
+              — Your API keys stay on your Gateway, not on our servers. You pay Anthropic or OpenAI directly and keep full control of your costs.
             </span>
           </p>
         </div>

@@ -1,24 +1,29 @@
+import { MousePointerClick, Key, Zap } from 'lucide-react';
+
 const steps = [
   {
     number: '01',
-    title: 'Sign up',
+    title: 'Click Deploy',
     description:
-      'Create your free account in seconds. No credit card required.',
-    icon: '✨',
+      'Pick Railway or Fly.io. One click deploys an AI agent to your own cloud account. No terminal needed.',
+    icon: MousePointerClick,
+    detail: 'Or connect your existing OpenClaw Gateway',
   },
   {
     number: '02',
-    title: 'Connect',
+    title: 'Add your API key',
     description:
-      'Link your own OpenClaw gateway or spin up our hosted option with one click.',
-    icon: '🔗',
+      'Enter your Anthropic or OpenAI key. Your agent connects to Clawdify automatically. You keep full control of costs.',
+    icon: Key,
+    detail: 'Keys never leave your infrastructure',
   },
   {
     number: '03',
-    title: 'Start building',
+    title: 'Create a task',
     description:
-      'Create projects, chat with AI, preview artifacts, and ship faster.',
-    icon: '🚀',
+      'Type what you want built. Watch your agent work in real-time — reading, writing, running commands — until it\'s done.',
+    icon: Zap,
+    detail: 'First task running in under 5 minutes',
   },
 ];
 
@@ -34,8 +39,11 @@ export function HowItWorks() {
             How it works
           </p>
           <h2 className="mt-4 text-3xl font-bold tracking-tight sm:text-4xl">
-            Up and running in minutes
+            From zero to AI agent in 5 minutes
           </h2>
+          <p className="mx-auto mt-4 max-w-2xl text-muted-foreground">
+            No servers to manage. No Docker to configure. No YAML to debug.
+          </p>
         </div>
 
         <div className="relative mt-16 grid gap-8 md:grid-cols-3">
@@ -44,8 +52,8 @@ export function HowItWorks() {
 
           {steps.map((step) => (
             <div key={step.number} className="relative text-center">
-              <div className="mx-auto mb-6 flex h-24 w-24 items-center justify-center rounded-2xl border border-border/50 bg-card/80 text-4xl shadow-lg shadow-violet-500/5">
-                {step.icon}
+              <div className="mx-auto mb-6 flex h-24 w-24 items-center justify-center rounded-2xl border border-border/50 bg-card/80 shadow-lg shadow-violet-500/5">
+                <step.icon className="h-10 w-10 text-violet-400" />
               </div>
               <div className="mb-2 text-xs font-bold uppercase tracking-widest text-violet-400">
                 Step {step.number}
@@ -53,6 +61,9 @@ export function HowItWorks() {
               <h3 className="text-lg font-semibold">{step.title}</h3>
               <p className="mt-2 text-sm text-muted-foreground">
                 {step.description}
+              </p>
+              <p className="mt-3 text-xs font-medium text-violet-400/70">
+                {step.detail}
               </p>
             </div>
           ))}

@@ -6,7 +6,7 @@ import { NextRequest, NextResponse } from 'next/server';
  *
  * 🔒 SECURITY: This endpoint is NOT production-ready.
  * Stripe webhook signature verification is required before enabling.
- * The endpoint returns 503 to prevent exploitation if accidentally deployed.
+ * The endpoint returns 503 to prevent exploitation if accidentally exposed.
  *
  * Production implementation checklist:
  * 1. Install Stripe SDK: `npm install stripe`

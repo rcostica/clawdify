@@ -21,6 +21,7 @@ import {
   Sparkles,
   Wifi,
   Rocket,
+  ExternalLink,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useGatewayStore } from '@/stores/gateway-store';
@@ -31,6 +32,7 @@ import { createProject, fetchProjects } from '@/lib/projects';
 import { useProjectStore } from '@/stores/project-store';
 import { useUserStore } from '@/stores/user-store';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { cn } from '@/lib/utils';
 
 /** Check if onboarding should be shown — uses Zustand persisted state */
@@ -47,8 +49,7 @@ export function shouldShowOnboarding(): boolean {
   return true;
 }
 
-type Step = 'welcome' | 'choose-path' | 'gateway-connect' | 'create-project' | 'done';
-type OnboardingPath = 'free' | 'pro' | 'gateway';
+type Step = 'welcome' | 'gateway-connect' | 'create-project' | 'done';
 
 interface OnboardingWizardProps {
   open: boolean;
@@ -60,7 +61,6 @@ const EMOJI_OPTIONS = ['📁', '🚀', '💡', '🎨', '🔬', '📊', '🤖', '
 
 export function OnboardingWizard({ open, onOpenChange }: OnboardingWizardProps) {
   const [step, setStep] = useState<Step>('welcome');
-  const [path, setPath] = useState<OnboardingPath | null>(null);
   const [direction, setDirection] = useState<'forward' | 'backward'>('forward');
   const router = useRouter();
 
@@ -88,7 +88,6 @@ export function OnboardingWizard({ open, onOpenChange }: OnboardingWizardProps) 
   const isConnected = useGatewayStore((s) => s.status === 'connected');
   const setProjects = useProjectStore((s) => s.setProjects);
   const addProject = useProjectStore((s) => s.addProject);
-  const setUserPlan = useUserStore((s) => s.setPlan);
   const setOnboardingCompleted = useUserStore((s) => s.setOnboardingCompleted);
   const setOnboardingPath = useUserStore((s) => s.setOnboardingPath);
   const setGatewayMode = useUserStore((s) => s.setGatewayMode);
@@ -98,9 +97,9 @@ export function OnboardingWizard({ open, onOpenChange }: OnboardingWizardProps) 
 
   const finishOnboarding = useCallback(() => {
     setOnboardingCompleted(true);
-    if (path) setOnboardingPath(path);
+    setOnboardingPath('free');
     onOpenChange(false);
-  }, [onOpenChange, path, setOnboardingCompleted, setOnboardingPath]);
+  }, [onOpenChange, setOnboardingCompleted, setOnboardingPath]);
 
   const skipToEnd = () => {
     setOnboardingCompleted(true);
@@ -138,20 +137,6 @@ export function OnboardingWizard({ open, onOpenChange }: OnboardingWizardProps) 
     setStep(nextStep);
   };
 
-  const handleChoosePro = () => {
-    setPath('pro');
-    setUserPlan('pro');
-    setGatewayMode('hosted');
-    goTo('create-project');
-  };
-
-  const handleChooseGateway = () => {
-    setPath('free');
-    setUserPlan('free');
-    setGatewayMode('byog');
-    goTo('gateway-connect');
-  };
-
   // ─── Gateway connection handlers ───────────────────────────────────────────
 
   const handleTestAndConnect = async () => {
@@ -183,6 +168,7 @@ export function OnboardingWizard({ open, onOpenChange }: OnboardingWizardProps) 
         insecureAuth,
       });
 
+      setGatewayMode('byog');
       toast.success('Connected to Gateway!');
     } catch (err) {
       toast.error('Connection failed', {
@@ -206,11 +192,7 @@ export function OnboardingWizard({ open, onOpenChange }: OnboardingWizardProps) 
       addProject(project);
       const projects = await fetchProjects();
       setProjects(projects);
-      if (path === 'pro') {
-        router.push('/deploy');
-      } else {
-        router.push(`/project/${project.id}`);
-      }
+      router.push(`/project/${project.id}`);
       goTo('done');
     } catch (err) {
       toast.error('Failed to create project', {
@@ -226,14 +208,13 @@ export function OnboardingWizard({ open, onOpenChange }: OnboardingWizardProps) 
   const getStepIndex = (): number => {
     switch (step) {
       case 'welcome': return 0;
-      case 'choose-path': return 1;
-      case 'gateway-connect': return 2;
-      case 'create-project': return path === 'pro' ? 2 : 3;
-      case 'done': return path === 'pro' ? 3 : 4;
+      case 'gateway-connect': return 1;
+      case 'create-project': return 2;
+      case 'done': return 3;
       default: return 0;
     }
   };
-  const totalSteps = path === 'pro' ? 4 : 5;
+  const totalSteps = 4;
   const currentIndex = getStepIndex();
 
   // Transition class based on direction
@@ -250,7 +231,6 @@ export function OnboardingWizard({ open, onOpenChange }: OnboardingWizardProps) 
         <VisuallyHidden>
           <DialogTitle>
             {step === 'welcome' && 'Welcome to Clawdify'}
-            {step === 'choose-path' && 'Choose your plan'}
             {step === 'gateway-connect' && 'Connect your Gateway'}
             {step === 'create-project' && 'Create your first project'}
             {step === 'done' && 'Setup complete'}
@@ -281,89 +261,16 @@ export function OnboardingWizard({ open, onOpenChange }: OnboardingWizardProps) 
               </div>
               <h2 className="text-2xl font-bold">Welcome to Clawdify 🐾</h2>
               <p className="max-w-sm text-muted-foreground">
-                Your private AI workspace
+                Your Mission Control for AI agents. Connect your Gateway and start managing tasks from anywhere.
               </p>
-              <Button onClick={() => goTo('choose-path')} size="lg" className="mt-4 gap-2">
-                Get Started
+              <Button onClick={() => goTo('gateway-connect')} size="lg" className="mt-4 gap-2">
+                Connect Your Gateway
                 <ArrowRight className="h-4 w-4" />
               </Button>
             </div>
           )}
 
-          {/* ── Step 2: Choose Your Path ── */}
-          {step === 'choose-path' && (
-            <div className={cn('space-y-4 py-4', contentClass)}>
-              <div className="text-center mb-4">
-                <h3 className="text-lg font-semibold">Choose your path</h3>
-                <p className="text-sm text-muted-foreground mt-1">
-                  How would you like to use Clawdify?
-                </p>
-              </div>
-
-              <div className="grid gap-3">
-                {/* Pro Card — Primary CTA */}
-                <button
-                  onClick={handleChoosePro}
-                  className="group relative flex items-start gap-4 rounded-xl border border-primary/30 p-4 text-left transition-all hover:border-primary hover:bg-primary/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-                >
-                  <Badge variant="default" className="absolute -top-2 right-3 text-[10px]">
-                    Recommended
-                  </Badge>
-                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-yellow-100 text-lg dark:bg-yellow-950">
-                    🚀
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2">
-                      <h4 className="font-semibold">Pro</h4>
-                      <span className="text-sm font-medium text-primary">$12/mo</span>
-                    </div>
-                    <p className="mt-0.5 text-sm text-muted-foreground">
-                      One-click deploy to Railway or Fly.io, unlimited projects, notifications &amp; analytics
-                    </p>
-                    <div className="mt-2 flex flex-wrap gap-1.5">
-                      <Badge variant="secondary" className="text-[10px]">One-click deploy</Badge>
-                      <Badge variant="secondary" className="text-[10px]">Unlimited</Badge>
-                      <Badge variant="secondary" className="text-[10px]">BYOK</Badge>
-                    </div>
-                  </div>
-                  <ArrowRight className="mt-1 h-4 w-4 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />
-                </button>
-
-                {/* Free / BYOG Card */}
-                <button
-                  onClick={handleChooseGateway}
-                  className="group flex items-start gap-4 rounded-xl border p-4 text-left transition-all hover:border-primary/50 hover:bg-primary/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-                >
-                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-100 text-lg dark:bg-blue-950">
-                    🔧
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2">
-                      <h4 className="font-semibold">Free</h4>
-                      <span className="text-sm text-muted-foreground">Bring your own Gateway</span>
-                    </div>
-                    <p className="mt-0.5 text-sm text-muted-foreground">
-                      Already running OpenClaw? Connect your Gateway and start managing tasks.
-                    </p>
-                    <div className="mt-2 flex flex-wrap gap-1.5">
-                      <Badge variant="secondary" className="text-[10px]">BYOG</Badge>
-                      <Badge variant="secondary" className="text-[10px]">2 projects</Badge>
-                      <Badge variant="secondary" className="text-[10px]">Any model</Badge>
-                    </div>
-                  </div>
-                  <ArrowRight className="mt-1 h-4 w-4 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />
-                </button>
-              </div>
-
-              <div className="flex justify-start pt-2">
-                <Button variant="ghost" onClick={() => goTo('welcome', 'backward')} className="gap-2">
-                  <ArrowLeft className="h-4 w-4" /> Back
-                </Button>
-              </div>
-            </div>
-          )}
-
-          {/* ── Step 3: Gateway Connection (Free/BYOG path) ── */}
+          {/* ── Step 2: Gateway Connection ── */}
           {step === 'gateway-connect' && (
             <div className={cn('space-y-4 py-4', contentClass)}>
               <div className="text-center mb-4">
@@ -440,24 +347,42 @@ export function OnboardingWizard({ open, onOpenChange }: OnboardingWizardProps) 
                     </AlertDescription>
                   </Alert>
                 )}
+
+                {/* Link for users who don't have OpenClaw yet */}
+                <div className="rounded-lg border border-dashed p-3 text-center">
+                  <p className="text-sm text-muted-foreground">
+                    Don&apos;t have OpenClaw yet?
+                  </p>
+                  <Link href="/get-started" className="inline-flex items-center gap-1.5 text-sm font-medium text-primary hover:underline mt-1">
+                    Install Guide <ExternalLink className="h-3 w-3" />
+                  </Link>
+                </div>
               </div>
 
               <div className="flex justify-between pt-2">
-                <Button variant="ghost" onClick={() => goTo('choose-path', 'backward')} className="gap-2">
+                <Button variant="ghost" onClick={() => goTo('welcome', 'backward')} className="gap-2">
                   <ArrowLeft className="h-4 w-4" /> Back
                 </Button>
                 <div className="flex gap-2">
                   {!connectionOk ? (
-                    <Button
-                      onClick={handleTestAndConnect}
-                      disabled={testing || !gatewayUrl || !!urlError}
-                    >
-                      {testing ? (
-                        <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Testing...</>
-                      ) : (
-                        'Test & Connect'
-                      )}
-                    </Button>
+                    <>
+                      <Button
+                        variant="ghost"
+                        onClick={() => goTo('create-project')}
+                      >
+                        Skip for now
+                      </Button>
+                      <Button
+                        onClick={handleTestAndConnect}
+                        disabled={testing || !gatewayUrl || !!urlError}
+                      >
+                        {testing ? (
+                          <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Testing...</>
+                        ) : (
+                          'Test & Connect'
+                        )}
+                      </Button>
+                    </>
                   ) : (
                     <Button onClick={() => goTo('create-project')} className="gap-2">
                       Next <ArrowRight className="h-4 w-4" />
@@ -468,7 +393,7 @@ export function OnboardingWizard({ open, onOpenChange }: OnboardingWizardProps) 
             </div>
           )}
 
-          {/* ── Step 4: Create First Project ── */}
+          {/* ── Step 3: Create First Project ── */}
           {step === 'create-project' && (
             <div className={cn('space-y-4 py-4', contentClass)}>
               <div className="text-center mb-4">
@@ -521,17 +446,24 @@ export function OnboardingWizard({ open, onOpenChange }: OnboardingWizardProps) 
                     ))}
                   </div>
                 </div>
+
+                {/* Pro upsell — subtle, after connecting */}
+                <div className="rounded-lg border border-yellow-500/20 bg-yellow-50/50 dark:bg-yellow-950/10 p-3">
+                  <p className="text-xs text-muted-foreground">
+                    <span className="font-medium text-foreground">Want more?</span>{' '}
+                    Unlock unlimited projects, push notifications &amp; analytics for{' '}
+                    <span className="font-semibold text-primary">$12/mo</span>.{' '}
+                    <Link href="/pricing" className="text-primary hover:underline">
+                      View plans →
+                    </Link>
+                  </p>
+                </div>
               </div>
 
               <div className="flex justify-between pt-2">
                 <Button
                   variant="ghost"
-                  onClick={() => {
-                    const backStep: Step =
-                      path === 'pro' ? 'choose-path' :
-                      'gateway-connect';
-                    goTo(backStep, 'backward');
-                  }}
+                  onClick={() => goTo('gateway-connect', 'backward')}
                   className="gap-2"
                 >
                   <ArrowLeft className="h-4 w-4" /> Back
@@ -552,7 +484,7 @@ export function OnboardingWizard({ open, onOpenChange }: OnboardingWizardProps) 
             </div>
           )}
 
-          {/* ── Step 5: Done ── */}
+          {/* ── Step 4: Done ── */}
           {step === 'done' && (
             <div className={cn('flex flex-col items-center justify-center gap-4 py-8 text-center', contentClass)}>
               {/* Animated checkmark */}
@@ -563,9 +495,9 @@ export function OnboardingWizard({ open, onOpenChange }: OnboardingWizardProps) 
                 You&apos;re all set!
               </h2>
               <p className="max-w-sm text-muted-foreground animate-in fade-in slide-in-from-bottom-2 duration-500 delay-500">
-                {path === 'free' && 'Gateway connected. Create your first task!'}
-                {path === 'pro' && 'Pro activated! You\'ll configure your API key when connecting your Gateway.'}
-                {!path && 'Your workspace is ready. Let\u0027s build something.'}
+                {isConnected
+                  ? 'Gateway connected. Create your first task!'
+                  : 'Your workspace is ready. Connect a Gateway when you\'re ready to start building.'}
               </p>
               <div className="mt-2 flex items-center gap-1 text-xs text-muted-foreground animate-in fade-in duration-500 delay-700">
                 <Loader2 className="h-3 w-3 animate-spin" />

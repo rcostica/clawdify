@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback, useMemo } from 'react';
+import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import { useParams } from 'next/navigation';
 import { useProjectStore } from '@/stores/project-store';
 import { useTaskStore } from '@/stores/task-store';
@@ -29,6 +29,10 @@ import { cn } from '@/lib/utils';
 import type { ChatEventPayload, AgentEventPayload } from '@/lib/gateway/types';
 import { getGatewayClient } from '@/lib/gateway/hooks';
 
+// Stable empty arrays to avoid re-render loops from new references
+const EMPTY_TASKS: ReturnType<typeof useTaskStore.getState>['tasksByProject'][string] = [];
+const EMPTY_ENTRIES: ReturnType<typeof useActivityStore.getState>['entriesByTask'][string] = [];
+
 export default function ProjectPage() {
   const { id: projectId } = useParams<{ id: string }>();
   const project = useProjectStore((s) =>
@@ -38,8 +42,8 @@ export default function ProjectPage() {
   const isConnected = useGatewayStore((s) => s.status === 'connected');
   const setMessages = useChatStore((s) => s.setMessages);
 
-  // Task state
-  const tasks = useTaskStore((s) => s.tasksByProject[projectId] ?? []);
+  // Task state — use stable empty array to prevent re-render loops
+  const tasks = useTaskStore((s) => s.tasksByProject[projectId] ?? EMPTY_TASKS);
   const selectedTaskId = useTaskStore((s) => s.selectedTaskId);
   const loadTasks = useTaskStore((s) => s.loadTasks);
   const createTask = useTaskStore((s) => s.createTask);
@@ -47,9 +51,9 @@ export default function ProjectPage() {
   const selectTask = useTaskStore((s) => s.selectTask);
   const cancelTask = useTaskStore((s) => s.cancelTask);
 
-  // Activity state
+  // Activity state — use stable empty array
   const activityEntries = useActivityStore((s) =>
-    selectedTaskId ? (s.entriesByTask[selectedTaskId] ?? []) : [],
+    selectedTaskId ? (s.entriesByTask[selectedTaskId] ?? EMPTY_ENTRIES) : EMPTY_ENTRIES,
   );
   const isStreaming = useActivityStore((s) =>
     selectedTaskId ? s.streamingTaskIds.has(selectedTaskId) : false,
@@ -102,7 +106,10 @@ export default function ProjectPage() {
   }, [messages, streaming?.content]);
 
   useEffect(() => {
-    setAllArtifacts(detectedArtifacts);
+    if (detectedArtifacts.length > 0 || allArtifacts.length > 0) {
+      setAllArtifacts(detectedArtifacts);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [detectedArtifacts]);
 
   // Persist artifacts from finalized messages
@@ -118,11 +125,15 @@ export default function ProjectPage() {
     }
   }, [messages.length, messages, projectId]);
 
+  // Keep a ref to tasks so the event wiring effect doesn't loop
+  const tasksRef = useRef(tasks);
+  tasksRef.current = tasks;
+
   // Wire up activity mapping from Gateway events for the active task
   useEffect(() => {
     if (!selectedTaskId) return;
 
-    const activeTask = tasks.find((t) => t.id === selectedTaskId);
+    const activeTask = tasksRef.current.find((t) => t.id === selectedTaskId);
     if (!activeTask?.runId) return;
 
     const client = getGatewayClient();
@@ -195,7 +206,7 @@ export default function ProjectPage() {
         onAgentEvent: origAgent,
       });
     };
-  }, [selectedTaskId, tasks, addActivity, updateTask, setActivityStreaming]);
+  }, [selectedTaskId, addActivity, updateTask, setActivityStreaming]);
 
   // Handle creating a task: create in DB, then send to Gateway
   const handleCreateTask = useCallback(

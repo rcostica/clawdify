@@ -37,14 +37,29 @@ function GitHubIcon({ className }: { className?: string }) {
   );
 }
 
+function getPasswordStrength(password: string): { score: number; label: string; color: string } {
+  let score = 0;
+  if (password.length >= 8) score++;
+  if (password.length >= 12) score++;
+  if (/[a-z]/.test(password) && /[A-Z]/.test(password)) score++;
+  if (/\d/.test(password)) score++;
+  if (/[^a-zA-Z0-9]/.test(password)) score++;
+
+  if (score <= 1) return { score, label: 'Weak', color: 'bg-red-500' };
+  if (score <= 2) return { score, label: 'Fair', color: 'bg-orange-500' };
+  if (score <= 3) return { score, label: 'Good', color: 'bg-yellow-500' };
+  if (score <= 4) return { score, label: 'Strong', color: 'bg-green-500' };
+  return { score, label: 'Very strong', color: 'bg-green-600' };
+}
+
 export default function SignupPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [oauthLoading, setOauthLoading] = useState<string | null>(null);
   const router = useRouter();
   const supabase = createClient();
+  const strength = password ? getPasswordStrength(password) : null;
 
   const handleOAuth = async (provider: 'google' | 'github') => {
     setOauthLoading(provider);
@@ -62,11 +77,6 @@ export default function SignupPage() {
 
   const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault();
-
-    if (password !== confirmPassword) {
-      toast.error('Passwords do not match');
-      return;
-    }
 
     if (password.length < 8) {
       toast.error('Password must be at least 8 characters');
@@ -171,19 +181,23 @@ export default function SignupPage() {
                 autoComplete="new-password"
                 minLength={8}
               />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="confirmPassword">Confirm Password</Label>
-              <Input
-                id="confirmPassword"
-                type="password"
-                placeholder="••••••••"
-                value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-                required
-                autoComplete="new-password"
-                minLength={8}
-              />
+              {strength && (
+                <div className="space-y-1.5">
+                  <div className="flex gap-1">
+                    {Array.from({ length: 5 }).map((_, i) => (
+                      <div
+                        key={i}
+                        className={`h-1 flex-1 rounded-full transition-colors ${
+                          i < strength.score ? strength.color : 'bg-muted'
+                        }`}
+                      />
+                    ))}
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Password strength: <span className="font-medium">{strength.label}</span>
+                  </p>
+                </div>
+              )}
             </div>
           </CardContent>
           <CardFooter className="flex flex-col gap-4">

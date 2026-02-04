@@ -10,13 +10,6 @@ import { Switch } from '@/components/ui/switch';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import {
   Loader2,
   CheckCircle2,
   XCircle,
@@ -28,9 +21,6 @@ import {
   Sparkles,
   Wifi,
   Rocket,
-  Star,
-  Key,
-  CreditCard,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useGatewayStore } from '@/stores/gateway-store';
@@ -40,7 +30,6 @@ import { createClient } from '@/lib/supabase/client';
 import { createProject, fetchProjects } from '@/lib/projects';
 import { useProjectStore } from '@/stores/project-store';
 import { useUserStore } from '@/stores/user-store';
-import { API_PROVIDERS, type ApiProviderId } from '@/lib/billing/plans';
 import { useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
 
@@ -58,7 +47,7 @@ export function shouldShowOnboarding(): boolean {
   return true;
 }
 
-type Step = 'welcome' | 'choose-path' | 'pro-setup' | 'gateway-connect' | 'create-project' | 'done';
+type Step = 'welcome' | 'choose-path' | 'gateway-connect' | 'create-project' | 'done';
 type OnboardingPath = 'free' | 'pro' | 'gateway';
 
 interface OnboardingWizardProps {
@@ -74,14 +63,6 @@ export function OnboardingWizard({ open, onOpenChange }: OnboardingWizardProps) 
   const [path, setPath] = useState<OnboardingPath | null>(null);
   const [direction, setDirection] = useState<'forward' | 'backward'>('forward');
   const router = useRouter();
-
-  // Pro setup state
-  const [proOption, setProOption] = useState<'api-key' | 'credits' | null>(null);
-  const [apiProvider, setApiProvider] = useState<ApiProviderId>('anthropic');
-  const [apiKey, setApiKey] = useState('');
-  const [showApiKey, setShowApiKey] = useState(false);
-  const [validatingKey, setValidatingKey] = useState(false);
-  const [keyValid, setKeyValid] = useState<boolean | null>(null);
 
   // Gateway connection state
   const [gatewayUrl, setGatewayUrl] = useState(
@@ -110,8 +91,6 @@ export function OnboardingWizard({ open, onOpenChange }: OnboardingWizardProps) 
   const setUserPlan = useUserStore((s) => s.setPlan);
   const setOnboardingCompleted = useUserStore((s) => s.setOnboardingCompleted);
   const setOnboardingPath = useUserStore((s) => s.setOnboardingPath);
-  const setApiProviderStore = useUserStore((s) => s.setApiProvider);
-  const setApiKeySet = useUserStore((s) => s.setApiKeySet);
   const setGatewayMode = useUserStore((s) => s.setGatewayMode);
   const supabase = createClient();
 
@@ -171,41 +150,6 @@ export function OnboardingWizard({ open, onOpenChange }: OnboardingWizardProps) 
     setUserPlan('free');
     setGatewayMode('byog');
     goTo('gateway-connect');
-  };
-
-  // ─── Pro setup handlers ────────────────────────────────────────────────────
-
-  const handleValidateApiKey = async () => {
-    if (!apiKey.trim()) return;
-    setValidatingKey(true);
-    setKeyValid(null);
-    try {
-      // Mock validation: check if key starts with expected prefix
-      const provider = API_PROVIDERS.find((p) => p.id === apiProvider);
-      await new Promise((resolve) => setTimeout(resolve, 1000)); // simulate network delay
-
-      if (provider && apiKey.startsWith(provider.keyPrefix)) {
-        setKeyValid(true);
-        setApiProviderStore(apiProvider);
-        setApiKeySet(true);
-        setUserPlan('pro');
-        toast.success('API key validated!');
-      } else {
-        setKeyValid(false);
-        toast.error('Invalid API key', {
-          description: `Expected key starting with "${provider?.keyPrefix ?? ''}"`,
-        });
-      }
-    } catch {
-      setKeyValid(false);
-      toast.error('Validation failed');
-    } finally {
-      setValidatingKey(false);
-    }
-  };
-
-  const handleProContinue = () => {
-    goTo('create-project');
   };
 
   // ─── Gateway connection handlers ───────────────────────────────────────────
@@ -283,7 +227,6 @@ export function OnboardingWizard({ open, onOpenChange }: OnboardingWizardProps) 
     switch (step) {
       case 'welcome': return 0;
       case 'choose-path': return 1;
-      case 'pro-setup':
       case 'gateway-connect': return 2;
       case 'create-project': return path === 'pro' ? 2 : 3;
       case 'done': return path === 'pro' ? 3 : 4;
@@ -308,7 +251,6 @@ export function OnboardingWizard({ open, onOpenChange }: OnboardingWizardProps) 
           <DialogTitle>
             {step === 'welcome' && 'Welcome to Clawdify'}
             {step === 'choose-path' && 'Choose your plan'}
-            {step === 'pro-setup' && 'Pro Setup'}
             {step === 'gateway-connect' && 'Connect your Gateway'}
             {step === 'create-project' && 'Create your first project'}
             {step === 'done' && 'Setup complete'}
@@ -421,163 +363,7 @@ export function OnboardingWizard({ open, onOpenChange }: OnboardingWizardProps) 
             </div>
           )}
 
-          {/* ── Step 3a: Pro Setup ── */}
-          {step === 'pro-setup' && (
-            <div className={cn('space-y-4 py-4', contentClass)}>
-              <div className="text-center mb-4">
-                <div className="flex h-10 w-10 mx-auto items-center justify-center rounded-xl bg-yellow-100 dark:bg-yellow-950 mb-3">
-                  <Star className="h-5 w-5 text-yellow-600" />
-                </div>
-                <h3 className="text-lg font-semibold">Pro Setup</h3>
-                <p className="text-sm text-muted-foreground mt-1">
-                  Choose how to power your AI models
-                </p>
-              </div>
-
-              {/* Sub-option selection */}
-              {!proOption && (
-                <div className="grid gap-3">
-                  <button
-                    onClick={() => setProOption('api-key')}
-                    className="group flex items-center gap-3 rounded-xl border p-4 text-left transition-all hover:border-primary/50 hover:bg-primary/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-                  >
-                    <Key className="h-5 w-5 shrink-0 text-muted-foreground" />
-                    <div className="flex-1">
-                      <h4 className="text-sm font-semibold">Use your own API key</h4>
-                      <p className="text-xs text-muted-foreground">
-                        Connect Anthropic, OpenAI, or Google API key
-                      </p>
-                    </div>
-                    <ArrowRight className="h-4 w-4 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />
-                  </button>
-
-                  <button
-                    disabled
-                    className="flex items-center gap-3 rounded-xl border border-dashed p-4 text-left opacity-60 cursor-not-allowed"
-                  >
-                    <CreditCard className="h-5 w-5 shrink-0 text-muted-foreground" />
-                    <div className="flex-1">
-                      <h4 className="flex items-center gap-2 text-sm font-semibold">
-                        Use Clawdify credits
-                        <Badge variant="secondary" className="text-[10px]">Coming Soon</Badge>
-                      </h4>
-                      <p className="text-xs text-muted-foreground">
-                        Pay per token — no API keys needed
-                      </p>
-                    </div>
-                  </button>
-                </div>
-              )}
-
-              {/* API Key form */}
-              {proOption === 'api-key' && (
-                <div className="space-y-3">
-                  <div className="space-y-1.5">
-                    <Label htmlFor="ob-provider">AI Provider</Label>
-                    <Select
-                      value={apiProvider}
-                      onValueChange={(v) => {
-                        setApiProvider(v as ApiProviderId);
-                        setApiKey('');
-                        setKeyValid(null);
-                      }}
-                    >
-                      <SelectTrigger className="w-full" id="ob-provider">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {API_PROVIDERS.map((p) => (
-                          <SelectItem key={p.id} value={p.id}>
-                            {p.name} — {p.models.join(', ')}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <Label htmlFor="ob-api-key">API Key</Label>
-                    <div className="relative">
-                      <Input
-                        id="ob-api-key"
-                        type={showApiKey ? 'text' : 'password'}
-                        placeholder={`Enter your ${API_PROVIDERS.find((p) => p.id === apiProvider)?.name ?? ''} API key`}
-                        value={apiKey}
-                        onChange={(e) => { setApiKey(e.target.value); setKeyValid(null); }}
-                        autoComplete="off"
-                        className="pr-10"
-                      />
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        className="absolute right-0 top-0 h-full px-3"
-                        onClick={() => setShowApiKey(!showApiKey)}
-                      >
-                        {showApiKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                      </Button>
-                    </div>
-                    <p className="text-[11px] text-muted-foreground">
-                      🔒 Your key is encrypted and stored securely. Never stored in the browser.
-                    </p>
-                  </div>
-
-                  {keyValid === true && (
-                    <Alert className="border-green-500/50 bg-green-50 dark:bg-green-950/20">
-                      <CheckCircle2 className="h-4 w-4 text-green-600" />
-                      <AlertDescription className="text-green-700 dark:text-green-300">
-                        API key validated successfully!
-                      </AlertDescription>
-                    </Alert>
-                  )}
-                  {keyValid === false && (
-                    <Alert className="border-red-500/50 bg-red-50 dark:bg-red-950/20">
-                      <XCircle className="h-4 w-4 text-red-600" />
-                      <AlertDescription className="text-red-700 dark:text-red-300">
-                        Invalid API key. Please check and try again.
-                      </AlertDescription>
-                    </Alert>
-                  )}
-
-                  <Button
-                    onClick={handleValidateApiKey}
-                    disabled={validatingKey || !apiKey.trim()}
-                    className="w-full"
-                  >
-                    {validatingKey ? (
-                      <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Validating...</>
-                    ) : (
-                      'Validate Key'
-                    )}
-                  </Button>
-                </div>
-              )}
-
-              <div className="flex justify-between pt-2">
-                <Button
-                  variant="ghost"
-                  onClick={() => {
-                    if (proOption) {
-                      setProOption(null);
-                      setKeyValid(null);
-                    } else {
-                      goTo('choose-path', 'backward');
-                    }
-                  }}
-                  className="gap-2"
-                >
-                  <ArrowLeft className="h-4 w-4" /> Back
-                </Button>
-                {keyValid === true && (
-                  <Button onClick={handleProContinue} className="gap-2">
-                    Next <ArrowRight className="h-4 w-4" />
-                  </Button>
-                )}
-              </div>
-            </div>
-          )}
-
-          {/* ── Step 3b: Gateway Connection ── */}
+          {/* ── Step 3: Gateway Connection (Free/BYOG path) ── */}
           {step === 'gateway-connect' && (
             <div className={cn('space-y-4 py-4', contentClass)}>
               <div className="text-center mb-4">

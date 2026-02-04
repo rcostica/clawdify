@@ -34,8 +34,9 @@ export function Hero() {
         </h1>
 
         <p className="mx-auto mt-6 max-w-2xl text-lg text-muted-foreground md:text-xl">
-          Deploy your own AI agent in 5 minutes. Create tasks, watch it work in
-          real-time, and see results — all from your browser.
+          You run the agent. We give you the command center. Create tasks, watch
+          your agent work in real-time, and review results — all from one
+          dashboard.
         </p>
 
         <div className="mt-10 flex flex-col items-center gap-4 sm:flex-row sm:justify-center">
@@ -44,7 +45,7 @@ export function Hero() {
               size="lg"
               className="h-12 px-8 text-base bg-gradient-to-r from-violet-600 to-indigo-600 text-white shadow-lg shadow-violet-500/25 hover:from-violet-500 hover:to-indigo-500 hover:shadow-violet-500/40 border-0"
             >
-              Deploy Your Agent
+              Get Started Free
             </Button>
           </Link>
           <Link href="#how-it-works">
@@ -59,8 +60,8 @@ export function Hero() {
         </div>
 
         <p className="mt-4 text-sm text-muted-foreground">
-          Free tier available · No credit card required · Your API keys, your
-          infrastructure
+          Free tier available · No credit card required · Your API keys stay on
+          your machine
         </p>
 
         {/* Mission Control mockup */}

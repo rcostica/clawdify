@@ -11,7 +11,7 @@ import {
   Plus,
   Wifi,
   Keyboard,
-  Rocket,
+  Zap,
   ListTodo,
   ChevronRight,
   CheckCircle2,
@@ -108,10 +108,10 @@ export default function AppHomePage() {
         <div className="flex flex-wrap gap-2">
           {!isConnected && (
             <>
-              <Link href="/deploy">
+              <Link href="/get-started">
                 <Button variant="default" className="gap-2">
-                  <Rocket className="h-4 w-4" />
-                  Deploy Agent
+                  <Zap className="h-4 w-4" />
+                  Get Started
                 </Button>
               </Link>
               <Link href="/connect">

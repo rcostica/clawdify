@@ -8,7 +8,7 @@ import { Menu, X } from 'lucide-react';
 const navLinks = [
   { label: 'Features', href: '#features' },
   { label: 'How It Works', href: '#how-it-works' },
-  { label: 'Pricing', href: '/pricing' },
+  { label: 'Pricing', href: '#pricing' },
 ];
 
 export function LandingNav() {
@@ -48,7 +48,7 @@ export function LandingNav() {
                 size="sm"
                 className="bg-gradient-to-r from-violet-600 to-indigo-600 text-white shadow-lg shadow-violet-500/25 hover:from-violet-500 hover:to-indigo-500 hover:shadow-violet-500/40 border-0"
               >
-                Deploy Your Agent
+                Get Started
               </Button>
             </Link>
           </div>
@@ -92,7 +92,7 @@ export function LandingNav() {
               <Button
                 className="w-full bg-gradient-to-r from-violet-600 to-indigo-600 text-white shadow-lg shadow-violet-500/25 hover:from-violet-500 hover:to-indigo-500 hover:shadow-violet-500/40 border-0"
               >
-                Deploy Your Agent
+                Get Started
               </Button>
             </Link>
           </div>

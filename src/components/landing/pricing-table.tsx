@@ -7,13 +7,13 @@ const tiers = [
     name: 'Free',
     price: '$0',
     period: '/mo',
-    description: 'Connect your own Gateway and start building. No strings.',
+    description: 'Connect your Gateway and start managing tasks. No strings.',
     cta: 'Get Started Free',
     ctaVariant: 'outline' as const,
     ctaHref: '/signup',
     highlighted: false,
     features: [
-      'Connect your own Gateway (BYOG)',
+      'Connect your own Gateway',
       '2 projects',
       'Basic activity feed',
       '7-day task history',
@@ -27,23 +27,22 @@ const tiers = [
     price: '$12',
     period: '/mo',
     description:
-      'Full Mission Control. Deploy-button agents, unlimited projects, and more.',
-    cta: 'Get Started',
+      'Full Mission Control. Unlimited projects, analytics, and priority support.',
+    cta: 'Upgrade to Pro',
     ctaVariant: 'default' as const,
     ctaHref: '/signup',
     highlighted: true,
     badge: 'Most Popular',
     features: [
       'Everything in Free',
-      'BYOG or one-click deploy Gateway',
       'Unlimited projects',
       'Full task history',
       'Push notifications',
-      'Scheduled tasks',
-      'Agent analytics',
+      'Agent analytics & token tracking',
+      'Multi-gateway management',
+      'Command palette & shortcuts',
       'Priority support',
     ],
-    note: 'Deploy-button Gateways run on your Railway/Fly.io account (billed separately, ~$3-5/mo)',
   },
 ];
 
@@ -58,10 +57,11 @@ export function PricingTable() {
             Pricing
           </p>
           <h2 className="mt-4 text-3xl font-bold tracking-tight sm:text-4xl">
-            From $0/mo. Seriously.
+            Free to start. $12/mo when you need more.
           </h2>
           <p className="mx-auto mt-4 max-w-2xl text-muted-foreground">
-            Bring your own Gateway for free. Upgrade to Pro for one-click deploy, unlimited projects, and cloud features.
+            Connect your Gateway and manage tasks for free. Upgrade to Pro for
+            unlimited projects, analytics, and notifications.
           </p>
         </div>
 
@@ -124,12 +124,6 @@ export function PricingTable() {
                 ))}
               </ul>
 
-              {'note' in tier && tier.note && (
-                <p className="mb-4 text-xs text-muted-foreground text-center italic">
-                  {tier.note}
-                </p>
-              )}
-
               <Link href={tier.ctaHref} className="mt-auto">
                 <Button
                   variant={tier.ctaVariant}
@@ -149,9 +143,10 @@ export function PricingTable() {
         {/* BYOK explainer */}
         <div className="mt-10 rounded-xl border border-border/50 bg-card/50 p-6 text-center">
           <p className="text-sm font-medium">
-            🔑 Bring Your Own Key{' '}
+            🔑 Your keys never leave your machine{' '}
             <span className="text-muted-foreground">
-              — Your API keys stay on your Gateway, not on our servers. You pay Anthropic or OpenAI directly and keep full control of your costs.
+              — API keys stay on your Gateway. You pay Anthropic or OpenAI
+              directly. Clawdify is just the dashboard.
             </span>
           </p>
         </div>

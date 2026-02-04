@@ -1,29 +1,32 @@
-import { MousePointerClick, Key, Zap } from 'lucide-react';
+import { Terminal, Link2, Zap } from 'lucide-react';
 
 const steps = [
   {
     number: '01',
-    title: 'Click Deploy',
+    title: 'Install OpenClaw',
     description:
-      'Pick Railway or Fly.io. One click deploys an AI agent to your own cloud account. No terminal needed.',
-    icon: MousePointerClick,
-    detail: 'Or connect your existing OpenClaw Gateway',
+      'One command gets you the OpenClaw Gateway — the agent runtime that runs on your machine. Your keys, your hardware, your control.',
+    icon: Terminal,
+    detail: 'npm install -g openclaw',
+    isCode: true,
   },
   {
     number: '02',
-    title: 'Add your API key',
+    title: 'Connect to Clawdify',
     description:
-      'Enter your Anthropic or OpenAI key. Your agent connects to Clawdify automatically. You keep full control of costs.',
-    icon: Key,
-    detail: 'Keys never leave your infrastructure',
+      'Paste your Clawdify token into the Gateway config. Your agent connects automatically and shows up in your dashboard.',
+    icon: Link2,
+    detail: 'openclaw gateway start --token YOUR_TOKEN',
+    isCode: true,
   },
   {
     number: '03',
-    title: 'Create a task',
+    title: 'Create your first task',
     description:
-      'Type what you want built. Watch your agent work in real-time — reading, writing, running commands — until it\'s done.',
+      'Type what you want done. Your agent picks it up, starts working, and you watch every step in real-time from your browser.',
     icon: Zap,
     detail: 'First task running in under 5 minutes',
+    isCode: false,
   },
 ];
 
@@ -39,10 +42,11 @@ export function HowItWorks() {
             How it works
           </p>
           <h2 className="mt-4 text-3xl font-bold tracking-tight sm:text-4xl">
-            From zero to AI agent in 5 minutes
+            Connected in 5 minutes
           </h2>
           <p className="mx-auto mt-4 max-w-2xl text-muted-foreground">
-            No servers to manage. No Docker to configure. No YAML to debug.
+            Install the Gateway on your machine. Connect it to Clawdify. Start
+            creating tasks. That&apos;s it.
           </p>
         </div>
 
@@ -62,7 +66,13 @@ export function HowItWorks() {
               <p className="mt-2 text-sm text-muted-foreground">
                 {step.description}
               </p>
-              <p className="mt-3 text-xs font-medium text-violet-400/70">
+              <p
+                className={`mt-3 text-xs font-medium ${
+                  step.isCode
+                    ? 'font-mono rounded-md bg-muted/50 px-3 py-1.5 inline-block text-violet-400'
+                    : 'text-violet-400/70'
+                }`}
+              >
                 {step.detail}
               </p>
             </div>

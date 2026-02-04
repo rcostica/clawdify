@@ -5,11 +5,11 @@ import { Footer } from '@/components/landing/footer';
 export const metadata: Metadata = {
   title: 'Clawdify — Mission Control for AI Agents',
   description:
-    'Deploy your own AI agent in 5 minutes. Create tasks, watch it work in real-time, and see results — all from your browser. Free tier available.',
+    'Mission Control for your AI agents. Create tasks, watch your agent work in real-time, and review results — all from one dashboard. Free tier available.',
   openGraph: {
     title: 'Clawdify — Mission Control for AI Agents',
     description:
-      'Deploy your own AI agent in 5 minutes. Create tasks, watch it work in real-time, and see results — all from your browser.',
+      'Mission Control for your AI agents. Create tasks, watch your agent work in real-time, and review results — all from one dashboard.',
     type: 'website',
     siteName: 'Clawdify',
   },
@@ -17,7 +17,7 @@ export const metadata: Metadata = {
     card: 'summary_large_image',
     title: 'Clawdify — Mission Control for AI Agents',
     description:
-      'Deploy your own AI agent in 5 minutes. Create tasks, watch it work in real-time, and see results — all from your browser.',
+      'Mission Control for your AI agents. Create tasks, watch your agent work in real-time, and review results — all from one dashboard.',
   },
 };
 

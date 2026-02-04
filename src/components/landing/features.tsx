@@ -1,63 +1,64 @@
 import {
   Activity,
   ListTodo,
-  Rocket,
-  Link2,
-  MonitorSmartphone,
+  FolderKanban,
   Eye,
   Bell,
-  Shield,
+  BarChart3,
+  Network,
+  Command,
 } from 'lucide-react';
 
 const features = [
   {
+    icon: ListTodo,
+    title: 'Task management',
+    description:
+      'Create tasks, queue them up, assign them to your agent. Track progress from queued → active → done. Your agent\'s to-do list, managed visually.',
+  },
+  {
     icon: Activity,
     title: 'Real-time activity feed',
     description:
-      'Watch your agent read files, write code, and run commands — as it happens. Like watching a senior dev pair-program with you.',
-  },
-  {
-    icon: ListTodo,
-    title: 'Task-based workflow',
-    description:
-      'Create tasks, queue them up, and let your agent work through them. Track progress from active to done.',
-  },
-  {
-    icon: Rocket,
-    title: 'One-click deploy',
-    description:
-      'Deploy your own AI agent to Railway or Fly.io with a single click. Runs on your account. Takes 5 minutes.',
-  },
-  {
-    icon: Link2,
-    title: 'Bring your own Gateway',
-    description:
-      'Already running an OpenClaw Gateway? Connect it in seconds. Enter your WebSocket URL and token — done.',
-  },
-  {
-    icon: MonitorSmartphone,
-    title: 'Works on every device',
-    description:
-      'Start a task on your laptop. Check progress on your phone. Full experience on every screen size.',
+      'Watch your agent read files, write code, and run commands — as it happens. Every action, timestamped and logged.',
   },
   {
     icon: Eye,
-    title: 'Artifact preview',
+    title: 'Artifact viewer',
     description:
-      'See what your agent produced — rendered HTML, syntax-highlighted code, and markdown — right in the dashboard.',
+      'Preview what your agent produced — rendered HTML, syntax-highlighted code, markdown docs, images — right in the dashboard. No context switching.',
+  },
+  {
+    icon: FolderKanban,
+    title: 'Project organization',
+    description:
+      'Group tasks by project. Switch between client work, side projects, and experiments. Each project gets its own task history and activity log.',
   },
   {
     icon: Bell,
     title: 'Notifications',
     description:
-      'Get notified when tasks finish. No need to stare at the screen. Come back when the work is done.',
+      'Get alerted when tasks complete or fail. Step away from the screen — your dashboard will ping you when there\'s something to review.',
     badge: 'Pro',
   },
   {
-    icon: Shield,
-    title: 'Your keys. Your infrastructure.',
+    icon: BarChart3,
+    title: 'Analytics',
     description:
-      'Clawdify never touches your API keys. They stay on your Gateway — on YOUR server, YOUR account.',
+      'Track token usage, task success rates, and time spent per project. Know exactly what your agent costs and where the time goes.',
+    badge: 'Pro',
+  },
+  {
+    icon: Network,
+    title: 'Multi-gateway support',
+    description:
+      'Running multiple Gateways? Manage them all from one dashboard. Different machines, different projects — one control plane.',
+  },
+  {
+    icon: Command,
+    title: 'Keyboard-first',
+    description:
+      'Command palette, keyboard shortcuts, and quick actions. Navigate your dashboard without touching the mouse. Built for developers who live in the keyboard.',
   },
 ];
 
@@ -70,11 +71,11 @@ export function Features() {
             Features
           </p>
           <h2 className="mt-4 text-3xl font-bold tracking-tight sm:text-4xl">
-            Everything you need to manage AI agents
+            Your agent works. You stay in control.
           </h2>
           <p className="mx-auto mt-4 max-w-2xl text-muted-foreground">
-            A task-centric dashboard for developers who want to see what their
-            AI agent is doing — and stay in control.
+            A dashboard built for developers who delegate work to AI agents —
+            and want visibility into every step.
           </p>
         </div>
 

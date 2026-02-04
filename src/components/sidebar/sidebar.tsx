@@ -11,7 +11,7 @@ import { ImportSessionsDialog } from '@/components/import/import-sessions-dialog
 import { AgentStatus } from '@/components/activity/agent-status';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
-import { Settings, LogOut, Wifi, Download, Rocket } from 'lucide-react';
+import { Settings, LogOut, Wifi, Download, Zap } from 'lucide-react';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { toast } from 'sonner';
 import { useProjectStore } from '@/stores/project-store';
@@ -109,14 +109,14 @@ export function Sidebar() {
           <span className="text-xs text-muted-foreground">Theme</span>
           <ThemeToggle />
         </div>
-        <Link href="/deploy">
+        <Link href="/get-started">
           <Button
             variant="ghost"
             className="w-full justify-start gap-2"
             size="sm"
           >
-            <Rocket className="h-4 w-4" />
-            Deploy
+            <Zap className="h-4 w-4" />
+            Get Started
           </Button>
         </Link>
         <Link href="/connect">

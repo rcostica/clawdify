@@ -2,9 +2,9 @@
 
 import { useGatewayStore } from '@/stores/gateway-store';
 import { cn } from '@/lib/utils';
-import { CheckCircle2, Loader2, Circle, Wifi } from 'lucide-react';
+import { CheckCircle2, Loader2, Circle } from 'lucide-react';
 
-export function DeployStatus() {
+export function ConnectionStatus() {
   const status = useGatewayStore((s) => s.status);
   const isConnected = status === 'connected';
   const isConnecting = status === 'connecting' || status === 'handshaking';
@@ -38,22 +38,21 @@ export function DeployStatus() {
 
       {isConnected && (
         <p className="text-sm text-muted-foreground">
-          Your gateway is connected and ready. Head to a project to create your first task.
+          Your Gateway is connected and ready. Head to a project to create your first task.
         </p>
       )}
 
       {isConnecting && (
         <div className="space-y-2">
-          <DeployStep label="Deploying container" done />
-          <DeployStep label="Starting gateway" done />
-          <DeployStep label="Connecting to Clawdify" active />
+          <ConnectionStep label="Reaching Gateway" done />
+          <ConnectionStep label="Authenticating" active />
         </div>
       )}
     </div>
   );
 }
 
-function DeployStep({
+function ConnectionStep({
   label,
   done,
   active,

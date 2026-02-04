@@ -1,33 +1,33 @@
-import { Code2, Clock, Laptop, Briefcase } from 'lucide-react';
+import { Code2, Users, Rocket, Laptop } from 'lucide-react';
 
 const personas = [
   {
     icon: Code2,
     title: 'Freelance developers',
     description:
-      'Ship client projects faster. Give your agent the task, review the output, deliver the work. More projects, less grind.',
-    highlight: '"I used to spend 3 hours on boilerplate. Now my agent does it while I write the proposal."',
+      'Managing multiple client projects? Create a project per client, queue up tasks, and let your agent handle the boilerplate while you focus on architecture and client calls.',
+    scenario: 'Queue tasks before bed. Review results with morning coffee.',
   },
   {
-    icon: Clock,
-    title: 'Side-project builders',
+    icon: Users,
+    title: 'Small teams',
     description:
-      'Got an idea at 11pm? Queue up the tasks. Check your phone in the morning. Your agent worked while you slept.',
-    highlight: '"I launched my SaaS MVP in a weekend. The agent handled the boring parts."',
+      'Delegate repetitive tasks to your AI agent — test writing, documentation, refactoring. The dashboard gives the whole team visibility into what the agent is doing.',
+    scenario: 'One agent, shared dashboard, everyone sees the progress.',
   },
   {
-    icon: Briefcase,
-    title: 'Startup engineers',
+    icon: Rocket,
+    title: 'Solo founders',
     description:
-      'Move fast without breaking things. Your agent writes tests, refactors code, and handles the PRs you never get to.',
-    highlight: '"Our 3-person team ships like a 10-person team. The agent is our secret weapon."',
+      'Building alone doesn\'t mean building slowly. Your agent is your first hire. Assign it tickets from the dashboard like you would a junior dev.',
+    scenario: 'Ship your MVP faster with an AI co-pilot you can actually manage.',
   },
   {
     icon: Laptop,
     title: 'AI-curious developers',
     description:
-      "Heard about AI agents but found setup too complex? One click deploys your own agent. See what the fuss is about.",
-    highlight: '"I went from zero to watching an agent build a React app in under 5 minutes."',
+      'Used ChatGPT but want more? An autonomous agent that reads your codebase, runs commands, and builds things — with a dashboard to watch it all happen.',
+    scenario: 'From chat to autonomous work, with full visibility.',
   },
 ];
 
@@ -42,11 +42,12 @@ export function Testimonials() {
             Built For
           </p>
           <h2 className="mt-4 text-3xl font-bold tracking-tight sm:text-4xl">
-            Developers who ship
+            Developers who delegate
           </h2>
           <p className="mx-auto mt-4 max-w-2xl text-muted-foreground">
-            Whether you&apos;re building for clients, side projects, or your startup
-            — Clawdify puts an AI agent on your team.
+            Whether you&apos;re building for clients, your startup, or your next
+            side project — Clawdify gives you a command center for your AI
+            agent.
           </p>
         </div>
 
@@ -67,9 +68,11 @@ export function Testimonials() {
                   </p>
                 </div>
               </div>
-              <blockquote className="mt-4 border-l-2 border-violet-500/30 pl-4 text-sm italic text-muted-foreground">
-                {persona.highlight}
-              </blockquote>
+              <div className="mt-4 border-l-2 border-violet-500/30 pl-4">
+                <p className="text-sm font-medium text-violet-400/80">
+                  {persona.scenario}
+                </p>
+              </div>
             </div>
           ))}
         </div>

@@ -7,6 +7,9 @@ const footerLinks = {
     { label: 'How It Works', href: '#how-it-works' },
     { label: 'Pricing', href: '/pricing' },
   ],
+  Resources: [
+    { label: 'OpenClaw Docs', href: 'https://github.com/openclaw/openclaw' },
+  ],
   Legal: [
     { label: 'Privacy', href: '/privacy' },
     { label: 'Terms', href: '/terms' },
@@ -17,7 +20,7 @@ export function Footer() {
   return (
     <footer className="border-t border-border/40">
       <div className="mx-auto max-w-6xl px-6 py-16">
-        <div className="grid gap-12 md:grid-cols-4">
+        <div className="grid gap-12 md:grid-cols-5">
           {/* Brand */}
           <div className="md:col-span-2">
             <Link
@@ -28,8 +31,8 @@ export function Footer() {
               <span>Clawdify</span>
             </Link>
             <p className="mt-4 max-w-sm text-sm leading-relaxed text-muted-foreground">
-              Mission Control for AI agents. Deploy, manage, and monitor your
-              AI agents from one dashboard. Built on OpenClaw.
+              Mission Control for AI agents. You run the agent. We give you the
+              command center. Built on OpenClaw.
             </p>
           </div>
 

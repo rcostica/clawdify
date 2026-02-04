@@ -10,7 +10,7 @@ const activityLines = [
   { time: '14:32:18', icon: '📝', text: 'Creating: src/components/hero.tsx' },
   { time: '14:32:24', icon: '📝', text: 'Creating: src/components/features.tsx' },
   { time: '14:32:30', icon: '⚡', text: 'Running: npm run build' },
-  { time: '14:32:38', icon: '✅', text: 'Build successful. Landing page ready.' },
+  { time: '14:32:38', icon: '✅', text: 'Build successful. Task complete.' },
 ];
 
 export function DemoPreview() {
@@ -72,22 +72,22 @@ export function DemoPreview() {
             See it in action
           </p>
           <h2 className="mt-4 text-3xl font-bold tracking-tight sm:text-4xl">
-            Watch an agent build a landing page
+            Your agent builds. You watch.
           </h2>
           <p className="mx-auto mt-4 max-w-2xl text-muted-foreground">
-            You type &quot;Build a landing page for my portfolio.&quot; Your agent does
-            the rest.
+            Create a task: &quot;Build a landing page for my portfolio.&quot; Then watch
+            every step in the activity feed — from planning to build success.
           </p>
         </div>
 
-        {/* Terminal-style activity preview */}
+        {/* Dashboard-style activity preview */}
         <div className="rounded-xl border border-border/50 bg-card/50 shadow-2xl shadow-violet-500/5 backdrop-blur-sm overflow-hidden">
           <div className="flex items-center gap-2 border-b border-border/50 px-4 py-3">
             <div className="h-3 w-3 rounded-full bg-red-500/60" />
             <div className="h-3 w-3 rounded-full bg-yellow-500/60" />
             <div className="h-3 w-3 rounded-full bg-green-500/60" />
             <span className="ml-3 text-xs text-muted-foreground font-mono">
-              Activity Feed — Task: &quot;Build a landing page&quot;
+              clawdify.app — Activity Feed — Task: &quot;Build a landing page&quot;
             </span>
           </div>
           <div className="p-4 md:p-6 font-mono text-sm min-h-[280px]">

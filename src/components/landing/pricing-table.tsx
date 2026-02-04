@@ -7,13 +7,13 @@ const tiers = [
     name: 'Free',
     price: '$0',
     period: '/mo',
-    description: 'Perfect for getting started and personal projects.',
+    description: 'Try Clawdify with Gemini Flash — no API key needed.',
     cta: 'Get Started Free',
     ctaVariant: 'outline' as const,
     ctaHref: '/signup',
     highlighted: false,
     features: [
-      'Gemini Flash model',
+      'Gemini Flash model (included)',
       '3 projects',
       'Basic chat interface',
       'Dark mode',
@@ -25,41 +25,42 @@ const tiers = [
     name: 'Pro',
     price: '$15',
     period: '/mo',
-    description: 'For developers who need the best models and full features.',
+    description: 'Use any model with your own API key. Full workspace features.',
     cta: 'Start Pro Trial',
     ctaVariant: 'default' as const,
     ctaHref: '/signup',
     highlighted: true,
     badge: 'Most Popular',
     features: [
-      'Claude + GPT-4 models',
+      'Any model (bring your API key)',
+      'Claude, GPT-4, Gemini & more',
       'Unlimited projects',
       'Voice input & output',
       'Artifacts & code preview',
       'File uploads',
-      'Priority gateway routing',
       'Keyboard shortcuts',
       'Import existing sessions',
     ],
+    note: 'API costs billed by your provider',
   },
   {
-    name: 'Team',
-    price: '$25',
-    period: '/seat/mo',
-    description: 'Collaboration features for teams that build together.',
-    cta: 'Join Waitlist',
+    name: 'Self-Hosted',
+    price: '$0',
+    period: '',
+    description: 'Connect your own OpenClaw Gateway — full control, zero cost.',
+    cta: 'Connect Gateway',
     ctaVariant: 'outline' as const,
-    ctaHref: 'mailto:hello@clawdify.app',
+    ctaHref: '/signup',
     highlighted: false,
     features: [
-      'Everything in Pro',
-      'Shared workspaces',
-      'Team collaboration',
-      'Admin dashboard',
-      'SSO / SAML',
-      'Audit logs',
-      'Priority support',
-      'Custom gateway config',
+      'Your Gateway, your rules',
+      'All Pro features included',
+      'Complete privacy',
+      'No data leaves your server',
+      'Unlimited everything',
+      'Works with any model',
+      'Community support',
+      'No subscription needed',
     ],
   },
 ];
@@ -78,7 +79,7 @@ export function PricingTable() {
             Simple, transparent pricing
           </h2>
           <p className="mx-auto mt-4 max-w-2xl text-muted-foreground">
-            Start free, scale when you&apos;re ready. No hidden fees, no surprises.
+            Start free with Gemini Flash. Bring your own API key for any model. Self-host for complete control.
           </p>
         </div>
 
@@ -104,7 +105,9 @@ export function PricingTable() {
                   <span className="text-4xl font-bold tracking-tight">
                     {tier.price}
                   </span>
-                  <span className="text-muted-foreground">{tier.period}</span>
+                  {tier.period && (
+                    <span className="text-muted-foreground">{tier.period}</span>
+                  )}
                 </div>
                 <p className="mt-3 text-sm text-muted-foreground">
                   {tier.description}
@@ -139,6 +142,12 @@ export function PricingTable() {
                 ))}
               </ul>
 
+              {'note' in tier && tier.note && (
+                <p className="mb-4 text-xs text-muted-foreground text-center italic">
+                  {tier.note}
+                </p>
+              )}
+
               <Link href={tier.ctaHref} className="mt-auto">
                 <Button
                   variant={tier.ctaVariant}
@@ -155,20 +164,14 @@ export function PricingTable() {
           ))}
         </div>
 
-        {/* Self-hosted footnote */}
+        {/* BYOK explainer */}
         <div className="mt-10 rounded-xl border border-border/50 bg-card/50 p-6 text-center">
           <p className="text-sm font-medium">
-            🔌 Already running OpenClaw?{' '}
+            🔑 Bring Your Own Key{' '}
             <span className="text-muted-foreground">
-              Connect your own Gateway — free. No subscription required for
-              self-hosted setups.
+              — Clawdify connects to models through your API keys. You pay your provider directly (OpenAI, Anthropic, Google) and keep full control of your usage and costs.
             </span>
           </p>
-          <Link href="/signup" className="mt-3 inline-block">
-            <Button variant="outline" size="sm">
-              Connect Your Gateway
-            </Button>
-          </Link>
         </div>
       </div>
     </section>

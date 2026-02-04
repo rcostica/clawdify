@@ -36,9 +36,10 @@ export function PlanSelector({ className }: PlanSelectorProps) {
       return;
     }
 
-    // Team plan — coming soon
-    if (planId === 'team') {
-      toast.info('Team plan is coming soon!');
+    // Self-Hosted — no payment needed
+    if (planId === 'byog') {
+      setPlan('byog');
+      toast.success('Switched to Self-Hosted plan. Connect your Gateway in Settings.');
       return;
     }
 
@@ -74,7 +75,7 @@ export function PlanSelector({ className }: PlanSelectorProps) {
     }
   };
 
-  const planOrder: PlanId[] = ['free', 'pro', 'team'];
+  const planOrder: PlanId[] = ['free', 'pro', 'byog'];
 
   return (
     <div className={cn('grid gap-4 md:grid-cols-3', className)}>

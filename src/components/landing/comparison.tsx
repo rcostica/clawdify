@@ -3,15 +3,21 @@ import { Badge } from '@/components/ui/badge';
 const features = [
   {
     label: 'Price',
-    clawdify: '$15/mo',
+    clawdify: 'Free — $15/mo',
     chatgpt: '$20/mo',
     claude: '$20/mo',
   },
   {
     label: 'Models',
-    clawdify: 'Claude + GPT-4 + Gemini',
+    clawdify: 'Any (your API key)',
     chatgpt: 'GPT-4 only',
     claude: 'Claude only',
+  },
+  {
+    label: 'Use your own API key',
+    clawdify: true,
+    chatgpt: false,
+    claude: false,
   },
   {
     label: 'Multi-device',
@@ -71,7 +77,7 @@ export function Comparison() {
             Clawdify vs. the alternatives
           </h2>
           <p className="mx-auto mt-4 max-w-2xl text-muted-foreground">
-            One workspace. Every model. Less money.
+            One workspace for every model. Bring your own keys, pay only for what you use.
           </p>
         </div>
 
@@ -85,7 +91,7 @@ export function Comparison() {
                 <th className="px-4 py-4 text-center">
                   <div className="flex flex-col items-center gap-1">
                     <span className="text-lg">🐾</span>
-                    <span className="font-semibold">Clawdify Pro</span>
+                    <span className="font-semibold">Clawdify</span>
                     <Badge className="bg-gradient-to-r from-violet-600 to-indigo-600 text-white border-0 text-[10px]">
                       Best Value
                     </Badge>

@@ -35,7 +35,7 @@ export interface SubscriptionInfo {
 const PRICE_IDS: Record<PlanId, string | null> = {
   free: null,
   pro: 'price_mock_pro_monthly',
-  team: 'price_mock_team_monthly',
+  byog: null,
 };
 
 // ─── Mock Stripe Client ──────────────────────────────────────────────────────

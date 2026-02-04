@@ -22,9 +22,9 @@ export async function POST(request: NextRequest) {
     const body = (await request.json()) as { planId?: string };
     const planId = body.planId as PlanId | undefined;
 
-    if (!planId || !['pro', 'team'].includes(planId)) {
+    if (!planId || !['pro'].includes(planId)) {
       return NextResponse.json(
-        { error: 'Invalid plan. Must be "pro" or "team".' },
+        { error: 'Invalid plan. Must be "pro".' },
         { status: 400 },
       );
     }

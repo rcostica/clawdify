@@ -49,7 +49,7 @@ const initialState = {
   stripeSubscriptionId: null as string | null,
   onboardingCompleted: false,
   onboardingPath: null as 'free' | 'pro' | 'gateway' | null,
-  gatewayMode: 'hosted' as const,
+  gatewayMode: 'byog' as const,
   usage: null as UsageStats | null,
 };
 

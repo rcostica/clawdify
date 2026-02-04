@@ -44,13 +44,13 @@ export default function PrivacyPage() {
             information (browser type, operating system, screen resolution).
           </p>
 
-          <h3 className="mt-4">Conversation Data</h3>
+          <h3 className="mt-4">Task &amp; Conversation Data</h3>
           <p className="mt-2">
-            Your conversations with AI models are processed to provide the
-            Service. For hosted (Free and Pro) tiers, conversations are routed
-            through our servers. For BYOG (Bring Your Own Gateway) users,
-            conversations are relayed but not stored on our servers beyond what
-            is necessary for transmission.
+            Your tasks and AI conversations are processed on your own
+            OpenClaw Gateway — on your machine or server. Clawdify connects
+            to your Gateway via WebSocket relay to display activity and
+            results. Conversation content is relayed but not stored on our
+            servers beyond what is necessary for real-time transmission.
           </p>
 
           <h3 className="mt-4">Payment Information</h3>

@@ -370,23 +370,23 @@ export default function SettingsPage() {
           <CardContent className="space-y-3 text-sm text-muted-foreground">
             <div className="space-y-3">
               <div>
-                <p className="font-medium text-foreground">Hosted Mode (Recommended)</p>
+                <p className="font-medium text-foreground">Local Gateway (Recommended)</p>
                 <p className="text-xs mt-1">
-                  Use Clawdify&apos;s hosted relay — no server setup required. Just sign up and start chatting.
+                  Run OpenClaw on your machine. Use{' '}
+                  <code className="rounded bg-muted px-1.5 py-0.5 text-[11px]">
+                    ws://localhost:18789
+                  </code>{' '}
+                  — your keys never leave your device.
                 </p>
               </div>
               <div>
-                <p className="font-medium text-foreground">Self-Hosted Gateway</p>
+                <p className="font-medium text-foreground">Remote Gateway</p>
                 <p className="text-xs mt-1">
-                  Run your own OpenClaw Gateway for full privacy. Use{' '}
+                  Running OpenClaw on a VPS for always-on access? Use{' '}
                   <code className="rounded bg-muted px-1.5 py-0.5 text-[11px]">
                     wss://
                   </code>{' '}
-                  for encrypted connections, or{' '}
-                  <code className="rounded bg-muted px-1.5 py-0.5 text-[11px]">
-                    ws://localhost
-                  </code>{' '}
-                  for local development.
+                  for encrypted connections to your remote server.
                 </p>
               </div>
             </div>

@@ -24,17 +24,16 @@ import {
 } from 'lucide-react';
 import { useTheme } from 'next-themes';
 
-interface CommandPaletteProps {
-  onNewProject?: () => void;
-  onImport?: () => void;
-}
-
-export function CommandPalette({ onNewProject, onImport }: CommandPaletteProps) {
+export function CommandPalette() {
   const [open, setOpen] = useState(false);
   const router = useRouter();
   const projects = useProjectStore((s) => s.projects);
   const isConnected = useGatewayStore((s) => s.status === 'connected');
   const { setTheme, theme } = useTheme();
+
+  const triggerNewProject = useCallback(() => {
+    document.querySelector<HTMLButtonElement>('[data-new-project]')?.click();
+  }, []);
 
   // Global keyboard shortcut: Cmd+K or Ctrl+K
   useEffect(() => {
@@ -48,14 +47,14 @@ export function CommandPalette({ onNewProject, onImport }: CommandPaletteProps) 
         const target = e.target as HTMLElement;
         if (target.tagName !== 'INPUT' && target.tagName !== 'TEXTAREA') {
           e.preventDefault();
-          onNewProject?.();
+          triggerNewProject();
         }
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [onNewProject]);
+  }, [triggerNewProject]);
 
   const runCommand = useCallback((command: () => void) => {
     setOpen(false);
@@ -97,17 +96,19 @@ export function CommandPalette({ onNewProject, onImport }: CommandPaletteProps) 
         {/* Actions */}
         <CommandGroup heading="Actions">
           <CommandItem
-            onSelect={() => runCommand(() => onNewProject?.())}
+            onSelect={() => runCommand(() => triggerNewProject())}
           >
             <Plus className="mr-2 h-4 w-4" />
             New Project
           </CommandItem>
           {isConnected && (
             <CommandItem
-              onSelect={() => runCommand(() => onImport?.())}
+              disabled
+              onSelect={() => {}}
             >
               <Download className="mr-2 h-4 w-4" />
               Import from Gateway
+              <span className="ml-auto text-[10px] text-muted-foreground">Coming soon</span>
             </CommandItem>
           )}
           <CommandItem

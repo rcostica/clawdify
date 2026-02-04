@@ -69,7 +69,7 @@ export default function ProjectPage() {
   const [allArtifacts, setAllArtifacts] = useState<DetectedArtifact[]>([]);
 
   const sessionKey = project?.sessionKey ?? '';
-  const { messages, streaming, sendMessage } = useChat(projectId, sessionKey);
+  const { messages, streaming, sendMessage, abortGeneration } = useChat(projectId, sessionKey);
 
   // Set active project
   useEffect(() => {
@@ -106,10 +106,7 @@ export default function ProjectPage() {
   }, [messages, streaming?.content]);
 
   useEffect(() => {
-    if (detectedArtifacts.length > 0 || allArtifacts.length > 0) {
-      setAllArtifacts(detectedArtifacts);
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    setAllArtifacts(detectedArtifacts);
   }, [detectedArtifacts]);
 
   // Persist artifacts from finalized messages
@@ -267,6 +264,11 @@ export default function ProjectPage() {
   const handleCancelTask = useCallback(
     async (taskId: string) => {
       try {
+        // Abort the Gateway agent if connected and task has a runId
+        const task = tasks.find((t) => t.id === taskId);
+        if (task?.runId && isConnected) {
+          try { await abortGeneration(); } catch { /* best effort */ }
+        }
         await cancelTask(taskId);
         setActivityStreaming(taskId, false);
         addActivity(taskId, {
@@ -283,7 +285,7 @@ export default function ProjectPage() {
         });
       }
     },
-    [cancelTask, setActivityStreaming, addActivity],
+    [tasks, isConnected, abortGeneration, cancelTask, setActivityStreaming, addActivity],
   );
 
   const selectedTask = tasks.find((t) => t.id === selectedTaskId);

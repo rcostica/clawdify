@@ -93,14 +93,14 @@ export function PlanSelector({ className }: PlanSelectorProps) {
             className={cn(
               'relative flex flex-col transition-all',
               isCurrent && 'border-primary ring-1 ring-primary/20',
-              plan.badge === 'Popular' &&
+              plan.badge === 'Most Popular' &&
                 !isCurrent &&
                 'border-primary/50',
             )}
           >
             {plan.badge && (
               <Badge
-                variant={plan.badge === 'Popular' ? 'default' : 'secondary'}
+                variant={plan.badge === 'Most Popular' ? 'default' : 'secondary'}
                 className="absolute -top-2.5 right-4"
               >
                 {plan.badge}

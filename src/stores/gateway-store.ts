@@ -37,7 +37,7 @@ export const useGatewayStore = create<GatewayState>()(
       setStatus: (status) =>
         set({
           status,
-          errorMessage: status === 'error' ? undefined : null,
+          ...(status !== 'error' ? { errorMessage: null } : {}),
         }),
       setConfig: (config) => set({ config }),
       setHello: (hello) => set({ hello }),

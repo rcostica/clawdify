@@ -169,9 +169,9 @@ export default function BillingPage() {
                 <div className="flex items-center gap-3 rounded-lg border border-dashed p-4">
                   <CreditCard className="h-8 w-8 text-muted-foreground" />
                   <div>
-                    <p className="text-sm font-medium">•••• •••• •••• 4242</p>
+                    <p className="text-sm font-medium">No payment method on file</p>
                     <p className="text-xs text-muted-foreground">
-                      Expires 12/2027 · Mock payment method
+                      Billing coming soon.
                     </p>
                   </div>
                 </div>

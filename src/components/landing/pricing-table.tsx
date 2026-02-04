@@ -28,7 +28,7 @@ const tiers = [
     period: '/mo',
     description:
       'Full Mission Control. Deploy-button agents, unlimited projects, and more.',
-    cta: 'Start Pro Trial',
+    cta: 'Get Started',
     ctaVariant: 'default' as const,
     ctaHref: '/signup',
     highlighted: true,
@@ -49,7 +49,7 @@ const tiers = [
 
 export function PricingTable() {
   return (
-    <section id="pricing" className="relative py-24 md:py-32">
+    <section id="pricing" className="relative py-24 md:py-32 scroll-mt-20">
       <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-violet-500/20 to-transparent" />
 
       <div className="mx-auto max-w-4xl px-6">

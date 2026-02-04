@@ -44,19 +44,18 @@ import { API_PROVIDERS, type ApiProviderId } from '@/lib/billing/plans';
 import { useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
 
-const ONBOARDING_KEY = 'clawdify-onboarding-completed';
-
-/** Check if onboarding should be shown */
+/** Check if onboarding should be shown — uses Zustand persisted state */
 export function shouldShowOnboarding(): boolean {
   if (typeof window === 'undefined') return false;
-  return localStorage.getItem(ONBOARDING_KEY) !== 'true';
-}
-
-/** Mark onboarding as completed */
-export function completeOnboarding(): void {
-  if (typeof window !== 'undefined') {
-    localStorage.setItem(ONBOARDING_KEY, 'true');
-  }
+  // Read directly from the Zustand persisted storage (single source of truth)
+  try {
+    const stored = localStorage.getItem('clawdify-user');
+    if (stored) {
+      const parsed = JSON.parse(stored);
+      if (parsed?.state?.onboardingCompleted) return false;
+    }
+  } catch { /* ignore parse errors */ }
+  return true;
 }
 
 type Step = 'welcome' | 'choose-path' | 'pro-setup' | 'gateway-connect' | 'create-project' | 'done';
@@ -116,6 +115,19 @@ export function OnboardingWizard({ open, onOpenChange }: OnboardingWizardProps) 
   const setGatewayMode = useUserStore((s) => s.setGatewayMode);
   const supabase = createClient();
 
+  // ─── Finish (defined early so useEffect can reference it) ──────────────
+
+  const finishOnboarding = useCallback(() => {
+    setOnboardingCompleted(true);
+    if (path) setOnboardingPath(path);
+    onOpenChange(false);
+  }, [onOpenChange, path, setOnboardingCompleted, setOnboardingPath]);
+
+  const skipToEnd = () => {
+    setOnboardingCompleted(true);
+    onOpenChange(false);
+  };
+
   // Validate gateway URL
   useEffect(() => {
     if (!gatewayUrl) {
@@ -138,7 +150,7 @@ export function OnboardingWizard({ open, onOpenChange }: OnboardingWizardProps) 
     return () => {
       if (doneTimerRef.current) clearTimeout(doneTimerRef.current);
     };
-  }, [step]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [step, finishOnboarding]);
 
   // ─── Navigation helpers ────────────────────────────────────────────────────
 
@@ -149,8 +161,9 @@ export function OnboardingWizard({ open, onOpenChange }: OnboardingWizardProps) 
 
   const handleChoosePro = () => {
     setPath('pro');
+    setUserPlan('pro');
     setGatewayMode('hosted');
-    goTo('pro-setup');
+    goTo('create-project');
   };
 
   const handleChooseGateway = () => {
@@ -209,16 +222,14 @@ export function OnboardingWizard({ open, onOpenChange }: OnboardingWizardProps) 
       setConnectionOk(true);
 
       // Save to Supabase
-      if (gatewayToken) {
-        await supabase.rpc('save_gateway_connection', {
-          p_name: 'Default',
-          p_gateway_url: gatewayUrl,
-          p_gateway_token: gatewayToken,
-        });
-      } else {
-        await supabase.rpc('save_gateway_connection', {
-          p_name: 'Default',
-          p_gateway_url: gatewayUrl,
+      const rpcPayload = gatewayToken
+        ? { p_name: 'Default', p_gateway_url: gatewayUrl, p_gateway_token: gatewayToken }
+        : { p_name: 'Default', p_gateway_url: gatewayUrl };
+      const { error: rpcError } = await supabase.rpc('save_gateway_connection', rpcPayload);
+      if (rpcError) {
+        console.error('[onboarding] Failed to save gateway connection:', rpcError);
+        toast.error('Failed to save connection', {
+          description: rpcError.message,
         });
       }
 
@@ -251,7 +262,11 @@ export function OnboardingWizard({ open, onOpenChange }: OnboardingWizardProps) 
       addProject(project);
       const projects = await fetchProjects();
       setProjects(projects);
-      router.push(`/project/${project.id}`);
+      if (path === 'pro') {
+        router.push('/deploy');
+      } else {
+        router.push(`/project/${project.id}`);
+      }
       goTo('done');
     } catch (err) {
       toast.error('Failed to create project', {
@@ -262,21 +277,6 @@ export function OnboardingWizard({ open, onOpenChange }: OnboardingWizardProps) 
     }
   };
 
-  // ─── Finish ────────────────────────────────────────────────────────────────
-
-  const finishOnboarding = useCallback(() => {
-    completeOnboarding();
-    setOnboardingCompleted(true);
-    if (path) setOnboardingPath(path);
-    onOpenChange(false);
-  }, [onOpenChange, path, setOnboardingCompleted, setOnboardingPath]);
-
-  const skipToEnd = () => {
-    completeOnboarding();
-    setOnboardingCompleted(true);
-    onOpenChange(false);
-  };
-
   // ─── Step progress ─────────────────────────────────────────────────────────
 
   const getStepIndex = (): number => {
@@ -285,12 +285,12 @@ export function OnboardingWizard({ open, onOpenChange }: OnboardingWizardProps) 
       case 'choose-path': return 1;
       case 'pro-setup':
       case 'gateway-connect': return 2;
-      case 'create-project': return 3;
-      case 'done': return 4;
+      case 'create-project': return path === 'pro' ? 2 : 3;
+      case 'done': return path === 'pro' ? 3 : 4;
       default: return 0;
     }
   };
-  const totalSteps = 5;
+  const totalSteps = path === 'pro' ? 4 : 5;
   const currentIndex = getStepIndex();
 
   // Transition class based on direction
@@ -742,7 +742,7 @@ export function OnboardingWizard({ open, onOpenChange }: OnboardingWizardProps) 
                   variant="ghost"
                   onClick={() => {
                     const backStep: Step =
-                      path === 'pro' ? 'pro-setup' :
+                      path === 'pro' ? 'choose-path' :
                       'gateway-connect';
                     goTo(backStep, 'backward');
                   }}
@@ -778,7 +778,7 @@ export function OnboardingWizard({ open, onOpenChange }: OnboardingWizardProps) 
               </h2>
               <p className="max-w-sm text-muted-foreground animate-in fade-in slide-in-from-bottom-2 duration-500 delay-500">
                 {path === 'free' && 'Gateway connected. Create your first task!'}
-                {path === 'pro' && 'Pro activated! Deploy your agent and start creating tasks.'}
+                {path === 'pro' && 'Pro activated! You\'ll configure your API key when connecting your Gateway.'}
                 {!path && 'Your workspace is ready. Let\u0027s build something.'}
               </p>
               <div className="mt-2 flex items-center gap-1 text-xs text-muted-foreground animate-in fade-in duration-500 delay-700">

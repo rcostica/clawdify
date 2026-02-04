@@ -29,7 +29,7 @@ const steps = [
 
 export function HowItWorks() {
   return (
-    <section id="how-it-works" className="relative py-24 md:py-32">
+    <section id="how-it-works" className="relative py-24 md:py-32 scroll-mt-20">
       {/* Subtle divider gradient */}
       <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-violet-500/20 to-transparent" />
 

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useProjectStore } from '@/stores/project-store';
 import { useGatewayStore } from '@/stores/gateway-store';
 import { useTaskStore, type Task } from '@/stores/task-store';
@@ -59,14 +59,16 @@ export default function AppHomePage() {
   const tasksByProject = useTaskStore((s) => s.tasksByProject);
   const loadTasks = useTaskStore((s) => s.loadTasks);
 
-  // Load tasks for all projects
+  // Load tasks for all projects (use ref to avoid infinite re-fetch loop)
+  const loadedRef = useRef<Set<string>>(new Set());
   useEffect(() => {
     for (const project of projects) {
-      if (!tasksByProject[project.id]) {
+      if (!loadedRef.current.has(project.id)) {
+        loadedRef.current.add(project.id);
         loadTasks(project.id);
       }
     }
-  }, [projects, tasksByProject, loadTasks]);
+  }, [projects, loadTasks]);
 
   // Aggregate recent tasks across all projects
   const recentTasks: (Task & { projectName: string; projectIcon: string })[] = [];

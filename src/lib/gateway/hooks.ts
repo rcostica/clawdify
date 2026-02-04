@@ -9,6 +9,11 @@ import type {
   HelloOk,
   GatewayConnectionConfig,
 } from './types';
+import type { ChatMessage } from '@/stores/chat-store';
+
+// Stable empty references to avoid infinite re-render loops in Zustand selectors
+const EMPTY_MESSAGES: ChatMessage[] = [];
+const EMPTY_LOADING = false;
 
 /** Singleton client instance (shared across the app) */
 let clientInstance: GatewayClient | null = null;
@@ -109,13 +114,13 @@ export function useChat(projectId: string, sessionKey: string) {
   const addMessage = useChatStore((s) => s.addMessage);
   const setLoading = useChatStore((s) => s.setLoading);
   const messages = useChatStore(
-    (s) => s.messagesByProject[projectId] ?? [],
+    (s) => s.messagesByProject[projectId] ?? EMPTY_MESSAGES,
   );
   const streaming = useChatStore(
     (s) => s.streamingByProject[projectId],
   );
   const loading = useChatStore(
-    (s) => s.loadingByProject[projectId] ?? false,
+    (s) => s.loadingByProject[projectId] ?? EMPTY_LOADING,
   );
 
   const sendMessage = useCallback(

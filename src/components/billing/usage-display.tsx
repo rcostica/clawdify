@@ -11,6 +11,7 @@ import {
 import { Skeleton } from '@/components/ui/skeleton';
 import { BarChart3, Zap, ArrowUpRight, ArrowDownRight } from 'lucide-react';
 import { useUserStore } from '@/stores/user-store';
+import { useGatewayStore } from '@/stores/gateway-store';
 import { cn } from '@/lib/utils';
 
 interface UsageBreakdown {
@@ -35,6 +36,7 @@ interface UsageDisplayProps {
 
 export function UsageDisplay({ className }: UsageDisplayProps) {
   const plan = useUserStore((s) => s.plan);
+  const gatewayMode = useUserStore((s) => s.gatewayMode);
   const setUsage = useUserStore((s) => s.setUsage);
   const [data, setData] = useState<UsageData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -80,6 +82,8 @@ export function UsageDisplay({ className }: UsageDisplayProps) {
       day: 'numeric',
     });
   };
+
+  const isBYOG = plan === 'byog' || plan === 'free' || gatewayMode === 'byog';
 
   // Usage cap for the visual bar (rough estimate per plan)
   const usageCap = plan === 'free' ? 500_000 : plan === 'pro' ? 5_000_000 : 10_000_000;
@@ -137,7 +141,14 @@ export function UsageDisplay({ className }: UsageDisplayProps) {
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
-        {/* Usage bar */}
+        {/* Usage bar — hide fake limits for BYOG users */}
+        {isBYOG ? (
+          <div className="rounded-lg border border-dashed p-4 text-center">
+            <p className="text-sm text-muted-foreground">
+              Usage tracked by your Gateway. Check your Gateway dashboard for detailed metrics.
+            </p>
+          </div>
+        ) : (
         <div className="space-y-1.5">
           <div className="flex items-center justify-between text-xs">
             <span className="text-muted-foreground">
@@ -161,6 +172,7 @@ export function UsageDisplay({ className }: UsageDisplayProps) {
             />
           </div>
         </div>
+        )}
 
         {/* Stats grid */}
         <div className="grid grid-cols-3 gap-3">

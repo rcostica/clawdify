@@ -89,7 +89,7 @@ export default function SignupPage() {
     toast.success('Account created!', {
       description: 'Check your email for a confirmation link, or sign in now.',
     });
-    router.push('/');
+    router.push('/dashboard');
     router.refresh();
   };
 

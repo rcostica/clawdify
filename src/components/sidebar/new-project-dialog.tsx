@@ -92,6 +92,7 @@ export function NewProjectDialog() {
           variant="outline"
           className="w-full justify-start gap-2"
           size="sm"
+          data-new-project
         >
           <Plus className="h-4 w-4" />
           New Project

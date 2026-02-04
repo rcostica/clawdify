@@ -24,7 +24,8 @@ const DEPLOY_PROVIDERS = [
     icon: '🚂',
     description: 'Deploy to Railway with one click. Auto-restarts, logs, and metrics included.',
     freeInfo: '$5/mo credit on free tier',
-    templateUrl: 'https://railway.app/template/openclaw-gateway',
+    templateUrl: null as string | null,
+    comingSoon: true,
     color: 'border-purple-500/30 hover:border-purple-500/50',
     bgColor: 'bg-purple-50 dark:bg-purple-950/20',
   },
@@ -34,7 +35,8 @@ const DEPLOY_PROVIDERS = [
     icon: '🪁',
     description: 'Deploy to Fly.io globally. Low-latency edge deployment with free tier.',
     freeInfo: 'Free tier: 3 shared VMs',
-    templateUrl: 'https://fly.io/launch/openclaw-gateway',
+    templateUrl: null as string | null,
+    comingSoon: true,
     color: 'border-indigo-500/30 hover:border-indigo-500/50',
     bgColor: 'bg-indigo-50 dark:bg-indigo-950/20',
   },
@@ -44,11 +46,12 @@ const DEPLOY_PROVIDERS = [
     icon: '🐳',
     description: 'Run on your own server with Docker. Full control, zero external dependencies.',
     freeInfo: 'Self-hosted — free forever',
-    templateUrl: null,
+    templateUrl: null as string | null,
+    comingSoon: false,
     color: 'border-blue-500/30 hover:border-blue-500/50',
     bgColor: 'bg-blue-50 dark:bg-blue-950/20',
   },
-] as const;
+];
 
 const DOCKER_COMMAND = `docker run -d \\
   --name openclaw-gateway \\
@@ -123,22 +126,15 @@ export function DeployPage() {
             </Badge>
 
             <div className="pt-1">
-              {provider.templateUrl ? (
+              {provider.comingSoon ? (
                 <Button
+                  variant="outline"
                   className="w-full gap-2"
-                  onClick={() => handleDeploy(provider.id, provider.templateUrl)}
-                  disabled={deploying === provider.id}
+                  disabled
                 >
-                  {deploying === provider.id ? (
-                    <>Launching...</>
-                  ) : (
-                    <>
-                      Deploy Now
-                      <ExternalLink className="h-3.5 w-3.5" />
-                    </>
-                  )}
+                  Coming Soon
                 </Button>
-              ) : (
+              ) : provider.id === 'docker' ? (
                 <Button
                   variant="outline"
                   className="w-full gap-2"
@@ -153,6 +149,21 @@ export function DeployPage() {
                     <>
                       <Copy className="h-3.5 w-3.5" />
                       Copy Command
+                    </>
+                  )}
+                </Button>
+              ) : (
+                <Button
+                  className="w-full gap-2"
+                  onClick={() => handleDeploy(provider.id, provider.templateUrl)}
+                  disabled={deploying === provider.id}
+                >
+                  {deploying === provider.id ? (
+                    <>Launching...</>
+                  ) : (
+                    <>
+                      Deploy Now
+                      <ExternalLink className="h-3.5 w-3.5" />
                     </>
                   )}
                 </Button>

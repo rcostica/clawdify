@@ -147,13 +147,6 @@ export function OnboardingWizard({ open, onOpenChange }: OnboardingWizardProps) 
     setStep(nextStep);
   };
 
-  const handleChooseFree = () => {
-    setPath('free');
-    setUserPlan('free');
-    setGatewayMode('hosted');
-    goTo('create-project');
-  };
-
   const handleChoosePro = () => {
     setPath('pro');
     setGatewayMode('hosted');
@@ -161,7 +154,8 @@ export function OnboardingWizard({ open, onOpenChange }: OnboardingWizardProps) 
   };
 
   const handleChooseGateway = () => {
-    setPath('gateway');
+    setPath('free');
+    setUserPlan('free');
     setGatewayMode('byog');
     goTo('gateway-connect');
   };
@@ -365,39 +359,16 @@ export function OnboardingWizard({ open, onOpenChange }: OnboardingWizardProps) 
               </div>
 
               <div className="grid gap-3">
-                {/* Free Card */}
-                <button
-                  onClick={handleChooseFree}
-                  className="group flex items-start gap-4 rounded-xl border p-4 text-left transition-all hover:border-primary/50 hover:bg-primary/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-                >
-                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-green-100 text-lg dark:bg-green-950">
-                    🆓
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2">
-                      <h4 className="font-semibold">Free</h4>
-                    </div>
-                    <p className="mt-0.5 text-sm text-muted-foreground">
-                      Connect your own Gateway. 2 projects, free forever.
-                    </p>
-                    <div className="mt-2 flex flex-wrap gap-1.5">
-                      <Badge variant="secondary" className="text-[10px]">BYOG</Badge>
-                      <Badge variant="secondary" className="text-[10px]">2 projects</Badge>
-                    </div>
-                  </div>
-                  <ArrowRight className="mt-1 h-4 w-4 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />
-                </button>
-
-                {/* Pro Card */}
+                {/* Pro Card — Primary CTA */}
                 <button
                   onClick={handleChoosePro}
                   className="group relative flex items-start gap-4 rounded-xl border border-primary/30 p-4 text-left transition-all hover:border-primary hover:bg-primary/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                 >
                   <Badge variant="default" className="absolute -top-2 right-3 text-[10px]">
-                    Popular
+                    Recommended
                   </Badge>
                   <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-yellow-100 text-lg dark:bg-yellow-950">
-                    ⭐
+                    🚀
                   </div>
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
@@ -405,10 +376,10 @@ export function OnboardingWizard({ open, onOpenChange }: OnboardingWizardProps) 
                       <span className="text-sm font-medium text-primary">$12/mo</span>
                     </div>
                     <p className="mt-0.5 text-sm text-muted-foreground">
-                      One-click deploy, unlimited projects, notifications &amp; analytics
+                      One-click deploy to Railway or Fly.io, unlimited projects, notifications &amp; analytics
                     </p>
                     <div className="mt-2 flex flex-wrap gap-1.5">
-                      <Badge variant="secondary" className="text-[10px]">Deploy</Badge>
+                      <Badge variant="secondary" className="text-[10px]">One-click deploy</Badge>
                       <Badge variant="secondary" className="text-[10px]">Unlimited</Badge>
                       <Badge variant="secondary" className="text-[10px]">BYOK</Badge>
                     </div>
@@ -416,37 +387,7 @@ export function OnboardingWizard({ open, onOpenChange }: OnboardingWizardProps) 
                   <ArrowRight className="mt-1 h-4 w-4 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />
                 </button>
 
-                {/* Deploy Card */}
-                <button
-                  onClick={() => {
-                    completeOnboarding();
-                    setOnboardingCompleted(true);
-                    onOpenChange(false);
-                    router.push('/deploy');
-                  }}
-                  className="group flex items-start gap-4 rounded-xl border border-green-500/30 p-4 text-left transition-all hover:border-green-500/50 hover:bg-green-50/50 dark:hover:bg-green-950/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-                >
-                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-green-100 text-lg dark:bg-green-950">
-                    🚀
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2">
-                      <h4 className="font-semibold">Deploy Agent</h4>
-                      <Badge variant="secondary" className="text-[10px]">New</Badge>
-                    </div>
-                    <p className="mt-0.5 text-sm text-muted-foreground">
-                      One-click deploy to Railway or Fly.io
-                    </p>
-                    <div className="mt-2 flex flex-wrap gap-1.5">
-                      <Badge variant="secondary" className="text-[10px]">Railway</Badge>
-                      <Badge variant="secondary" className="text-[10px]">Fly.io</Badge>
-                      <Badge variant="secondary" className="text-[10px]">Docker</Badge>
-                    </div>
-                  </div>
-                  <ArrowRight className="mt-1 h-4 w-4 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />
-                </button>
-
-                {/* Self-Hosted Card */}
+                {/* Free / BYOG Card */}
                 <button
                   onClick={handleChooseGateway}
                   className="group flex items-start gap-4 rounded-xl border p-4 text-left transition-all hover:border-primary/50 hover:bg-primary/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
@@ -456,13 +397,15 @@ export function OnboardingWizard({ open, onOpenChange }: OnboardingWizardProps) 
                   </div>
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
-                      <h4 className="font-semibold">Self-Hosted</h4>
+                      <h4 className="font-semibold">Free</h4>
+                      <span className="text-sm text-muted-foreground">Bring your own Gateway</span>
                     </div>
                     <p className="mt-0.5 text-sm text-muted-foreground">
-                      Connect your own OpenClaw Gateway
+                      Already running OpenClaw? Connect your Gateway and start managing tasks.
                     </p>
                     <div className="mt-2 flex flex-wrap gap-1.5">
                       <Badge variant="secondary" className="text-[10px]">BYOG</Badge>
+                      <Badge variant="secondary" className="text-[10px]">2 projects</Badge>
                       <Badge variant="secondary" className="text-[10px]">Any model</Badge>
                     </div>
                   </div>
@@ -799,7 +742,6 @@ export function OnboardingWizard({ open, onOpenChange }: OnboardingWizardProps) 
                   variant="ghost"
                   onClick={() => {
                     const backStep: Step =
-                      path === 'free' ? 'choose-path' :
                       path === 'pro' ? 'pro-setup' :
                       'gateway-connect';
                     goTo(backStep, 'backward');
@@ -835,9 +777,8 @@ export function OnboardingWizard({ open, onOpenChange }: OnboardingWizardProps) 
                 You&apos;re all set!
               </h2>
               <p className="max-w-sm text-muted-foreground animate-in fade-in slide-in-from-bottom-2 duration-500 delay-500">
-                {path === 'free' && 'Your workspace is ready. Create your first task!'}
-                {path === 'pro' && 'Pro activated! Deploy an agent or connect your Gateway.'}
-                {path === 'gateway' && 'Gateway connected. Create your first task!'}
+                {path === 'free' && 'Gateway connected. Create your first task!'}
+                {path === 'pro' && 'Pro activated! Deploy your agent and start creating tasks.'}
                 {!path && 'Your workspace is ready. Let\u0027s build something.'}
               </p>
               <div className="mt-2 flex items-center gap-1 text-xs text-muted-foreground animate-in fade-in duration-500 delay-700">

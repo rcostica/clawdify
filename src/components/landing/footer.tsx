@@ -7,8 +7,8 @@ const footerLinks = {
     { label: 'Pricing', href: '/pricing' },
   ],
   Legal: [
-    { label: 'Privacy', href: '#' },
-    { label: 'Terms', href: '#' },
+    { label: 'Privacy', href: '/privacy' },
+    { label: 'Terms', href: '/terms' },
   ],
 };
 

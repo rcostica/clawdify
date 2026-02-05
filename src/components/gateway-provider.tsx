@@ -3,29 +3,26 @@
 import { useEffect } from 'react';
 import { useGatewayConnection } from '@/lib/gateway/hooks';
 import { useGatewayStore } from '@/stores/gateway-store';
-import { useActivityStore } from '@/stores/activity-store';
-import { useTaskStore } from '@/stores/task-store';
-import { mapChatEventToActivity, mapAgentEventToActivity } from '@/lib/gateway/activity-mapper';
-import { getGatewayClient } from '@/lib/gateway/hooks';
-import type { ChatEventPayload, AgentEventPayload } from '@/lib/gateway/types';
 
 /**
  * Initializes the Gateway connection on app load.
- * Loads saved connection from Supabase and auto-connects.
- * Also wires up the activity mapper for real-time event translation.
+ * Auto-connects if a saved config exists in localStorage.
  * Must be mounted once at the app layout level.
  */
 export function GatewayProvider({ children }: { children: React.ReactNode }) {
   // This hook wires up the singleton GatewayClient to Zustand stores
-  useGatewayConnection();
-
-  const loadFromSupabase = useGatewayStore((s) => s.loadFromSupabase);
+  const { connect } = useGatewayConnection();
   const config = useGatewayStore((s) => s.config);
+  const status = useGatewayStore((s) => s.status);
 
-  // On mount, try to load saved connection from Supabase
+  // On mount, auto-connect if we have a saved config
   useEffect(() => {
-    if (!config?.token) {
-      loadFromSupabase();
+    if (config?.url && status === 'disconnected') {
+      // Small delay to ensure store is hydrated
+      const timer = setTimeout(() => {
+        connect(config);
+      }, 100);
+      return () => clearTimeout(timer);
     }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 

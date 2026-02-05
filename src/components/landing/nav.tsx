@@ -3,12 +3,11 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
-import { Menu, X } from 'lucide-react';
+import { Menu, X, Github } from 'lucide-react';
 
 const navLinks = [
   { label: 'Features', href: '#features' },
   { label: 'How It Works', href: '#how-it-works' },
-  { label: 'Pricing', href: '#pricing' },
 ];
 
 export function LandingNav() {
@@ -36,19 +35,24 @@ export function LandingNav() {
         </div>
 
         <div className="flex items-center gap-3">
-          {/* Desktop auth buttons */}
+          {/* Desktop buttons */}
           <div className="hidden items-center gap-3 sm:flex">
-            <Link href="/login">
-              <Button variant="ghost" size="sm">
-                Sign In
+            <a
+              href="https://github.com/rcostica/clawdify"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              <Button variant="ghost" size="sm" className="gap-2">
+                <Github className="h-4 w-4" />
+                GitHub
               </Button>
-            </Link>
-            <Link href="/signup">
+            </a>
+            <Link href="/dashboard">
               <Button
                 size="sm"
                 className="bg-gradient-to-r from-violet-600 to-indigo-600 text-white shadow-lg shadow-violet-500/25 hover:from-violet-500 hover:to-indigo-500 hover:shadow-violet-500/40 border-0"
               >
-                Get Started
+                Open Dashboard
               </Button>
             </Link>
           </div>
@@ -81,18 +85,21 @@ export function LandingNav() {
               </Link>
             ))}
             <div className="my-2 h-px bg-border/40" />
-            <Link
-              href="/login"
-              className="rounded-lg px-3 py-2 text-sm font-medium transition-colors hover:bg-muted"
+            <a
+              href="https://github.com/rcostica/clawdify"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="rounded-lg px-3 py-2 text-sm font-medium transition-colors hover:bg-muted flex items-center gap-2"
               onClick={() => setMobileOpen(false)}
             >
-              Sign In
-            </Link>
-            <Link href="/signup" onClick={() => setMobileOpen(false)}>
+              <Github className="h-4 w-4" />
+              GitHub
+            </a>
+            <Link href="/dashboard" onClick={() => setMobileOpen(false)}>
               <Button
                 className="w-full bg-gradient-to-r from-violet-600 to-indigo-600 text-white shadow-lg shadow-violet-500/25 hover:from-violet-500 hover:to-indigo-500 hover:shadow-violet-500/40 border-0"
               >
-                Get Started
+                Open Dashboard
               </Button>
             </Link>
           </div>

@@ -29,26 +29,12 @@ export function QuickConnectHandler() {
           validation.error,
         );
       } else {
-        // Set config in memory (token stays in Zustand memory, NOT localStorage)
+        // Set config in Zustand store (persisted to localStorage)
         setConfig({
           url: gatewayUrl,
           token: token ?? undefined,
           insecureAuth: searchParams.get('insecure') === '1',
         });
-
-        // 🔒 SECURITY: Persist to Supabase encrypted so token doesn't stay in URL/memory
-        if (token) {
-          import('@/lib/supabase/client').then(async ({ createClient }) => {
-            const supabase = createClient();
-            const { error } = await supabase
-              .rpc('save_gateway_connection', {
-                p_name: 'Default',
-                p_gateway_url: gatewayUrl,
-                p_gateway_token: token,
-              });
-            if (error) console.error('Failed to save connection:', error);
-          });
-        }
       }
 
       // 🔒 SECURITY: Strip sensitive params from URL IMMEDIATELY.

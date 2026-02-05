@@ -1,9 +1,6 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
-import { useProjectStore } from '@/stores/project-store';
 import { useGatewayStore } from '@/stores/gateway-store';
-import { useTaskStore } from '@/stores/task-store';
 import { CurrentHeroCard } from '@/components/dashboard/current-hero-card';
 import { TasksCard } from '@/components/dashboard/tasks-card';
 import { AgentsCard } from '@/components/dashboard/agents-card';
@@ -14,29 +11,8 @@ import { Button } from '@/components/ui/button';
 import { Zap, Wifi, Keyboard } from 'lucide-react';
 import Link from 'next/link';
 
-export default function AppHomePage() {
-  const projects = useProjectStore((s) => s.projects);
+export default function DashboardPage() {
   const isConnected = useGatewayStore((s) => s.status === 'connected');
-  const loadTasks = useTaskStore((s) => s.loadTasks);
-
-  // Load tasks for all projects (use ref to avoid infinite re-fetch loop)
-  const loadedRef = useRef<Set<string>>(new Set());
-  useEffect(() => {
-    for (const project of projects) {
-      if (!loadedRef.current.has(project.id)) {
-        loadedRef.current.add(project.id);
-        loadTasks(project.id);
-      }
-    }
-  }, [projects, loadTasks]);
-
-  const handleNewTask = () => {
-    if (projects.length > 0) {
-      window.location.href = `/project/${projects[0]!.id}`;
-    } else {
-      document.querySelector<HTMLButtonElement>('[data-new-project]')?.click();
-    }
-  };
 
   return (
     <div className="flex h-full flex-col overflow-y-auto">
@@ -49,7 +25,7 @@ export default function AppHomePage() {
           <div>
             <h2 className="text-2xl font-bold">Agent Dashboard</h2>
             <p className="text-sm text-muted-foreground">
-              Manage your AI agent tasks
+              Manage your AI agent
             </p>
           </div>
         </div>
@@ -72,12 +48,12 @@ export default function AppHomePage() {
           </div>
         )}
 
-        {/* Hero Card — Current Task */}
-        <CurrentHeroCard onNewTask={handleNewTask} />
+        {/* Hero Card — Current Activity */}
+        <CurrentHeroCard />
 
         {/* Bento Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <TasksCard onNewTask={handleNewTask} />
+          <TasksCard />
           <AgentsCard />
           <FilesCard />
           <div className="grid grid-cols-2 gap-4">
@@ -95,11 +71,7 @@ export default function AppHomePage() {
           <div className="flex flex-wrap gap-3">
             <span>
               <kbd className="rounded border bg-muted px-1.5 py-0.5 text-[10px] font-mono">⌘K</kbd>
-              {' '}Search
-            </span>
-            <span>
-              <kbd className="rounded border bg-muted px-1.5 py-0.5 text-[10px] font-mono">⌘N</kbd>
-              {' '}New Project
+              {' '}Command Palette
             </span>
           </div>
         </div>

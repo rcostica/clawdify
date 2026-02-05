@@ -36,7 +36,6 @@ interface MessageInputProps {
   replyTo?: ChatMessage | null;
   onCancelReply?: () => void;
   disabled?: boolean;
-  projectId?: string;
 }
 
 export function MessageInput({
@@ -48,7 +47,6 @@ export function MessageInput({
   replyTo,
   onCancelReply,
   disabled,
-  projectId,
 }: MessageInputProps) {
   const [content, setContent] = useState('');
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
@@ -179,22 +177,19 @@ export function MessageInput({
                 </TooltipTrigger>
                 <TooltipContent>Emoji</TooltipContent>
               </Tooltip>
-              {projectId && (
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <span>
-                      <FileUploadButton
-                        projectId={projectId}
-                        onUpload={(f) =>
-                          setAttachedFiles((prev) => [...prev, f])
-                        }
-                        disabled={!isConnected || disabled}
-                      />
-                    </span>
-                  </TooltipTrigger>
-                  <TooltipContent>Attach file</TooltipContent>
-                </Tooltip>
-              )}
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span>
+                    <FileUploadButton
+                      onUpload={(f) =>
+                        setAttachedFiles((prev) => [...prev, f])
+                      }
+                      disabled={!isConnected || disabled}
+                    />
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent>Attach file</TooltipContent>
+              </Tooltip>
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Button

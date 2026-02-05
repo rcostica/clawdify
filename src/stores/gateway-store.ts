@@ -22,8 +22,7 @@ interface GatewayState {
   setConfig: (config: GatewayConnectionConfig | null) => void;
   setHello: (hello: HelloOk | null) => void;
   setError: (message: string | null) => void;
-  /** Load connection config from Supabase (decrypts token server-side) */
-  loadFromSupabase: () => Promise<void>;
+  clearConfig: () => void;
 }
 
 export const useGatewayStore = create<GatewayState>()(
@@ -42,44 +41,13 @@ export const useGatewayStore = create<GatewayState>()(
       setConfig: (config) => set({ config }),
       setHello: (hello) => set({ hello }),
       setError: (errorMessage) => set({ errorMessage, status: 'error' }),
-
-      loadFromSupabase: async () => {
-        try {
-          const { createClient } = await import('@/lib/supabase/client');
-          const supabase = createClient();
-          const { data, error } = await supabase.rpc(
-            'get_gateway_connection',
-            { p_name: 'Default' },
-          );
-          if (
-            !error &&
-            data &&
-            Array.isArray(data) &&
-            data.length > 0
-          ) {
-            const conn = data[0] as {
-              gateway_url: string;
-              gateway_token?: string | null;
-            };
-            if (conn.gateway_url) {
-              set({
-                config: {
-                  url: conn.gateway_url,
-                  token: conn.gateway_token ?? undefined,
-                },
-              });
-            }
-          }
-        } catch (err) {
-          console.warn('[gateway-store] Failed to load from Supabase:', err);
-        }
-      },
+      clearConfig: () => set({ config: null, status: 'disconnected', hello: null }),
     }),
     {
       name: 'clawdify-gateway',
+      // Self-hosted: safe to persist both URL and token locally
       partialize: (state) => ({
-        // 🔒 SECURITY: Only persist the gateway URL, NEVER the token.
-        config: state.config ? { url: state.config.url } : null,
+        config: state.config,
       }),
     },
   ),

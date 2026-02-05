@@ -1,24 +1,22 @@
 'use client';
 
 import { useMemo } from 'react';
-import Link from 'next/link';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import {
   ListTodo,
   Plus,
-  ArrowRight,
   Circle,
   CheckCircle2,
   XCircle,
   Loader2,
+  Trash2,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useTaskStore, type Task } from '@/stores/task-store';
-import { useProjectStore } from '@/stores/project-store';
 
-const statusConfig: Record<Task['status'], { icon: typeof Circle; color: string; pulse?: boolean }> = {
-  active: { icon: Loader2, color: 'text-green-500', pulse: true },
+const statusConfig: Record<Task['status'], { icon: typeof Circle; color: string }> = {
+  active: { icon: Loader2, color: 'text-green-500' },
   queued: { icon: Circle, color: 'text-muted-foreground' },
   done: { icon: CheckCircle2, color: 'text-green-500' },
   failed: { icon: XCircle, color: 'text-red-500' },
@@ -39,33 +37,23 @@ function timeAgo(dateStr: string): string {
   return `${days}d`;
 }
 
-interface TasksCardProps {
-  onNewTask?: () => void;
-}
+export function TasksCard() {
+  const tasks = useTaskStore((s) => s.tasks);
+  const deleteTask = useTaskStore((s) => s.deleteTask);
+  const clearTasks = useTaskStore((s) => s.clearTasks);
 
-export function TasksCard({ onNewTask }: TasksCardProps) {
-  const tasksByProject = useTaskStore((s) => s.tasksByProject);
-  const projects = useProjectStore((s) => s.projects);
-
-  // Aggregate and sort tasks: active first, then by date
+  // Sort: active first, then by date descending
   const recentTasks = useMemo(() => {
-    const all: (Task & { projectName: string })[] = [];
-    for (const project of projects) {
-      const tasks = tasksByProject[project.id] ?? [];
-      for (const task of tasks) {
-        all.push({ ...task, projectName: project.name });
-      }
-    }
-    
-    // Sort: active first, then by date descending
-    all.sort((a, b) => {
+    const sorted = [...tasks].sort((a, b) => {
       if (a.status === 'active' && b.status !== 'active') return -1;
       if (b.status === 'active' && a.status !== 'active') return 1;
       return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
     });
-    
-    return all.slice(0, 5);
-  }, [tasksByProject, projects]);
+    return sorted.slice(0, 6);
+  }, [tasks]);
+
+  const completedCount = tasks.filter((t) => t.status === 'done').length;
+  const hasCompleted = completedCount > 0;
 
   return (
     <Card>
@@ -74,53 +62,63 @@ export function TasksCard({ onNewTask }: TasksCardProps) {
           <CardTitle className="flex items-center gap-2 text-base">
             <ListTodo className="h-4 w-4" />
             Tasks
+            {tasks.length > 0 && (
+              <span className="text-xs text-muted-foreground font-normal">
+                ({completedCount}/{tasks.length})
+              </span>
+            )}
           </CardTitle>
-          <Button variant="ghost" size="sm" className="h-7 gap-1 text-xs" onClick={onNewTask}>
-            <Plus className="h-3 w-3" />
-            New
-          </Button>
+          {hasCompleted && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 gap-1 text-xs text-muted-foreground"
+              onClick={clearTasks}
+            >
+              <Trash2 className="h-3 w-3" />
+              Clear
+            </Button>
+          )}
         </div>
       </CardHeader>
       <CardContent className="space-y-1">
         {recentTasks.length === 0 ? (
           <p className="text-sm text-muted-foreground py-4 text-center">
-            No tasks yet
+            No tasks yet — agent activity will appear here
           </p>
         ) : (
-          <>
-            {recentTasks.map((task) => {
-              const config = statusConfig[task.status];
-              const Icon = config.icon;
-              return (
-                <Link
-                  key={task.id}
-                  href={`/project/${task.projectId}`}
-                  className="flex items-center gap-2.5 rounded-md px-2 py-1.5 transition-colors hover:bg-accent/50"
+          recentTasks.map((task) => {
+            const config = statusConfig[task.status];
+            const Icon = config.icon;
+            return (
+              <div
+                key={task.id}
+                className="flex items-center gap-2.5 rounded-md px-2 py-1.5 group"
+              >
+                <Icon
+                  className={cn(
+                    'h-3.5 w-3.5 shrink-0',
+                    config.color,
+                    task.status === 'active' && 'animate-spin'
+                  )}
+                />
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm truncate">{task.title}</p>
+                </div>
+                <span className="text-xs text-muted-foreground shrink-0 group-hover:hidden">
+                  {timeAgo(task.createdAt)}
+                </span>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-5 w-5 hidden group-hover:flex"
+                  onClick={() => deleteTask(task.id)}
                 >
-                  <Icon
-                    className={cn(
-                      'h-3.5 w-3.5 shrink-0',
-                      config.color,
-                      task.status === 'active' && 'animate-spin'
-                    )}
-                  />
-                  <div className="min-w-0 flex-1">
-                    <p className="text-sm truncate">{task.title}</p>
-                  </div>
-                  <span className="text-xs text-muted-foreground shrink-0">
-                    {timeAgo(task.createdAt)}
-                  </span>
-                </Link>
-              );
-            })}
-            <Link
-              href="/dashboard"
-              className="flex items-center justify-center gap-1 pt-2 text-xs text-muted-foreground hover:text-foreground transition-colors"
-            >
-              View All Tasks
-              <ArrowRight className="h-3 w-3" />
-            </Link>
-          </>
+                  <Trash2 className="h-3 w-3" />
+                </Button>
+              </div>
+            );
+          })
         )}
       </CardContent>
     </Card>

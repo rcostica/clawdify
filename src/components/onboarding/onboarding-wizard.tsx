@@ -8,7 +8,6 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Badge } from '@/components/ui/badge';
 import {
   Loader2,
   CheckCircle2,
@@ -18,18 +17,13 @@ import {
   ArrowLeft,
   Eye,
   EyeOff,
-  Sparkles,
   Wifi,
-  Rocket,
   ExternalLink,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useGatewayStore } from '@/stores/gateway-store';
 import { useGatewayConnection } from '@/lib/gateway/hooks';
 import { validateGatewayUrl } from '@/lib/gateway/types';
-import { createClient } from '@/lib/supabase/client';
-import { createProject, fetchProjects } from '@/lib/projects';
-import { useProjectStore } from '@/stores/project-store';
 import { useUserStore } from '@/stores/user-store';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
@@ -38,7 +32,6 @@ import { cn } from '@/lib/utils';
 /** Check if onboarding should be shown — uses Zustand persisted state */
 export function shouldShowOnboarding(): boolean {
   if (typeof window === 'undefined') return false;
-  // Read directly from the Zustand persisted storage (single source of truth)
   try {
     const stored = localStorage.getItem('clawdify-user');
     if (stored) {
@@ -49,15 +42,12 @@ export function shouldShowOnboarding(): boolean {
   return true;
 }
 
-type Step = 'welcome' | 'gateway-connect' | 'create-project' | 'done';
+type Step = 'welcome' | 'gateway-connect' | 'done';
 
 interface OnboardingWizardProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }
-
-// Emoji options for project creation
-const EMOJI_OPTIONS = ['📁', '🚀', '💡', '🎨', '🔬', '📊', '🤖', '✨', '🐾', '🌟', '🔧', '📝'];
 
 export function OnboardingWizard({ open, onOpenChange }: OnboardingWizardProps) {
   const [step, setStep] = useState<Step>('welcome');
@@ -76,30 +66,18 @@ export function OnboardingWizard({ open, onOpenChange }: OnboardingWizardProps) 
   const [testing, setTesting] = useState(false);
   const [connectionOk, setConnectionOk] = useState(false);
 
-  // Create project state
-  const [projectName, setProjectName] = useState('My Workspace');
-  const [projectEmoji, setProjectEmoji] = useState('🐾');
-  const [creating, setCreating] = useState(false);
-
   // Done state
   const doneTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const { connect, testConnection } = useGatewayConnection();
   const isConnected = useGatewayStore((s) => s.status === 'connected');
-  const setProjects = useProjectStore((s) => s.setProjects);
-  const addProject = useProjectStore((s) => s.addProject);
   const setOnboardingCompleted = useUserStore((s) => s.setOnboardingCompleted);
-  const setOnboardingPath = useUserStore((s) => s.setOnboardingPath);
-  const setGatewayMode = useUserStore((s) => s.setGatewayMode);
-  const supabase = createClient();
-
-  // ─── Finish (defined early so useEffect can reference it) ──────────────
 
   const finishOnboarding = useCallback(() => {
     setOnboardingCompleted(true);
-    setOnboardingPath('free');
     onOpenChange(false);
-  }, [onOpenChange, setOnboardingCompleted, setOnboardingPath]);
+    router.push('/dashboard');
+  }, [onOpenChange, setOnboardingCompleted, router]);
 
   const skipToEnd = () => {
     setOnboardingCompleted(true);
@@ -130,14 +108,10 @@ export function OnboardingWizard({ open, onOpenChange }: OnboardingWizardProps) 
     };
   }, [step, finishOnboarding]);
 
-  // ─── Navigation helpers ────────────────────────────────────────────────────
-
   const goTo = (nextStep: Step, dir: 'forward' | 'backward' = 'forward') => {
     setDirection(dir);
     setStep(nextStep);
   };
-
-  // ─── Gateway connection handlers ───────────────────────────────────────────
 
   const handleTestAndConnect = async () => {
     setTesting(true);
@@ -150,25 +124,13 @@ export function OnboardingWizard({ open, onOpenChange }: OnboardingWizardProps) 
       });
       setConnectionOk(true);
 
-      // Save to Supabase
-      const rpcPayload = gatewayToken
-        ? { p_name: 'Default', p_gateway_url: gatewayUrl, p_gateway_token: gatewayToken }
-        : { p_name: 'Default', p_gateway_url: gatewayUrl };
-      const { error: rpcError } = await supabase.rpc('save_gateway_connection', rpcPayload);
-      if (rpcError) {
-        console.error('[onboarding] Failed to save gateway connection:', rpcError);
-        toast.error('Failed to save connection', {
-          description: rpcError.message,
-        });
-      }
-
+      // Save to local storage via Zustand store
       connect({
         url: gatewayUrl,
         token: gatewayToken || undefined,
         insecureAuth,
       });
 
-      setGatewayMode('byog');
       toast.success('Connected to Gateway!');
     } catch (err) {
       toast.error('Connection failed', {
@@ -179,45 +141,17 @@ export function OnboardingWizard({ open, onOpenChange }: OnboardingWizardProps) 
     }
   };
 
-  // ─── Create project handler ────────────────────────────────────────────────
-
-  const handleCreateProject = async () => {
-    if (!projectName.trim()) return;
-    setCreating(true);
-    try {
-      const project = await createProject({
-        name: projectName.trim(),
-        icon: projectEmoji,
-      });
-      addProject(project);
-      const projects = await fetchProjects();
-      setProjects(projects);
-      router.push(`/project/${project.id}`);
-      goTo('done');
-    } catch (err) {
-      toast.error('Failed to create project', {
-        description: err instanceof Error ? err.message : 'Unknown error',
-      });
-    } finally {
-      setCreating(false);
-    }
-  };
-
-  // ─── Step progress ─────────────────────────────────────────────────────────
-
   const getStepIndex = (): number => {
     switch (step) {
       case 'welcome': return 0;
       case 'gateway-connect': return 1;
-      case 'create-project': return 2;
-      case 'done': return 3;
+      case 'done': return 2;
       default: return 0;
     }
   };
-  const totalSteps = 4;
+  const totalSteps = 3;
   const currentIndex = getStepIndex();
 
-  // Transition class based on direction
   const contentClass = cn(
     'transition-all duration-300 ease-out',
     direction === 'forward'
@@ -232,7 +166,6 @@ export function OnboardingWizard({ open, onOpenChange }: OnboardingWizardProps) 
           <DialogTitle>
             {step === 'welcome' && 'Welcome to Clawdify'}
             {step === 'gateway-connect' && 'Connect your Gateway'}
-            {step === 'create-project' && 'Create your first project'}
             {step === 'done' && 'Setup complete'}
           </DialogTitle>
         </VisuallyHidden>
@@ -251,7 +184,7 @@ export function OnboardingWizard({ open, onOpenChange }: OnboardingWizardProps) 
         </div>
 
         {/* Step content */}
-        <div className="px-6 pb-6 min-h-[340px]">
+        <div className="px-6 pb-6 min-h-[320px]">
 
           {/* ── Step 1: Welcome ── */}
           {step === 'welcome' && (
@@ -368,7 +301,7 @@ export function OnboardingWizard({ open, onOpenChange }: OnboardingWizardProps) 
                     <>
                       <Button
                         variant="ghost"
-                        onClick={() => goTo('create-project')}
+                        onClick={() => goTo('done')}
                       >
                         Skip for now
                       </Button>
@@ -384,8 +317,8 @@ export function OnboardingWizard({ open, onOpenChange }: OnboardingWizardProps) 
                       </Button>
                     </>
                   ) : (
-                    <Button onClick={() => goTo('create-project')} className="gap-2">
-                      Next <ArrowRight className="h-4 w-4" />
+                    <Button onClick={() => goTo('done')} className="gap-2">
+                      Continue <ArrowRight className="h-4 w-4" />
                     </Button>
                   )}
                 </div>
@@ -393,101 +326,9 @@ export function OnboardingWizard({ open, onOpenChange }: OnboardingWizardProps) 
             </div>
           )}
 
-          {/* ── Step 3: Create First Project ── */}
-          {step === 'create-project' && (
-            <div className={cn('space-y-4 py-4', contentClass)}>
-              <div className="text-center mb-4">
-                <div className="flex h-10 w-10 mx-auto items-center justify-center rounded-xl bg-green-100 dark:bg-green-950 mb-3">
-                  <Sparkles className="h-5 w-5 text-green-600" />
-                </div>
-                <h3 className="text-lg font-semibold">Create your first project</h3>
-                <p className="text-sm text-muted-foreground mt-1">
-                  Projects are separate workspaces with their own context.
-                </p>
-              </div>
-
-              <div className="space-y-3">
-                <div className="space-y-1.5">
-                  <Label htmlFor="ob-project">Project name</Label>
-                  <Input
-                    id="ob-project"
-                    placeholder="My Workspace"
-                    value={projectName}
-                    onChange={(e) => setProjectName(e.target.value)}
-                    maxLength={100}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' && projectName.trim()) {
-                        e.preventDefault();
-                        void handleCreateProject();
-                      }
-                    }}
-                    autoFocus
-                  />
-                </div>
-
-                {/* Emoji picker */}
-                <div className="space-y-1.5">
-                  <Label>Icon</Label>
-                  <div className="flex flex-wrap gap-1.5">
-                    {EMOJI_OPTIONS.map((emoji) => (
-                      <button
-                        key={emoji}
-                        type="button"
-                        onClick={() => setProjectEmoji(emoji)}
-                        className={cn(
-                          'flex h-9 w-9 items-center justify-center rounded-lg border text-lg transition-all',
-                          projectEmoji === emoji
-                            ? 'border-primary bg-primary/10 ring-1 ring-primary/20'
-                            : 'border-transparent hover:bg-muted',
-                        )}
-                      >
-                        {emoji}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Pro upsell — subtle, after connecting */}
-                <div className="rounded-lg border border-yellow-500/20 bg-yellow-50/50 dark:bg-yellow-950/10 p-3">
-                  <p className="text-xs text-muted-foreground">
-                    <span className="font-medium text-foreground">Want more?</span>{' '}
-                    Unlock unlimited projects, push notifications &amp; analytics for{' '}
-                    <span className="font-semibold text-primary">$12/mo</span>.{' '}
-                    <Link href="/pricing" className="text-primary hover:underline">
-                      View plans →
-                    </Link>
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex justify-between pt-2">
-                <Button
-                  variant="ghost"
-                  onClick={() => goTo('gateway-connect', 'backward')}
-                  className="gap-2"
-                >
-                  <ArrowLeft className="h-4 w-4" /> Back
-                </Button>
-                <Button
-                  onClick={() => void handleCreateProject()}
-                  disabled={creating || !projectName.trim()}
-                  size="lg"
-                  className="gap-2"
-                >
-                  {creating ? (
-                    <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Creating...</>
-                  ) : (
-                    <>Let&apos;s Go! <Rocket className="h-4 w-4" /></>
-                  )}
-                </Button>
-              </div>
-            </div>
-          )}
-
-          {/* ── Step 4: Done ── */}
+          {/* ── Step 3: Done ── */}
           {step === 'done' && (
             <div className={cn('flex flex-col items-center justify-center gap-4 py-8 text-center', contentClass)}>
-              {/* Animated checkmark */}
               <div className="flex h-16 w-16 items-center justify-center rounded-full bg-green-100 dark:bg-green-950 animate-in zoom-in-50 duration-500">
                 <CheckCircle2 className="h-8 w-8 text-green-600 animate-in zoom-in-0 duration-700 delay-200" />
               </div>
@@ -496,12 +337,12 @@ export function OnboardingWizard({ open, onOpenChange }: OnboardingWizardProps) 
               </h2>
               <p className="max-w-sm text-muted-foreground animate-in fade-in slide-in-from-bottom-2 duration-500 delay-500">
                 {isConnected
-                  ? 'Gateway connected. Create your first task!'
-                  : 'Your workspace is ready. Connect a Gateway when you\'re ready to start building.'}
+                  ? 'Gateway connected. Your dashboard is ready!'
+                  : 'Your workspace is ready. Connect a Gateway when you\'re ready to start.'}
               </p>
               <div className="mt-2 flex items-center gap-1 text-xs text-muted-foreground animate-in fade-in duration-500 delay-700">
                 <Loader2 className="h-3 w-3 animate-spin" />
-                Redirecting to your workspace...
+                Redirecting to dashboard...
               </div>
             </div>
           )}

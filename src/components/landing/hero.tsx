@@ -40,12 +40,12 @@ export function Hero() {
         </p>
 
         <div className="mt-10 flex flex-col items-center gap-4 sm:flex-row sm:justify-center">
-          <Link href="/signup">
+          <Link href="/get-started">
             <Button
               size="lg"
               className="h-12 px-8 text-base bg-gradient-to-r from-violet-600 to-indigo-600 text-white shadow-lg shadow-violet-500/25 hover:from-violet-500 hover:to-indigo-500 hover:shadow-violet-500/40 border-0"
             >
-              Get Started Free
+              Get Started
             </Button>
           </Link>
           <Link href="#how-it-works">
@@ -60,8 +60,7 @@ export function Hero() {
         </div>
 
         <p className="mt-4 text-sm text-muted-foreground">
-          Free tier available · No credit card required · Your API keys stay on
-          your machine
+          Open source · Self-hosted · Your API keys stay on your machine
         </p>
 
         {/* Agent Dashboard mockup */}

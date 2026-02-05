@@ -5,7 +5,6 @@ import { Users, Circle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useGatewayStore } from '@/stores/gateway-store';
 import { useTaskStore } from '@/stores/task-store';
-import { useProjectStore } from '@/stores/project-store';
 import { useMemo } from 'react';
 
 interface Agent {
@@ -17,20 +16,15 @@ interface Agent {
 
 export function AgentsCard() {
   const gatewayStatus = useGatewayStore((s) => s.status);
-  const tasksByProject = useTaskStore((s) => s.tasksByProject);
-  const projects = useProjectStore((s) => s.projects);
+  const tasks = useTaskStore((s) => s.tasks);
 
   // Find active task for main agent
   const activeTask = useMemo(() => {
-    for (const project of projects) {
-      const tasks = tasksByProject[project.id] ?? [];
-      const active = tasks.find((t) => t.status === 'active');
-      if (active) return active.title;
-    }
-    return undefined;
-  }, [tasksByProject, projects]);
+    const active = tasks.find((t) => t.status === 'active');
+    return active?.title;
+  }, [tasks]);
 
-  // Build agents list: main agent from gateway status + mock sub-agents
+  // Build agents list: main agent from gateway status
   const agents: Agent[] = useMemo(() => {
     const mainStatus = gatewayStatus === 'connected'
       ? (activeTask ? 'working' : 'idle')
@@ -43,17 +37,7 @@ export function AgentsCard() {
         status: mainStatus,
         currentTask: activeTask,
       },
-      // Mock sub-agents for now
-      {
-        id: 'research',
-        name: 'Research',
-        status: 'idle' as const,
-      },
-      {
-        id: 'code-review',
-        name: 'Code Review',
-        status: 'offline' as const,
-      },
+      // Future: Add sub-agents from Gateway sessions.list
     ];
   }, [gatewayStatus, activeTask]);
 
@@ -62,7 +46,7 @@ export function AgentsCard() {
       <CardHeader className="pb-3">
         <CardTitle className="flex items-center gap-2 text-base">
           <Users className="h-4 w-4" />
-          Team
+          Agents
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-2">
@@ -87,6 +71,12 @@ export function AgentsCard() {
             </div>
           </div>
         ))}
+        
+        {gatewayStatus !== 'connected' && (
+          <p className="text-xs text-muted-foreground text-center py-2">
+            Connect to see agents
+          </p>
+        )}
       </CardContent>
     </Card>
   );

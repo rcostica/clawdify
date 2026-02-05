@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
 import {
   Card,
   CardContent,
@@ -12,7 +11,6 @@ import {
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
-import { Separator } from '@/components/ui/separator';
 import { Switch } from '@/components/ui/switch';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import {
@@ -24,25 +22,23 @@ import {
   XCircle,
   AlertTriangle,
   Shield,
-  LogOut,
+  Trash2,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useGatewayStore } from '@/stores/gateway-store';
 import { useGatewayConnection } from '@/lib/gateway/hooks';
 import { validateGatewayUrl } from '@/lib/gateway/types';
-import { createClient } from '@/lib/supabase/client';
 
 export default function SettingsPage() {
-  const router = useRouter();
-  const supabase = createClient();
   const config = useGatewayStore((s) => s.config);
   const status = useGatewayStore((s) => s.status);
   const hello = useGatewayStore((s) => s.hello);
+  const clearConfig = useGatewayStore((s) => s.clearConfig);
 
   const [gatewayUrl, setGatewayUrl] = useState(
     config?.url || process.env.NEXT_PUBLIC_DEFAULT_GATEWAY_URL || '',
   );
-  const [gatewayToken, setGatewayToken] = useState('');
+  const [gatewayToken, setGatewayToken] = useState(config?.token || '');
   const [showToken, setShowToken] = useState(false);
   const [insecureAuth, setInsecureAuth] = useState(
     config?.insecureAuth ?? false,
@@ -50,20 +46,21 @@ export default function SettingsPage() {
   const [urlError, setUrlError] = useState<string | null>(null);
   const [urlInsecure, setUrlInsecure] = useState(false);
   const [testing, setTesting] = useState(false);
-  const [saving, setSaving] = useState(false);
   const [testResult, setTestResult] = useState<{
     ok: boolean;
     message: string;
   } | null>(null);
-  const [userEmail, setUserEmail] = useState<string>('');
 
   const { connect, disconnect, testConnection } = useGatewayConnection();
 
+  // Sync form with store when config changes
   useEffect(() => {
-    supabase.auth.getUser().then(({ data }) => {
-      setUserEmail(data.user?.email ?? '');
-    });
-  }, [supabase]);
+    if (config) {
+      setGatewayUrl(config.url || '');
+      setGatewayToken(config.token || '');
+      setInsecureAuth(config.insecureAuth ?? false);
+    }
+  }, [config]);
 
   // Validate URL on change
   useEffect(() => {
@@ -100,57 +97,20 @@ export default function SettingsPage() {
     }
   };
 
-  const handleSaveAndConnect = async () => {
+  const handleSaveAndConnect = () => {
     if (urlError) {
       toast.error('Fix the URL error before saving');
       return;
     }
-    setSaving(true);
-    try {
-      // 🔒 SECURITY: Save token encrypted in Supabase, never in localStorage
-      if (gatewayToken) {
-        const { error } = await supabase.rpc('save_gateway_connection', {
-          p_name: 'Default',
-          p_gateway_url: gatewayUrl,
-          p_gateway_token: gatewayToken,
-        });
-        if (error) {
-          toast.error('Failed to save connection', {
-            description: error.message,
-          });
-          setSaving(false);
-          return;
-        }
-      } else {
-        // Save URL only (no token update)
-        const { error } = await supabase.rpc('save_gateway_connection', {
-          p_name: 'Default',
-          p_gateway_url: gatewayUrl,
-        });
-        if (error) {
-          toast.error('Failed to save connection', {
-            description: error.message,
-          });
-          setSaving(false);
-          return;
-        }
-      }
 
-      // Connect with current credentials
-      connect({
-        url: gatewayUrl,
-        token: gatewayToken || config?.token || undefined,
-        insecureAuth,
-      });
+    // Save to localStorage via Zustand and connect
+    connect({
+      url: gatewayUrl,
+      token: gatewayToken || undefined,
+      insecureAuth,
+    });
 
-      toast.success('Connection saved and connecting...');
-    } catch (err) {
-      toast.error('Failed to save', {
-        description: err instanceof Error ? err.message : 'Unknown error',
-      });
-    } finally {
-      setSaving(false);
-    }
+    toast.success('Connection saved!');
   };
 
   const handleDisconnect = () => {
@@ -158,15 +118,14 @@ export default function SettingsPage() {
     toast.info('Disconnected from Gateway');
   };
 
-  const handleSignOut = async () => {
+  const handleClearConfig = () => {
     disconnect();
-    const { error } = await supabase.auth.signOut();
-    if (error) {
-      toast.error('Failed to sign out', { description: error.message });
-      return;
-    }
-    router.push('/login');
-    router.refresh();
+    clearConfig();
+    setGatewayUrl('');
+    setGatewayToken('');
+    setInsecureAuth(false);
+    setTestResult(null);
+    toast.info('Connection cleared');
   };
 
   return (
@@ -185,8 +144,8 @@ export default function SettingsPage() {
               Gateway Connection
             </CardTitle>
             <CardDescription>
-              Configure your OpenClaw Gateway connection. Tokens are
-              encrypted and stored securely in Supabase.
+              Configure your OpenClaw Gateway connection. Your credentials
+              are stored locally in your browser.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -210,7 +169,8 @@ export default function SettingsPage() {
                   <AlertTriangle className="h-4 w-4 text-yellow-600" />
                   <AlertDescription className="text-xs text-yellow-700 dark:text-yellow-300">
                     ⚠️ Unencrypted connection — your gateway token will be
-                    sent in plaintext. Use wss:// for secure connections.
+                    sent in plaintext. Use wss:// for secure connections,
+                    or ws:// over Tailscale/VPN.
                   </AlertDescription>
                 </Alert>
               )}
@@ -249,16 +209,8 @@ export default function SettingsPage() {
               <p className="text-xs text-muted-foreground">
                 Find your token:{' '}
                 <code className="rounded bg-muted px-1 py-0.5 text-[10px]">
-                  openclaw config get gateway.auth.token
+                  openclaw status
                 </code>
-                {' '}or in{' '}
-                <code className="rounded bg-muted px-1 py-0.5 text-[10px]">
-                  ~/.openclaw/openclaw.json
-                </code>
-              </p>
-              <p className="text-xs text-muted-foreground">
-                Your token is encrypted and stored securely — never in
-                browser localStorage.
               </p>
             </div>
 
@@ -307,7 +259,7 @@ export default function SettingsPage() {
             )}
 
             {/* Action Buttons */}
-            <div className="flex gap-2">
+            <div className="flex flex-wrap gap-2">
               <Button
                 variant="outline"
                 onClick={handleTest}
@@ -324,20 +276,23 @@ export default function SettingsPage() {
               </Button>
               <Button
                 onClick={handleSaveAndConnect}
-                disabled={saving || !gatewayUrl || !!urlError}
+                disabled={!gatewayUrl || !!urlError}
               >
-                {saving ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Saving...
-                  </>
-                ) : (
-                  'Save & Connect'
-                )}
+                Save & Connect
               </Button>
               {status === 'connected' && (
-                <Button variant="destructive" onClick={handleDisconnect}>
+                <Button variant="outline" onClick={handleDisconnect}>
                   Disconnect
+                </Button>
+              )}
+              {config && (
+                <Button
+                  variant="ghost"
+                  onClick={handleClearConfig}
+                  className="text-destructive hover:text-destructive"
+                >
+                  <Trash2 className="mr-2 h-4 w-4" />
+                  Clear
                 </Button>
               )}
             </div>
@@ -380,7 +335,7 @@ export default function SettingsPage() {
           <CardContent className="space-y-3 text-sm text-muted-foreground">
             <div className="space-y-3">
               <div>
-                <p className="font-medium text-foreground">Local Gateway (Recommended)</p>
+                <p className="font-medium text-foreground">Local Gateway</p>
                 <p className="text-xs mt-1">
                   Run OpenClaw on your machine. Use{' '}
                   <code className="rounded bg-muted px-1.5 py-0.5 text-[11px]">
@@ -390,44 +345,26 @@ export default function SettingsPage() {
                 </p>
               </div>
               <div>
-                <p className="font-medium text-foreground">Remote Gateway</p>
+                <p className="font-medium text-foreground">Tailscale/VPN</p>
                 <p className="text-xs mt-1">
-                  Running OpenClaw on a VPS for always-on access? Use{' '}
+                  Access your home server from anywhere via Tailscale. Use{' '}
                   <code className="rounded bg-muted px-1.5 py-0.5 text-[11px]">
-                    wss://
+                    ws://100.x.x.x:18789
                   </code>{' '}
-                  for encrypted connections to your remote server.
+                  — encrypted at the network layer.
+                </p>
+              </div>
+              <div>
+                <p className="font-medium text-foreground">Remote Gateway (wss://)</p>
+                <p className="text-xs mt-1">
+                  Running OpenClaw on a VPS with a domain? Use{' '}
+                  <code className="rounded bg-muted px-1.5 py-0.5 text-[11px]">
+                    wss://yourdomain.com
+                  </code>{' '}
+                  for TLS-encrypted connections.
                 </p>
               </div>
             </div>
-          </CardContent>
-        </Card>
-
-        <Separator />
-
-        {/* Account Section */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Account</CardTitle>
-            <CardDescription>
-              Manage your account settings
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {userEmail && (
-              <div className="space-y-2">
-                <Label>Email</Label>
-                <p className="text-sm text-muted-foreground">{userEmail}</p>
-              </div>
-            )}
-            <Button
-              variant="destructive"
-              onClick={handleSignOut}
-              className="gap-2"
-            >
-              <LogOut className="h-4 w-4" />
-              Sign Out
-            </Button>
           </CardContent>
         </Card>
       </div>

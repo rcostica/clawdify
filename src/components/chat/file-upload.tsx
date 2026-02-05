@@ -3,8 +3,6 @@
 import { useCallback, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Paperclip, X, File, ImageIcon, Loader2 } from 'lucide-react';
-import { cn } from '@/lib/utils';
-import { createClient } from '@/lib/supabase/client';
 import { toast } from 'sonner';
 
 export interface UploadedFile {
@@ -15,12 +13,11 @@ export interface UploadedFile {
 }
 
 interface FileUploadProps {
-  projectId: string;
   onUpload: (file: UploadedFile) => void;
   disabled?: boolean;
 }
 
-const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
+const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB for data URLs
 const ALLOWED_TYPES = [
   'image/jpeg',
   'image/png',
@@ -32,11 +29,9 @@ const ALLOWED_TYPES = [
   'text/csv',
   'text/markdown',
   'application/json',
-  'application/zip',
 ];
 
 export function FileUploadButton({
-  projectId,
   onUpload,
   disabled,
 }: FileUploadProps) {
@@ -48,7 +43,7 @@ export function FileUploadButton({
       // Validate size
       if (file.size > MAX_FILE_SIZE) {
         toast.error('File too large', {
-          description: 'Maximum file size is 10MB',
+          description: 'Maximum file size is 5MB',
         });
         return;
       }
@@ -63,43 +58,31 @@ export function FileUploadButton({
 
       setUploading(true);
       try {
-        const supabase = createClient();
-        const ext = file.name.split('.').pop() ?? 'bin';
-        const path = `${projectId}/${crypto.randomUUID()}.${ext}`;
-
-        const { data, error } = await supabase.storage
-          .from('chat-attachments')
-          .upload(path, file, {
-            cacheControl: '3600',
-            upsert: false,
+        // Convert to data URL (self-hosted, no cloud storage)
+        const reader = new FileReader();
+        reader.onload = () => {
+          const dataUrl = reader.result as string;
+          onUpload({
+            name: file.name,
+            url: dataUrl,
+            type: file.type,
+            size: file.size,
           });
-
-        if (error) {
-          toast.error('Upload failed', { description: error.message });
-          return;
-        }
-
-        const {
-          data: { publicUrl },
-        } = supabase.storage
-          .from('chat-attachments')
-          .getPublicUrl(data.path);
-
-        onUpload({
-          name: file.name,
-          url: publicUrl,
-          type: file.type,
-          size: file.size,
-        });
+          setUploading(false);
+        };
+        reader.onerror = () => {
+          toast.error('Failed to read file');
+          setUploading(false);
+        };
+        reader.readAsDataURL(file);
       } catch (err) {
         toast.error('Upload failed', {
           description: err instanceof Error ? err.message : 'Unknown error',
         });
-      } finally {
         setUploading(false);
       }
     },
-    [projectId, onUpload],
+    [onUpload],
   );
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {

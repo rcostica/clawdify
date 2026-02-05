@@ -3,7 +3,6 @@ import { Features } from '@/components/landing/features';
 import { DemoPreview } from '@/components/landing/demo-preview';
 import { HowItWorks } from '@/components/landing/how-it-works';
 import { Comparison } from '@/components/landing/comparison';
-import { PricingTable } from '@/components/landing/pricing-table';
 import { Testimonials } from '@/components/landing/testimonials';
 import { CtaSection } from '@/components/landing/cta-section';
 import { Faq } from '@/components/landing/faq';
@@ -17,7 +16,6 @@ export default function LandingPage() {
       <HowItWorks />
       <Comparison />
       <Testimonials />
-      <PricingTable />
       <CtaSection />
       <Faq />
     </>

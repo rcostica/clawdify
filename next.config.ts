@@ -1,5 +1,7 @@
 import type { NextConfig } from 'next';
 
+const isDev = process.env.NODE_ENV === 'development';
+
 const nextConfig: NextConfig = {
   // output: 'standalone', // Enable only for Docker self-hosting, not Vercel
 
@@ -30,13 +32,15 @@ const nextConfig: NextConfig = {
               "object-src 'none'",
               "form-action 'self'",
               "frame-ancestors 'none'",
-              "upgrade-insecure-requests",
+              // Only upgrade in production (breaks http:// access in dev/Tailscale)
+              ...(isDev ? [] : ["upgrade-insecure-requests"]),
             ].join('; '),
           },
-          {
+          // HSTS only in production
+          ...(isDev ? [] : [{
             key: 'Strict-Transport-Security',
             value: 'max-age=31536000; includeSubDomains',
-          },
+          }]),
         ],
       },
     ];

@@ -4,42 +4,29 @@ import { useMemo } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
-import { Zap, Plus, ArrowRight } from 'lucide-react';
+import { Zap, Wifi } from 'lucide-react';
 import Link from 'next/link';
 import { cn } from '@/lib/utils';
 import { useGatewayStore } from '@/stores/gateway-store';
 import { useTaskStore, type Task } from '@/stores/task-store';
-import { useProjectStore } from '@/stores/project-store';
 import { useActivityStore } from '@/stores/activity-store';
 
-interface CurrentHeroCardProps {
-  onNewTask?: () => void;
-}
-
-export function CurrentHeroCard({ onNewTask }: CurrentHeroCardProps) {
+export function CurrentHeroCard() {
   const status = useGatewayStore((s) => s.status);
-  const tasksByProject = useTaskStore((s) => s.tasksByProject);
-  const projects = useProjectStore((s) => s.projects);
+  const tasks = useTaskStore((s) => s.tasks);
   const entriesByTask = useActivityStore((s) => s.entriesByTask);
   const streamingTaskIds = useActivityStore((s) => s.streamingTaskIds);
 
-  // Find the first active task across all projects
-  const activeTaskWithProject = useMemo(() => {
-    for (const project of projects) {
-      const tasks = tasksByProject[project.id] ?? [];
-      const activeTask = tasks.find((t) => t.status === 'active');
-      if (activeTask) {
-        return { task: activeTask, project };
-      }
-    }
-    return null;
-  }, [tasksByProject, projects]);
+  // Find the first active task
+  const activeTask = useMemo(() => {
+    return tasks.find((t) => t.status === 'active') ?? null;
+  }, [tasks]);
 
   const isConnected = status === 'connected';
-  const isWorking = activeTaskWithProject !== null || streamingTaskIds.size > 0;
+  const isWorking = activeTask !== null || streamingTaskIds.size > 0;
 
   // Get activity data for the active task (or any streaming task)
-  const activeTaskId = activeTaskWithProject?.task.runId ?? 
+  const activeTaskId = activeTask?.runId ?? 
     (streamingTaskIds.size > 0 ? Array.from(streamingTaskIds)[0] : null);
   const activityEntries = activeTaskId ? (entriesByTask[activeTaskId] ?? []) : [];
   
@@ -59,7 +46,6 @@ export function CurrentHeroCard({ onNewTask }: CurrentHeroCardProps) {
   }, [activityEntries]);
 
   // Progress: rough estimate based on activity (just for visual feedback)
-  // TODO: Implement real progress tracking
   const progress = Math.min(90, activityEntries.length * 10);
 
   return (
@@ -99,16 +85,14 @@ export function CurrentHeroCard({ onNewTask }: CurrentHeroCardProps) {
 
         {isWorking ? (
           <WorkingState
-            task={activeTaskWithProject?.task ?? null}
-            projectId={activeTaskWithProject?.task.projectId}
-            projectName={activeTaskWithProject?.project.name ?? 'Unknown'}
+            task={activeTask}
             currentFile={currentFile}
             progress={progress}
             activityTrail={activityTrail}
             isStreaming={streamingTaskIds.size > 0}
           />
         ) : (
-          <IdleState isConnected={isConnected} onNewTask={onNewTask} />
+          <IdleState isConnected={isConnected} />
         )}
       </CardContent>
     </Card>
@@ -117,8 +101,6 @@ export function CurrentHeroCard({ onNewTask }: CurrentHeroCardProps) {
 
 interface WorkingStateProps {
   task: Task | null;
-  projectId?: string;
-  projectName: string;
   currentFile: string | null;
   progress: number;
   activityTrail: string[];
@@ -127,8 +109,6 @@ interface WorkingStateProps {
 
 function WorkingState({
   task,
-  projectId,
-  projectName,
   currentFile,
   progress,
   activityTrail,
@@ -139,7 +119,7 @@ function WorkingState({
   
   return (
     <div className="space-y-4">
-      {/* Task title and project */}
+      {/* Task title */}
       <div>
         <h3 className="text-lg font-semibold">{title}</h3>
         {currentFile && (
@@ -171,49 +151,31 @@ function WorkingState({
           ))}
         </div>
       )}
-
-      {/* Link to task */}
-      {projectId && (
-        <Link href={`/project/${projectId}`}>
-          <Button variant="ghost" size="sm" className="gap-1.5 -ml-2 text-xs">
-            View in {projectName}
-            <ArrowRight className="h-3 w-3" />
-          </Button>
-        </Link>
-      )}
     </div>
   );
 }
 
 interface IdleStateProps {
   isConnected: boolean;
-  onNewTask?: () => void;
 }
 
-function IdleState({ isConnected, onNewTask }: IdleStateProps) {
+function IdleState({ isConnected }: IdleStateProps) {
   return (
     <div className="space-y-4">
       <p className="text-muted-foreground">
         {isConnected
-          ? 'Waiting for a task...'
+          ? 'Agent idle — waiting for a task...'
           : 'Connect your Gateway to start working'}
       </p>
 
-      <div className="flex gap-2">
-        {isConnected ? (
-          <Button onClick={onNewTask} className="gap-2">
-            <Plus className="h-4 w-4" />
-            New Task
+      {!isConnected && (
+        <Link href="/connect">
+          <Button className="gap-2">
+            <Wifi className="h-4 w-4" />
+            Connect Gateway
           </Button>
-        ) : (
-          <Link href="/connect">
-            <Button className="gap-2">
-              <Zap className="h-4 w-4" />
-              Connect Gateway
-            </Button>
-          </Link>
-        )}
-      </div>
+        </Link>
+      )}
     </div>
   );
 }

@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
+import { Github } from 'lucide-react';
 
 export function CtaSection() {
   return (
@@ -16,30 +17,35 @@ export function CtaSection() {
             Stop watching terminal output scroll by
           </h2>
           <p className="relative mx-auto mt-4 max-w-xl text-muted-foreground">
-            Install OpenClaw. Connect to Clawdify. Create a task and watch your
-            agent work from a real dashboard — not a wall of logs.
+            Install OpenClaw. Run Clawdify locally. Watch your agent work from a
+            real dashboard — not a wall of logs.
           </p>
           <div className="relative mt-8 flex flex-col items-center gap-4 sm:flex-row sm:justify-center">
-            <Link href="/signup">
+            <Link href="/get-started">
               <Button
                 size="lg"
                 className="h-12 px-8 text-base bg-gradient-to-r from-violet-600 to-indigo-600 text-white shadow-lg shadow-violet-500/25 hover:from-violet-500 hover:to-indigo-500 hover:shadow-violet-500/40 border-0"
               >
-                Get Started Free
+                Get Started
               </Button>
             </Link>
-            <Link href="/pricing">
+            <a
+              href="https://github.com/rcostica/clawdify"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
               <Button
                 variant="outline"
                 size="lg"
-                className="h-12 px-8 text-base"
+                className="h-12 px-8 text-base gap-2"
               >
-                View Pricing
+                <Github className="h-4 w-4" />
+                View on GitHub
               </Button>
-            </Link>
+            </a>
           </div>
           <p className="relative mt-6 text-sm text-muted-foreground">
-            Free tier available · No credit card required
+            Open source · MIT License · Self-hosted
           </p>
         </div>
       </div>

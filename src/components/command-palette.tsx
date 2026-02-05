@@ -11,29 +11,22 @@ import {
   CommandList,
   CommandSeparator,
 } from '@/components/ui/command';
-import { useProjectStore } from '@/stores/project-store';
 import { useGatewayStore } from '@/stores/gateway-store';
 import {
-  FolderOpen,
-  Plus,
   Settings,
   Wifi,
-  Download,
   Moon,
   Sun,
+  LayoutDashboard,
+  Github,
 } from 'lucide-react';
 import { useTheme } from 'next-themes';
 
 export function CommandPalette() {
   const [open, setOpen] = useState(false);
   const router = useRouter();
-  const projects = useProjectStore((s) => s.projects);
   const isConnected = useGatewayStore((s) => s.status === 'connected');
-  const { setTheme, theme } = useTheme();
-
-  const triggerNewProject = useCallback(() => {
-    document.querySelector<HTMLButtonElement>('[data-new-project]')?.click();
-  }, []);
+  const { setTheme } = useTheme();
 
   // Global keyboard shortcut: Cmd+K or Ctrl+K
   useEffect(() => {
@@ -42,19 +35,11 @@ export function CommandPalette() {
         e.preventDefault();
         setOpen((prev) => !prev);
       }
-      // Cmd+N: New project
-      if ((e.metaKey || e.ctrlKey) && e.key === 'n' && !e.shiftKey) {
-        const target = e.target as HTMLElement;
-        if (target.tagName !== 'INPUT' && target.tagName !== 'TEXTAREA') {
-          e.preventDefault();
-          triggerNewProject();
-        }
-      }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [triggerNewProject]);
+  }, []);
 
   const runCommand = useCallback((command: () => void) => {
     setOpen(false);
@@ -63,65 +48,32 @@ export function CommandPalette() {
 
   return (
     <CommandDialog open={open} onOpenChange={setOpen}>
-      <CommandInput placeholder="Search projects, actions..." />
+      <CommandInput placeholder="Search actions..." />
       <CommandList>
         <CommandEmpty>No results found.</CommandEmpty>
 
-        {/* Projects */}
-        {projects.length > 0 && (
-          <CommandGroup heading="Projects">
-            {projects
-              .filter((p) => !p.archived)
-              .map((project) => (
-                <CommandItem
-                  key={project.id}
-                  onSelect={() =>
-                    runCommand(() => router.push(`/project/${project.id}`))
-                  }
-                >
-                  <span className="mr-2 text-lg">{project.icon}</span>
-                  <span>{project.name}</span>
-                  {project.description && (
-                    <span className="ml-2 text-xs text-muted-foreground truncate">
-                      {project.description}
-                    </span>
-                  )}
-                </CommandItem>
-              ))}
-          </CommandGroup>
-        )}
-
-        <CommandSeparator />
-
-        {/* Actions */}
-        <CommandGroup heading="Actions">
+        {/* Navigation */}
+        <CommandGroup heading="Navigation">
           <CommandItem
-            onSelect={() => runCommand(() => triggerNewProject())}
+            onSelect={() => runCommand(() => router.push('/dashboard'))}
           >
-            <Plus className="mr-2 h-4 w-4" />
-            New Project
-          </CommandItem>
-          {isConnected && (
-            <CommandItem
-              disabled
-              onSelect={() => {}}
-            >
-              <Download className="mr-2 h-4 w-4" />
-              Import from Gateway
-              <span className="ml-auto text-[10px] text-muted-foreground">Coming soon</span>
-            </CommandItem>
-          )}
-          <CommandItem
-            onSelect={() => runCommand(() => router.push('/settings'))}
-          >
-            <Settings className="mr-2 h-4 w-4" />
-            Settings
+            <LayoutDashboard className="mr-2 h-4 w-4" />
+            Dashboard
           </CommandItem>
           <CommandItem
             onSelect={() => runCommand(() => router.push('/connect'))}
           >
             <Wifi className="mr-2 h-4 w-4" />
             Connection
+            {!isConnected && (
+              <span className="ml-auto text-xs text-muted-foreground">Disconnected</span>
+            )}
+          </CommandItem>
+          <CommandItem
+            onSelect={() => runCommand(() => router.push('/settings'))}
+          >
+            <Settings className="mr-2 h-4 w-4" />
+            Settings
           </CommandItem>
         </CommandGroup>
 
@@ -136,6 +88,22 @@ export function CommandPalette() {
           <CommandItem onSelect={() => runCommand(() => setTheme('dark'))}>
             <Moon className="mr-2 h-4 w-4" />
             Dark Mode
+          </CommandItem>
+        </CommandGroup>
+
+        <CommandSeparator />
+
+        {/* Links */}
+        <CommandGroup heading="Links">
+          <CommandItem
+            onSelect={() =>
+              runCommand(() =>
+                window.open('https://github.com/rcostica/clawdify', '_blank')
+              )
+            }
+          >
+            <Github className="mr-2 h-4 w-4" />
+            GitHub
           </CommandItem>
         </CommandGroup>
       </CommandList>

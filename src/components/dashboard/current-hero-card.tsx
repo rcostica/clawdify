@@ -10,13 +10,7 @@ import { cn } from '@/lib/utils';
 import { useGatewayStore } from '@/stores/gateway-store';
 import { useTaskStore, type Task } from '@/stores/task-store';
 import { useProjectStore } from '@/stores/project-store';
-
-// Mock activity trail — will be replaced with real streaming in Phase 2
-const MOCK_ACTIVITY_TRAIL = [
-  'Installed deps',
-  'Created page.tsx',
-  'Added hero section',
-];
+import { useActivityStore } from '@/stores/activity-store';
 
 interface CurrentHeroCardProps {
   onNewTask?: () => void;
@@ -26,6 +20,8 @@ export function CurrentHeroCard({ onNewTask }: CurrentHeroCardProps) {
   const status = useGatewayStore((s) => s.status);
   const tasksByProject = useTaskStore((s) => s.tasksByProject);
   const projects = useProjectStore((s) => s.projects);
+  const entriesByTask = useActivityStore((s) => s.entriesByTask);
+  const streamingTaskIds = useActivityStore((s) => s.streamingTaskIds);
 
   // Find the first active task across all projects
   const activeTaskWithProject = useMemo(() => {
@@ -40,13 +36,31 @@ export function CurrentHeroCard({ onNewTask }: CurrentHeroCardProps) {
   }, [tasksByProject, projects]);
 
   const isConnected = status === 'connected';
-  const isWorking = activeTaskWithProject !== null;
+  const isWorking = activeTaskWithProject !== null || streamingTaskIds.size > 0;
 
-  // Mock progress — will be replaced with real progress tracking
-  const mockProgress = isWorking ? 60 : 0;
+  // Get activity data for the active task (or any streaming task)
+  const activeTaskId = activeTaskWithProject?.task.runId ?? 
+    (streamingTaskIds.size > 0 ? Array.from(streamingTaskIds)[0] : null);
+  const activityEntries = activeTaskId ? (entriesByTask[activeTaskId] ?? []) : [];
+  
+  // Get the last few entries for the activity trail
+  const recentEntries = activityEntries.slice(-5);
+  const activityTrail = recentEntries.map((e) => e.title);
 
-  // Mock current file — will come from activity stream
-  const mockCurrentFile = isWorking ? 'src/app/page.tsx' : null;
+  // Get current file from the most recent file_read or file_write entry
+  const currentFile = useMemo(() => {
+    for (let i = activityEntries.length - 1; i >= 0; i--) {
+      const entry = activityEntries[i];
+      if (entry && (entry.type === 'file_read' || entry.type === 'file_write') && entry.detail) {
+        return entry.detail;
+      }
+    }
+    return null;
+  }, [activityEntries]);
+
+  // Progress: rough estimate based on activity (just for visual feedback)
+  // TODO: Implement real progress tracking
+  const progress = Math.min(90, activityEntries.length * 10);
 
   return (
     <Card className="overflow-hidden border-primary/20 bg-gradient-to-r from-primary/5 via-primary/3 to-transparent">
@@ -83,13 +97,15 @@ export function CurrentHeroCard({ onNewTask }: CurrentHeroCardProps) {
           </div>
         </div>
 
-        {isWorking && activeTaskWithProject ? (
+        {isWorking ? (
           <WorkingState
-            task={activeTaskWithProject.task}
-            projectName={activeTaskWithProject.project.name}
-            currentFile={mockCurrentFile}
-            progress={mockProgress}
-            activityTrail={MOCK_ACTIVITY_TRAIL}
+            task={activeTaskWithProject?.task ?? null}
+            projectId={activeTaskWithProject?.task.projectId}
+            projectName={activeTaskWithProject?.project.name ?? 'Unknown'}
+            currentFile={currentFile}
+            progress={progress}
+            activityTrail={activityTrail}
+            isStreaming={streamingTaskIds.size > 0}
           />
         ) : (
           <IdleState isConnected={isConnected} onNewTask={onNewTask} />
@@ -100,25 +116,32 @@ export function CurrentHeroCard({ onNewTask }: CurrentHeroCardProps) {
 }
 
 interface WorkingStateProps {
-  task: Task;
+  task: Task | null;
+  projectId?: string;
   projectName: string;
   currentFile: string | null;
   progress: number;
   activityTrail: string[];
+  isStreaming: boolean;
 }
 
 function WorkingState({
   task,
+  projectId,
   projectName,
   currentFile,
   progress,
   activityTrail,
+  isStreaming,
 }: WorkingStateProps) {
+  // Title: use task title if available, otherwise indicate streaming
+  const title = task?.title ?? (isStreaming ? 'Agent is working...' : 'Processing...');
+  
   return (
     <div className="space-y-4">
       {/* Task title and project */}
       <div>
-        <h3 className="text-lg font-semibold">{task.title}</h3>
+        <h3 className="text-lg font-semibold">{title}</h3>
         {currentFile && (
           <p className="text-sm text-muted-foreground mt-0.5">
             Working on{' '}
@@ -136,12 +159,12 @@ function WorkingState({
 
       {/* Activity breadcrumb trail */}
       {activityTrail.length > 0 && (
-        <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+        <div className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
           <span className="text-muted-foreground/70">↳</span>
-          {activityTrail.map((action, i) => (
+          {activityTrail.slice(-4).map((action, i, arr) => (
             <span key={i} className="flex items-center gap-1.5">
-              <span>{action}</span>
-              {i < activityTrail.length - 1 && (
+              <span className="truncate max-w-[150px]">{action}</span>
+              {i < arr.length - 1 && (
                 <span className="text-muted-foreground/50">→</span>
               )}
             </span>
@@ -150,12 +173,14 @@ function WorkingState({
       )}
 
       {/* Link to task */}
-      <Link href={`/project/${task.projectId}`}>
-        <Button variant="ghost" size="sm" className="gap-1.5 -ml-2 text-xs">
-          View in {projectName}
-          <ArrowRight className="h-3 w-3" />
-        </Button>
-      </Link>
+      {projectId && (
+        <Link href={`/project/${projectId}`}>
+          <Button variant="ghost" size="sm" className="gap-1.5 -ml-2 text-xs">
+            View in {projectName}
+            <ArrowRight className="h-3 w-3" />
+          </Button>
+        </Link>
+      )}
     </div>
   );
 }

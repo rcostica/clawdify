@@ -4,8 +4,11 @@ import { useEffect, useRef, useCallback } from 'react';
 import { GatewayClient } from './client';
 import { useGatewayStore } from '@/stores/gateway-store';
 import { useChatStore } from '@/stores/chat-store';
+import { useActivityStore } from '@/stores/activity-store';
+import { mapAgentEventToActivity } from './activity-mapper';
 import type {
   ChatEventPayload,
+  AgentEventPayload,
   HelloOk,
   GatewayConnectionConfig,
 } from './types';
@@ -35,6 +38,8 @@ export function useGatewayConnection() {
   const setError = useGatewayStore((s) => s.setError);
   const config = useGatewayStore((s) => s.config);
   const handleChatEvent = useChatStore((s) => s.handleChatEvent);
+  const addActivityEntry = useActivityStore((s) => s.addEntry);
+  const setActivityStreaming = useActivityStore((s) => s.setStreaming);
 
   const clientRef = useRef(getGatewayClient());
 
@@ -45,6 +50,17 @@ export function useGatewayConnection() {
       onStatusChange: (status) => setStatus(status),
       onHello: (hello) => setHello(hello),
       onChatEvent: (payload: ChatEventPayload) => handleChatEvent(payload),
+      onAgentEvent: (payload: AgentEventPayload) => {
+        // Map agent events (tool calls, etc.) to activity entries
+        // Use runId as taskId for now — refinement TBD
+        const taskId = payload.runId;
+        setActivityStreaming(taskId, true);
+        
+        const entry = mapAgentEventToActivity(payload, taskId);
+        if (entry) {
+          addActivityEntry(taskId, entry);
+        }
+      },
       onError: (err) => {
         console.error('[gateway]', err.message);
         setError(err.message);
@@ -63,7 +79,7 @@ export function useGatewayConnection() {
     return () => {
       // Don't disconnect on unmount — keep connection alive
     };
-  }, [config, setStatus, setHello, setError, handleChatEvent]);
+  }, [config, setStatus, setHello, setError, handleChatEvent, addActivityEntry, setActivityStreaming]);
 
   const connect = useCallback((cfg: GatewayConnectionConfig) => {
     useGatewayStore.getState().setConfig(cfg);

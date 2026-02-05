@@ -242,25 +242,30 @@ function isPrivateOrTailscaleIP(hostname: string): boolean {
   }
 
   // Check if it's an IP address (simple check)
-  const ipMatch = hostname.match(/^(\d+)\.(\d+)\.(\d+)\.(\d+)$/);
-  if (!ipMatch) {
+  const parts = hostname.split('.');
+  if (parts.length !== 4) {
     return false; // Domain name - not private
   }
 
-  const [, a, b] = ipMatch.map(Number);
+  const octets = parts.map(Number);
+  if (octets.some((n) => isNaN(n) || n < 0 || n > 255)) {
+    return false; // Invalid IP
+  }
+
+  const [a, b] = octets;
 
   // 10.0.0.0/8 - Private
   if (a === 10) return true;
 
   // 172.16.0.0/12 - Private (172.16.x.x - 172.31.x.x)
-  if (a === 172 && b >= 16 && b <= 31) return true;
+  if (a === 172 && b !== undefined && b >= 16 && b <= 31) return true;
 
   // 192.168.0.0/16 - Private
   if (a === 192 && b === 168) return true;
 
   // 100.64.0.0/10 - CGNAT range (Tailscale uses this)
   // Covers 100.64.0.0 - 100.127.255.255
-  if (a === 100 && b >= 64 && b <= 127) return true;
+  if (a === 100 && b !== undefined && b >= 64 && b <= 127) return true;
 
   return false;
 }

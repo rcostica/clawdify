@@ -27,7 +27,7 @@ const tiers = [
     price: '$12',
     period: '/mo',
     description:
-      'Full Mission Control. Unlimited projects, analytics, and priority support.',
+      'Full Agent Dashboard. Unlimited projects, analytics, and priority support.',
     cta: 'Upgrade to Pro',
     ctaVariant: 'default' as const,
     ctaHref: '/signup',

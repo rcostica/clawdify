@@ -1,10 +1,11 @@
 'use client';
 
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useRef } from 'react';
 import { useProjectStore } from '@/stores/project-store';
 import { useGatewayStore } from '@/stores/gateway-store';
 import { useTaskStore, type Task } from '@/stores/task-store';
 import { AgentStatus } from '@/components/activity/agent-status';
+import { CurrentHeroCard } from '@/components/dashboard/current-hero-card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import {
@@ -94,12 +95,24 @@ export default function AppHomePage() {
             🐾
           </div>
           <div>
-            <h2 className="text-2xl font-bold">Mission Control</h2>
+            <h2 className="text-2xl font-bold">Agent Dashboard</h2>
             <p className="text-sm text-muted-foreground">
               Manage your AI agent tasks
             </p>
           </div>
         </div>
+
+        {/* Current Task Hero Card */}
+        <CurrentHeroCard
+          onNewTask={() => {
+            // Navigate to first project or prompt to create one
+            if (projects.length > 0) {
+              window.location.href = `/project/${projects[0]!.id}`;
+            } else {
+              document.querySelector<HTMLButtonElement>('[data-new-project]')?.click();
+            }
+          }}
+        />
 
         {/* Agent Status */}
         <AgentStatus />

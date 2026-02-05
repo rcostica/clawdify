@@ -1,4 +1,4 @@
-// Plan definitions for Clawdify SaaS tiers — Mission Control positioning
+// Plan definitions for Clawdify SaaS tiers — Agent Dashboard positioning
 
 export type PlanId = 'free' | 'pro' | 'byog';
 
@@ -56,7 +56,7 @@ export const PLANS: Record<PlanId, Plan> = {
     maxProjects: -1,
     maxProjectsLabel: 'Unlimited projects',
     description:
-      'Full Mission Control. Unlimited projects, notifications, analytics, and priority support.',
+      'Full Agent Dashboard. Unlimited projects, notifications, analytics, and priority support.',
     badge: 'Most Popular',
     features: [
       { name: 'Everything in Free', included: true },

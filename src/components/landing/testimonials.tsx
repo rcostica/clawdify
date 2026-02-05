@@ -46,7 +46,7 @@ export function Testimonials() {
           </h2>
           <p className="mx-auto mt-4 max-w-2xl text-muted-foreground">
             Whether you&apos;re building for clients, your startup, or your next
-            side project — Clawdify gives you a command center for your AI
+            side project — Clawdify gives you a workspace for your AI
             agent.
           </p>
         </div>

@@ -261,7 +261,7 @@ export function OnboardingWizard({ open, onOpenChange }: OnboardingWizardProps) 
               </div>
               <h2 className="text-2xl font-bold">Welcome to Clawdify 🐾</h2>
               <p className="max-w-sm text-muted-foreground">
-                Your Mission Control for AI agents. Connect your Gateway and start managing tasks from anywhere.
+                Your Agent Dashboard for AI agents. Connect your Gateway and start managing tasks from anywhere.
               </p>
               <Button onClick={() => goTo('gateway-connect')} size="lg" className="mt-4 gap-2">
                 Connect Your Gateway

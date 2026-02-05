@@ -3,21 +3,21 @@ import { LandingNav } from '@/components/landing/nav';
 import { Footer } from '@/components/landing/footer';
 
 export const metadata: Metadata = {
-  title: 'Clawdify — Mission Control for AI Agents',
+  title: 'Clawdify — Agent Dashboard for AI Agents',
   description:
-    'Mission Control for your AI agents. Create tasks, watch your agent work in real-time, and review results — all from one dashboard. Free tier available.',
+    'Agent Dashboard for your AI agents. Create tasks, watch your agent work in real-time, and review results — all from one dashboard. Free tier available.',
   openGraph: {
-    title: 'Clawdify — Mission Control for AI Agents',
+    title: 'Clawdify — Agent Dashboard for AI Agents',
     description:
-      'Mission Control for your AI agents. Create tasks, watch your agent work in real-time, and review results — all from one dashboard.',
+      'Agent Dashboard for your AI agents. Create tasks, watch your agent work in real-time, and review results — all from one dashboard.',
     type: 'website',
     siteName: 'Clawdify',
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'Clawdify — Mission Control for AI Agents',
+    title: 'Clawdify — Agent Dashboard for AI Agents',
     description:
-      'Mission Control for your AI agents. Create tasks, watch your agent work in real-time, and review results — all from one dashboard.',
+      'Agent Dashboard for your AI agents. Create tasks, watch your agent work in real-time, and review results — all from one dashboard.',
   },
 };
 

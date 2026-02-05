@@ -27,14 +27,14 @@ export function Hero() {
         </div>
 
         <h1 className="mx-auto max-w-4xl text-4xl font-bold tracking-tight sm:text-5xl md:text-6xl lg:text-7xl">
-          Mission Control for{' '}
+          Agent Dashboard for{' '}
           <span className="bg-gradient-to-r from-violet-400 via-indigo-400 to-purple-400 bg-clip-text text-transparent">
             AI Agents
           </span>
         </h1>
 
         <p className="mx-auto mt-6 max-w-2xl text-lg text-muted-foreground md:text-xl">
-          You run the agent. We give you the command center. Create tasks, watch
+          You run the agent. We give you the workspace. Create tasks, watch
           your agent work in real-time, and review results — all from one
           dashboard.
         </p>
@@ -64,7 +64,7 @@ export function Hero() {
           your machine
         </p>
 
-        {/* Mission Control mockup */}
+        {/* Agent Dashboard mockup */}
         <div className="relative mx-auto mt-20 max-w-5xl">
           <div className="rounded-xl border border-border/50 bg-card/50 shadow-2xl shadow-violet-500/5 backdrop-blur-sm overflow-hidden">
             {/* Window chrome */}

@@ -8,7 +8,7 @@ const faqs = [
   {
     question: 'What is Clawdify?',
     answer:
-      'Clawdify is a Mission Control dashboard for AI agents powered by OpenClaw. You create tasks in the dashboard, your AI agent executes them — reading files, writing code, running commands — and you watch it all happen in real-time from your browser.',
+      'Clawdify is a Agent Dashboard dashboard for AI agents powered by OpenClaw. You create tasks in the dashboard, your AI agent executes them — reading files, writing code, running commands — and you watch it all happen in real-time from your browser.',
   },
   {
     question: 'Do I need to install anything?',

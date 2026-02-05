@@ -31,8 +31,8 @@ export function Footer() {
               <span>Clawdify</span>
             </Link>
             <p className="mt-4 max-w-sm text-sm leading-relaxed text-muted-foreground">
-              Mission Control for AI agents. You run the agent. We give you the
-              command center. Built on OpenClaw.
+              Agent Dashboard for AI agents. You run the agent. We give you the
+              workspace. Built on OpenClaw.
             </p>
           </div>
 

@@ -247,6 +247,16 @@ export default function SettingsPage() {
                 </Button>
               </div>
               <p className="text-xs text-muted-foreground">
+                Find your token:{' '}
+                <code className="rounded bg-muted px-1 py-0.5 text-[10px]">
+                  openclaw config get gateway.auth.token
+                </code>
+                {' '}or in{' '}
+                <code className="rounded bg-muted px-1 py-0.5 text-[10px]">
+                  ~/.openclaw/openclaw.json
+                </code>
+              </p>
+              <p className="text-xs text-muted-foreground">
                 Your token is encrypted and stored securely — never in
                 browser localStorage.
               </p>

@@ -372,7 +372,7 @@ export default function ProjectPage() {
     </div>
   );
 
-  // ── Desktop Layout (three-column Mission Control) ──
+  // ── Desktop Layout (three-column Agent Dashboard) ──
   const desktopLayout = (
     <div className="hidden md:flex h-full flex-col">
       {/* Project header */}

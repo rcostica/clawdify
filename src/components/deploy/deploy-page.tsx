@@ -127,8 +127,26 @@ export function DeployPage() {
               </p>
             </div>
           </div>
-          <div className="ml-11">
+          <div className="ml-11 space-y-3">
             <CodeBlock command={`$ ${START_COMMAND}`} />
+            <div className="rounded-lg border border-blue-500/30 bg-blue-50/50 dark:bg-blue-950/20 p-3 space-y-2">
+              <p className="text-sm font-medium text-blue-900 dark:text-blue-100">
+                📋 Your Gateway Token
+              </p>
+              <p className="text-xs text-blue-800 dark:text-blue-200">
+                After starting, your token is auto-generated. Retrieve it with:
+              </p>
+              <pre className="overflow-x-auto rounded bg-background px-3 py-2 text-xs font-mono border">
+                $ openclaw config get gateway.auth.token
+              </pre>
+              <p className="text-xs text-muted-foreground">
+                Or find it in{' '}
+                <code className="rounded bg-muted px-1 py-0.5 text-[10px]">
+                  ~/.openclaw/openclaw.json
+                </code>{' '}
+                under <code className="rounded bg-muted px-1 py-0.5 text-[10px]">gateway.auth.token</code>
+              </p>
+            </div>
           </div>
         </div>
 

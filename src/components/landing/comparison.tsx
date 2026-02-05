@@ -4,7 +4,7 @@ const comparisons = [
   {
     versus: 'Terminal',
     icon: '>_',
-    tagline: 'Your agent works in the terminal. You work in Mission Control.',
+    tagline: 'Your agent works in the terminal. You work in Agent Dashboard.',
     points: [
       { label: 'Visual task management', clawdify: true, other: false },
       { label: 'Real-time activity feed', clawdify: true, other: 'Scrolling logs' },
@@ -17,7 +17,7 @@ const comparisons = [
   {
     versus: 'ChatGPT / Claude',
     icon: '💬',
-    tagline: 'Chat is for conversations. Mission Control is for getting work done.',
+    tagline: 'Chat is for conversations. Agent Dashboard is for getting work done.',
     points: [
       { label: 'Autonomous task execution', clawdify: true, other: false },
       { label: 'File system access', clawdify: true, other: false },
@@ -30,7 +30,7 @@ const comparisons = [
   {
     versus: 'Cursor / Windsurf',
     icon: '⌨️',
-    tagline: 'IDE agents are limited to code. Mission Control agents do anything.',
+    tagline: 'IDE agents are limited to code. Agent Dashboard agents do anything.',
     points: [
       { label: 'Works beyond code files', clawdify: true, other: false },
       { label: 'Runs any shell command', clawdify: true, other: 'Limited' },

@@ -1,8 +1,10 @@
 # 🐾 Clawdify
 
-**Your AI workspace powered by OpenClaw.**
+**A web dashboard for your OpenClaw AI agent.**
 
-Clawdify is a modern web interface for managing conversations with your AI agent through [OpenClaw](https://github.com/nichochar/openclaw) Gateways. It provides project-based chat organization, artifact previews, conversation import, and a polished user experience.
+Clawdify is an open-source web interface for [OpenClaw](https://github.com/openclaw/openclaw) — the AI agent runtime. It gives you a project-based workspace to manage tasks, watch your agent work in real-time, and organize your AI-assisted projects.
+
+> **Note:** This is a personal/community project, not a commercial product. Self-host it, fork it, make it yours.
 
 <!-- ![Clawdify Screenshot](./screenshots/hero.png) -->
 
@@ -103,18 +105,32 @@ The Docker image:
 
 ## 🔌 Connection Options
 
-### Hosted Mode (Recommended)
+### Local (Same Machine)
 
-Use Clawdify's hosted relay — no server setup required. Just sign up and start chatting.
+If you're running Clawdify and OpenClaw on the same machine:
 
-### Self-Hosted Gateway
+1. Start your OpenClaw Gateway: `openclaw gateway start`
+2. In Clawdify → **Settings**, use `ws://localhost:18789`
+3. Get your token: `openclaw config get gateway.auth.token`
+4. Paste the token and click **Test & Connect**
 
-For maximum privacy, run your own [OpenClaw Gateway](https://github.com/nichochar/openclaw):
+### Remote Access via Tailscale (Recommended)
 
-1. Install and start the OpenClaw Gateway on your machine
-2. In Clawdify → **Settings**, enter your Gateway URL (e.g., `ws://localhost:18789`)
-3. Enter your Gateway token and click **Test & Connect**
-4. For remote access, use `wss://` with a reverse proxy for encrypted connections
+For accessing your Gateway from anywhere (including mobile):
+
+1. Install [Tailscale](https://tailscale.com/) on your Gateway machine
+2. Install Tailscale on your client device (laptop, phone, etc.)
+3. Sign in to the same Tailscale account on both
+4. In Clawdify → **Settings**, use `ws://your-machine.tailnet:18789`
+
+Tailscale creates a secure, encrypted tunnel — no SSL certs or port forwarding needed.
+
+### Remote Access via wss://
+
+For more advanced setups, expose your Gateway over wss:// using:
+- **Caddy/nginx** reverse proxy with Let's Encrypt
+- **Cloudflare Tunnel** for zero-config SSL
+- Any reverse proxy that terminates TLS
 
 ---
 
@@ -197,9 +213,25 @@ src/
 
 ---
 
+## 🤝 Contributing
+
+Contributions welcome! This is a community project.
+
+1. Fork the repo
+2. Create a feature branch (`git checkout -b feature/awesome`)
+3. Commit your changes (`git commit -m 'Add awesome feature'`)
+4. Push to the branch (`git push origin feature/awesome`)
+5. Open a Pull Request
+
+**Areas where help is appreciated:**
+- Wiring up real data for Files/Media/Crons cards (currently mocked)
+- Mobile responsiveness improvements
+- Additional artifact types (PDF, images, etc.)
+- Documentation and examples
+
 ## 📄 License
 
-MIT
+MIT — see [LICENSE](./LICENSE) for details.
 
 ---
 

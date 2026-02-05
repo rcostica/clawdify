@@ -22,8 +22,6 @@ const START_COMMAND = 'openclaw gateway start';
 const DOCKER_COMMAND = `docker run -d \\
   --name openclaw-gateway \\
   -e ANTHROPIC_API_KEY=your_key_here \\
-  -e CLAWDIFY_RELAY_URL=wss://relay.clawdify.app \\
-  -e CLAWDIFY_USER_TOKEN=your_token_here \\
   -p 18789:18789 \\
   ghcr.io/openclaw/gateway:latest`;
 

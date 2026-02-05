@@ -227,6 +227,44 @@ export interface GatewayConnectionConfig {
 }
 
 // 🔒 SECURITY: Gateway URL validation — prevent connecting to arbitrary endpoints
+/**
+ * Check if an IP address is private, localhost, or Tailscale (CGNAT range).
+ * These are safe for ws:// because they're either local or VPN-encrypted.
+ */
+function isPrivateOrTailscaleIP(hostname: string): boolean {
+  // Localhost
+  if (
+    hostname === 'localhost' ||
+    hostname === '127.0.0.1' ||
+    hostname === '::1'
+  ) {
+    return true;
+  }
+
+  // Check if it's an IP address (simple check)
+  const ipMatch = hostname.match(/^(\d+)\.(\d+)\.(\d+)\.(\d+)$/);
+  if (!ipMatch) {
+    return false; // Domain name - not private
+  }
+
+  const [, a, b] = ipMatch.map(Number);
+
+  // 10.0.0.0/8 - Private
+  if (a === 10) return true;
+
+  // 172.16.0.0/12 - Private (172.16.x.x - 172.31.x.x)
+  if (a === 172 && b >= 16 && b <= 31) return true;
+
+  // 192.168.0.0/16 - Private
+  if (a === 192 && b === 168) return true;
+
+  // 100.64.0.0/10 - CGNAT range (Tailscale uses this)
+  // Covers 100.64.0.0 - 100.127.255.255
+  if (a === 100 && b >= 64 && b <= 127) return true;
+
+  return false;
+}
+
 export function validateGatewayUrl(url: string): {
   valid: boolean;
   error?: string;
@@ -242,12 +280,10 @@ export function validateGatewayUrl(url: string): {
     if (parsed.hostname === '' || parsed.hostname === '0.0.0.0') {
       return { valid: false, error: 'Invalid hostname' };
     }
-    // Warn about insecure connections (non-localhost ws://)
-    const isLocalhost =
-      parsed.hostname === 'localhost' ||
-      parsed.hostname === '127.0.0.1' ||
-      parsed.hostname === '::1';
-    const isInsecure = parsed.protocol === 'ws:' && !isLocalhost;
+    // Warn about insecure connections only for public IPs/domains
+    // Private IPs and Tailscale (CGNAT) are safe - either local or VPN-encrypted
+    const isSafeNetwork = isPrivateOrTailscaleIP(parsed.hostname);
+    const isInsecure = parsed.protocol === 'ws:' && !isSafeNetwork;
     return { valid: true, isInsecure };
   } catch {
     return { valid: false, error: 'Invalid URL format' };

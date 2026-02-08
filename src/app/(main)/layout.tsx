@@ -2,6 +2,7 @@ import { SidebarProvider, SidebarInset, SidebarTrigger } from '@/components/ui/s
 import { AppSidebar } from '@/components/app-sidebar';
 import { Separator } from '@/components/ui/separator';
 import { SearchModal } from '@/components/search-modal';
+import { KeyboardShortcuts } from '@/components/keyboard-shortcuts';
 
 export default function MainLayout({
   children,
@@ -22,6 +23,7 @@ export default function MainLayout({
         </main>
       </SidebarInset>
       <SearchModal />
+      <KeyboardShortcuts />
     </SidebarProvider>
   );
 }

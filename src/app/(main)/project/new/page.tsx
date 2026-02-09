@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useProjectsStore } from '@/lib/stores/projects';
+import { toast } from 'sonner';
 
 const EMOJI_OPTIONS = ['📁', '🚀', '💡', '📊', '🎯', '🔧', '📝', '🎨', '💰', '🔬', '📱', '🌐'];
 
@@ -37,6 +38,7 @@ export default function NewProjectPage() {
       }
 
       addProject(data.project);
+      toast.success(`Project "${data.project.name}" created`);
       router.push(`/project/${data.project.id}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to create project');

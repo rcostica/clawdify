@@ -5,7 +5,9 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Skeleton } from '@/components/ui/skeleton';
 import { Plus, GripVertical, Trash2, ArrowRight, Loader2 } from 'lucide-react';
+import { toast } from 'sonner';
 
 interface Task {
   id: string;
@@ -77,7 +79,7 @@ export default function KanbanPage() {
     // Use first project if none selected
     const projectId = selectedProject || projects[0]?.id;
     if (!projectId) {
-      alert('Create a project first!');
+      toast.error('Create a project first!');
       return;
     }
 
@@ -94,9 +96,11 @@ export default function KanbanPage() {
       const data = await res.json();
       if (data.task) {
         setTasks((prev) => [...prev, data.task]);
+        toast.success('Task created');
       }
     } catch (err) {
       console.error('Failed to add task:', err);
+      toast.error('Failed to create task');
     }
 
     setNewTaskTitle('');
@@ -113,8 +117,11 @@ export default function KanbanPage() {
       setTasks((prev) =>
         prev.map((t) => (t.id === taskId ? { ...t, status: newStatus } : t))
       );
+      const statusLabel = COLUMNS.find(c => c.key === newStatus)?.label || newStatus;
+      toast.success(`Moved to ${statusLabel}`);
     } catch (err) {
       console.error('Failed to move task:', err);
+      toast.error('Failed to move task');
     }
   };
 
@@ -122,8 +129,10 @@ export default function KanbanPage() {
     try {
       await fetch(`/api/tasks/${taskId}`, { method: 'DELETE' });
       setTasks((prev) => prev.filter((t) => t.id !== taskId));
+      toast.success('Task deleted');
     } catch (err) {
       console.error('Failed to delete task:', err);
+      toast.error('Failed to delete task');
     }
   };
 
@@ -134,8 +143,34 @@ export default function KanbanPage() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-[calc(100vh-3.5rem)]">
-        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+      <div className="flex flex-col h-[calc(100vh-3.5rem)]">
+        <div className="border-b px-4 sm:px-6 py-3 flex items-center justify-between">
+          <Skeleton className="h-6 w-32" />
+          <Skeleton className="h-8 w-36" />
+        </div>
+        <div className="flex-1 overflow-x-auto p-4">
+          <div className="flex gap-4 h-full min-w-max">
+            {COLUMNS.map((column) => (
+              <div key={column.key} className="w-64 sm:w-72 flex flex-col">
+                <div className={`rounded-t-lg border-t-4 ${column.color} bg-muted/50 px-3 py-2 flex items-center justify-between`}>
+                  <Skeleton className="h-4 w-20" />
+                  <Skeleton className="h-5 w-6 rounded-full" />
+                </div>
+                <div className="flex-1 bg-muted/20 rounded-b-lg border border-t-0 p-2 space-y-2">
+                  {[1, 2, 3].map((i) => (
+                    <Card key={i} className="shadow-sm">
+                      <CardContent className="p-3 space-y-2">
+                        <Skeleton className="h-4 w-full" />
+                        <Skeleton className="h-4 w-3/4" />
+                        <Skeleton className="h-5 w-12 rounded" />
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
       </div>
     );
   }

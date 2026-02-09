@@ -25,10 +25,12 @@ import {
   SidebarMenuSub,
   SidebarMenuSubItem,
   SidebarMenuSubButton,
+  SidebarMenuSkeleton,
 } from '@/components/ui/sidebar';
 import { Button } from '@/components/ui/button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { useProjectsStore, buildProjectTree } from '@/lib/stores/projects';
+import { toast } from 'sonner';
 import type { Project } from '@/lib/db/schema';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
@@ -113,6 +115,7 @@ export function AppSidebar() {
       router.push('/login');
     } catch (err) {
       console.error('Logout failed:', err);
+      toast.error('Logout failed');
     } finally {
       setLogoutLoading(false);
     }
@@ -141,11 +144,11 @@ export function AppSidebar() {
           <SidebarGroupContent>
             <SidebarMenu>
               {loading ? (
-                <SidebarMenuItem>
-                  <SidebarMenuButton disabled>
-                    <span className="text-muted-foreground">Loading...</span>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
+                <>
+                  <SidebarMenuSkeleton showIcon />
+                  <SidebarMenuSkeleton showIcon />
+                  <SidebarMenuSkeleton showIcon />
+                </>
               ) : projectTree.length === 0 ? (
                 <SidebarMenuItem>
                   <SidebarMenuButton asChild>

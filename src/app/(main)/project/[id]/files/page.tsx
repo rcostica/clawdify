@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback, use } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Skeleton } from '@/components/ui/skeleton';
 import {
   Folder, FileText, FileCode, FileImage, File as FileIcon,
   ChevronRight, ArrowLeft, Home, Download, Upload, FolderPlus,
@@ -11,6 +12,7 @@ import {
 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { useChatAttachmentsStore } from '@/lib/stores/chat-attachments';
+import { toast } from 'sonner';
 import type { Project } from '@/lib/db/schema';
 
 interface FileEntry {
@@ -166,7 +168,7 @@ export default function ProjectFilesPage({ params }: { params: Promise<{ id: str
       : `${basePath}/${newName.trim()}`;
 
     try {
-      await fetch('/api/files', {
+      const res = await fetch('/api/files', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -175,9 +177,12 @@ export default function ProjectFilesPage({ params }: { params: Promise<{ id: str
           content: creating === 'file' ? '' : undefined,
         }),
       });
+      if (!res.ok) throw new Error('Create failed');
+      toast.success(`${creating === 'folder' ? 'Folder' : 'File'} created`);
       fetchDirectory(currentSubPath);
     } catch (err) {
       console.error('Create failed:', err);
+      toast.error(`Failed to create ${creating}`);
     }
     setCreating(null);
     setNewName('');
@@ -256,8 +261,14 @@ export default function ProjectFilesPage({ params }: { params: Promise<{ id: str
           )}
 
           {loading ? (
-            <div className="flex items-center justify-center py-8">
-              <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+            <div className="py-1 space-y-1">
+              {[1, 2, 3, 4, 5].map((i) => (
+                <div key={i} className="flex items-center gap-2 px-2 py-1.5">
+                  <Skeleton className="h-4 w-4 rounded" />
+                  <Skeleton className="h-4 flex-1" />
+                  <Skeleton className="h-3 w-12" />
+                </div>
+              ))}
             </div>
           ) : entries.length === 0 ? (
             <div className="p-4 text-sm text-muted-foreground text-center">

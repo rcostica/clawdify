@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Plus, GripVertical, Trash2, ArrowRight, Loader2 } from 'lucide-react';
+import { Plus, GripVertical, Trash2, ArrowRight, Loader2, Calendar, Clock } from 'lucide-react';
 import { toast } from 'sonner';
 
 interface Task {
@@ -17,8 +17,39 @@ interface Task {
   status: 'backlog' | 'in-progress' | 'review' | 'done';
   priority: 'low' | 'medium' | 'high';
   assignedTo?: string | null;
+  dueDate?: Date | string | null;
   createdAt: Date;
   updatedAt: Date;
+}
+
+function formatDueDate(date: Date | string | null | undefined): { text: string; isOverdue: boolean; isSoon: boolean } {
+  if (!date) return { text: '', isOverdue: false, isSoon: false };
+  
+  const dueDate = new Date(date);
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const dueDateDay = new Date(dueDate.getFullYear(), dueDate.getMonth(), dueDate.getDate());
+  const diffDays = Math.ceil((dueDateDay.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+  
+  const isOverdue = diffDays < 0;
+  const isSoon = diffDays >= 0 && diffDays <= 2;
+  
+  let text: string;
+  if (diffDays === 0) {
+    text = 'Today';
+  } else if (diffDays === 1) {
+    text = 'Tomorrow';
+  } else if (diffDays === -1) {
+    text = 'Yesterday';
+  } else if (diffDays < -1) {
+    text = `${Math.abs(diffDays)}d overdue`;
+  } else if (diffDays <= 7) {
+    text = `${diffDays}d`;
+  } else {
+    text = dueDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  }
+  
+  return { text, isOverdue, isSoon };
 }
 
 const COLUMNS: { key: Task['status']; label: string; color: string }[] = [
@@ -38,6 +69,7 @@ export default function KanbanPage() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
   const [newTaskTitle, setNewTaskTitle] = useState('');
+  const [newTaskDueDate, setNewTaskDueDate] = useState('');
   const [addingToColumn, setAddingToColumn] = useState<Task['status'] | null>(null);
   const [projects, setProjects] = useState<Array<{ id: string; name: string; icon: string }>>([]);
   const [selectedProject, setSelectedProject] = useState<string>('');
@@ -91,6 +123,7 @@ export default function KanbanPage() {
           projectId,
           title: newTaskTitle.trim(),
           status,
+          dueDate: newTaskDueDate || null,
         }),
       });
       const data = await res.json();
@@ -104,6 +137,7 @@ export default function KanbanPage() {
     }
 
     setNewTaskTitle('');
+    setNewTaskDueDate('');
     setAddingToColumn(null);
   };
 
@@ -247,10 +281,25 @@ export default function KanbanPage() {
                               {task.description}
                             </p>
                           )}
-                          <div className="flex items-center gap-2 mt-2">
+                          <div className="flex items-center gap-2 mt-2 flex-wrap">
                             <span className={`text-[10px] px-1.5 py-0.5 rounded ${PRIORITY_COLORS[task.priority]}`}>
                               {task.priority}
                             </span>
+                            {task.dueDate && (() => {
+                              const { text, isOverdue, isSoon } = formatDueDate(task.dueDate);
+                              return (
+                                <span className={`text-[10px] px-1.5 py-0.5 rounded flex items-center gap-1 ${
+                                  isOverdue 
+                                    ? 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300' 
+                                    : isSoon 
+                                      ? 'bg-orange-100 text-orange-700 dark:bg-orange-900 dark:text-orange-300'
+                                      : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400'
+                                }`}>
+                                  {isOverdue ? <Clock className="h-2.5 w-2.5" /> : <Calendar className="h-2.5 w-2.5" />}
+                                  {text}
+                                </span>
+                              );
+                            })()}
                           </div>
                         </CardContent>
                       </Card>
@@ -264,15 +313,26 @@ export default function KanbanPage() {
                           value={newTaskTitle}
                           onChange={(e) => setNewTaskTitle(e.target.value)}
                           onKeyDown={(e) => {
-                            if (e.key === 'Enter') addTask(column.key);
+                            if (e.key === 'Enter' && !e.shiftKey) addTask(column.key);
                             if (e.key === 'Escape') {
                               setAddingToColumn(null);
                               setNewTaskTitle('');
+                              setNewTaskDueDate('');
                             }
                           }}
                           autoFocus
                           className="text-sm"
                         />
+                        <div className="flex items-center gap-2">
+                          <Calendar className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                          <input
+                            type="date"
+                            value={newTaskDueDate}
+                            onChange={(e) => setNewTaskDueDate(e.target.value)}
+                            className="flex-1 text-xs border rounded px-2 py-1 bg-background"
+                            placeholder="Due date (optional)"
+                          />
+                        </div>
                         <div className="flex gap-1">
                           <Button size="sm" onClick={() => addTask(column.key)} className="text-xs">
                             Add
@@ -283,6 +343,7 @@ export default function KanbanPage() {
                             onClick={() => {
                               setAddingToColumn(null);
                               setNewTaskTitle('');
+                              setNewTaskDueDate('');
                             }}
                             className="text-xs"
                           >

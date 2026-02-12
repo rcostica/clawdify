@@ -10,7 +10,7 @@ export async function PATCH(
   try {
     const { id } = await params;
     const body = await request.json();
-    const { title, description, status, priority, assignedTo, sortOrder } = body;
+    const { title, description, status, priority, assignedTo, sortOrder, dueDate } = body;
 
     const existing = db.select().from(tasks).where(eq(tasks.id, id)).get();
     if (!existing) {
@@ -24,6 +24,7 @@ export async function PATCH(
     if (priority !== undefined) updates.priority = priority;
     if (assignedTo !== undefined) updates.assignedTo = assignedTo;
     if (sortOrder !== undefined) updates.sortOrder = sortOrder;
+    if (dueDate !== undefined) updates.dueDate = dueDate ? new Date(dueDate) : null;
 
     db.update(tasks).set(updates).where(eq(tasks.id, id)).run();
     const updated = db.select().from(tasks).where(eq(tasks.id, id)).get();

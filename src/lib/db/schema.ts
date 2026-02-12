@@ -73,6 +73,22 @@ export const auditLogs = sqliteTable('audit_logs', {
   createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
 });
 
+// Settings (key-value config)
+export const settings = sqliteTable('settings', {
+  key: text('key').primaryKey(),
+  value: text('value').notNull(),
+  updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull(),
+});
+
+// Vault (credential store)
+export const vault = sqliteTable('vault', {
+  id: text('id').primaryKey(),
+  key: text('key').notNull().unique(),
+  value: text('value').notNull(),
+  createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
+  updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull(),
+});
+
 // Type exports
 export type Project = typeof projects.$inferSelect;
 export type NewProject = typeof projects.$inferInsert;
@@ -84,3 +100,6 @@ export type Task = typeof tasks.$inferSelect;
 export type NewTask = typeof tasks.$inferInsert;
 export type AuthSession = typeof authSessions.$inferSelect;
 export type AuditLog = typeof auditLogs.$inferSelect;
+export type Setting = typeof settings.$inferSelect;
+export type VaultEntry = typeof vault.$inferSelect;
+export type NewVaultEntry = typeof vault.$inferInsert;

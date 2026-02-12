@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import {
@@ -8,6 +8,31 @@ import {
   ChevronRight, ChevronDown, ArrowLeft, Home, Download,
   Plus, FolderPlus, Trash2, Loader2
 } from 'lucide-react';
+import hljs from 'highlight.js/lib/core';
+import typescript from 'highlight.js/lib/languages/typescript';
+import javascript from 'highlight.js/lib/languages/javascript';
+import python from 'highlight.js/lib/languages/python';
+import bash from 'highlight.js/lib/languages/bash';
+import json from 'highlight.js/lib/languages/json';
+import yaml from 'highlight.js/lib/languages/yaml';
+import markdown from 'highlight.js/lib/languages/markdown';
+import css from 'highlight.js/lib/languages/css';
+import xml from 'highlight.js/lib/languages/xml';
+import sql from 'highlight.js/lib/languages/sql';
+import 'highlight.js/styles/github-dark.css';
+
+// Register languages
+hljs.registerLanguage('typescript', typescript);
+hljs.registerLanguage('javascript', javascript);
+hljs.registerLanguage('python', python);
+hljs.registerLanguage('bash', bash);
+hljs.registerLanguage('json', json);
+hljs.registerLanguage('yaml', yaml);
+hljs.registerLanguage('markdown', markdown);
+hljs.registerLanguage('css', css);
+hljs.registerLanguage('html', xml);
+hljs.registerLanguage('xml', xml);
+hljs.registerLanguage('sql', sql);
 
 interface FileEntry {
   name: string;
@@ -52,9 +77,41 @@ function getLanguage(ext?: string): string {
   const map: Record<string, string> = {
     ts: 'typescript', tsx: 'typescript', js: 'javascript', jsx: 'javascript',
     py: 'python', sh: 'bash', json: 'json', yaml: 'yaml', yml: 'yaml',
-    toml: 'toml', md: 'markdown', css: 'css', html: 'html', sql: 'sql',
+    toml: 'yaml', md: 'markdown', css: 'css', html: 'html', xml: 'xml', sql: 'sql',
   };
-  return map[ext || ''] || 'text';
+  return map[ext || ''] || '';
+}
+
+function HighlightedCode({ content, extension }: { content: string; extension?: string }) {
+  const highlighted = useMemo(() => {
+    const lang = getLanguage(extension);
+    if (lang && hljs.getLanguage(lang)) {
+      try {
+        const result = hljs.highlight(content, { language: lang });
+        return result.value;
+      } catch {
+        return null;
+      }
+    }
+    return null;
+  }, [content, extension]);
+
+  if (highlighted) {
+    return (
+      <pre className="p-4 text-sm font-mono leading-relaxed overflow-x-auto">
+        <code 
+          className="hljs"
+          dangerouslySetInnerHTML={{ __html: highlighted }}
+        />
+      </pre>
+    );
+  }
+
+  return (
+    <pre className="p-4 text-sm font-mono whitespace-pre-wrap break-words leading-relaxed">
+      {content}
+    </pre>
+  );
 }
 
 export default function FilesPage() {
@@ -268,9 +325,10 @@ export default function FilesPage() {
                   </div>
                 </div>
               ) : (
-                <pre className="p-4 text-sm font-mono whitespace-pre-wrap break-words leading-relaxed">
-                  {selectedFile.content}
-                </pre>
+                <HighlightedCode 
+                  content={selectedFile.content || ''} 
+                  extension={selectedFile.extension} 
+                />
               )}
             </ScrollArea>
           </>

@@ -4,7 +4,7 @@ import { useEffect, useState, useRef, useCallback, use } from 'react';
 import { useProjectsStore } from '@/lib/stores/projects';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Button } from '@/components/ui/button';
-import { Send, MessageSquare, Square, Loader2, Paperclip, X, FileText, FileCode, File as FileIcon, Search, Copy, Check } from 'lucide-react';
+import { Send, MessageSquare, Square, Loader2, Paperclip, X, FileText, FileCode, File as FileIcon, Search, Copy, Check, Reply, Upload } from 'lucide-react';
 import { useChatAttachmentsStore } from '@/lib/stores/chat-attachments';
 import type { Project } from '@/lib/db/schema';
 
@@ -40,6 +40,7 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
   const [searchQuery, setSearchQuery] = useState('');
   const [showSearch, setShowSearch] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [replyTo, setReplyTo] = useState<Message | null>(null);
   const [pickerFiles, setPickerFiles] = useState<any[]>([]);
   const [pickerPath, setPickerPath] = useState('');
   const [pickerLoading, setPickerLoading] = useState(false);
@@ -148,9 +149,25 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
       const fileList = message.attachedFiles.map(f => `- ${f.name}`).join('\n');
       text = `**Attached files:**\n${fileList}\n\n${text}`;
     }
-    await navigator.clipboard.writeText(text);
-    setCopiedId(message.id);
-    setTimeout(() => setCopiedId(null), 2000);
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(text);
+      } else {
+        // Fallback for non-secure contexts (e.g. HTTP over Tailscale)
+        const ta = document.createElement('textarea');
+        ta.value = text;
+        ta.style.position = 'fixed';
+        ta.style.opacity = '0';
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand('copy');
+        document.body.removeChild(ta);
+      }
+      setCopiedId(message.id);
+      setTimeout(() => setCopiedId(null), 2000);
+    } catch (err) {
+      console.error('Copy failed:', err);
+    }
   }, []);
 
   // File picker: browse workspace files
@@ -185,6 +202,50 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
   const removeFile = useCallback((filePath: string) => {
     setAttachedFiles(prev => prev.filter(f => f.path !== filePath));
   }, []);
+
+  // Upload a file (from file input or clipboard paste)
+  const uploadFile = useCallback(async (file: File) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('directory', '_uploads');
+    try {
+      const res = await fetch('/api/files/upload', { method: 'POST', body: formData });
+      if (!res.ok) throw new Error('Upload failed');
+      const data = await res.json();
+      addFile({ path: data.path, name: data.name, size: data.size });
+    } catch (err) {
+      console.error('File upload failed:', err);
+    }
+  }, [addFile]);
+
+  // Handle native file input change
+  const handleFileInputChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (files) {
+      Array.from(files).forEach(uploadFile);
+    }
+    // Reset so same file can be selected again
+    e.target.value = '';
+  }, [uploadFile]);
+
+  // Handle paste (for screenshots / images)
+  const handlePaste = useCallback((e: React.ClipboardEvent) => {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+    for (const item of Array.from(items)) {
+      if (item.type.startsWith('image/')) {
+        e.preventDefault();
+        const file = item.getAsFile();
+        if (file) {
+          // Give it a meaningful name
+          const ext = file.type.split('/')[1] || 'png';
+          const namedFile = new File([file], `screenshot-${Date.now()}.${ext}`, { type: file.type });
+          uploadFile(namedFile);
+        }
+        return;
+      }
+    }
+  }, [uploadFile]);
 
   // Drag and drop handlers (for workspace file paths from the file browser)
   const handleDragOver = useCallback((e: React.DragEvent) => {
@@ -231,8 +292,11 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
 
     setMessages((prev) => [...prev, userMessage]);
     const messageText = input.trim();
+    const replyToId = replyTo?.id;
+    const replyToContent = replyTo?.content;
     setInput('');
     setAttachedFiles([]);
+    setReplyTo(null);
     setSending(true);
     setStreamingContent('');
 
@@ -247,6 +311,7 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
           message: messageText,
           projectId: id,
           attachedFiles: currentFiles.map(f => f.path),
+          ...(replyToId ? { replyTo: { id: replyToId, content: replyToContent?.slice(0, 200) } } : {}),
         }),
         signal: controller.signal,
       });
@@ -436,21 +501,34 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
                     )}
                     <p className="whitespace-pre-wrap text-sm leading-relaxed">{message.content}</p>
                   </div>
-                  <button
-                    onClick={() => copyMessage(message)}
-                    className={`p-1.5 rounded opacity-0 group-hover:opacity-100 transition-opacity ${
-                      message.role === 'user'
-                        ? 'hover:bg-primary/20 text-primary-foreground/70 hover:text-primary-foreground'
-                        : 'hover:bg-muted text-muted-foreground hover:text-foreground'
-                    }`}
-                    title="Copy as markdown"
-                  >
-                    {copiedId === message.id ? (
-                      <Check className="h-3.5 w-3.5" />
-                    ) : (
-                      <Copy className="h-3.5 w-3.5" />
-                    )}
-                  </button>
+                  <div className={`flex flex-col gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity`}>
+                    <button
+                      onClick={() => copyMessage(message)}
+                      className={`p-1.5 rounded ${
+                        message.role === 'user'
+                          ? 'hover:bg-primary/20 text-primary-foreground/70 hover:text-primary-foreground'
+                          : 'hover:bg-muted text-muted-foreground hover:text-foreground'
+                      }`}
+                      title="Copy as markdown"
+                    >
+                      {copiedId === message.id ? (
+                        <Check className="h-3.5 w-3.5" />
+                      ) : (
+                        <Copy className="h-3.5 w-3.5" />
+                      )}
+                    </button>
+                    <button
+                      onClick={() => { setReplyTo(message); inputRef.current?.focus(); }}
+                      className={`p-1.5 rounded ${
+                        message.role === 'user'
+                          ? 'hover:bg-primary/20 text-primary-foreground/70 hover:text-primary-foreground'
+                          : 'hover:bg-muted text-muted-foreground hover:text-foreground'
+                      }`}
+                      title="Reply"
+                    >
+                      <Reply className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
                 </div>
               </div>
             ))}
@@ -556,6 +634,19 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
         onDrop={handleDrop}
       >
         <div className="max-w-3xl mx-auto">
+          {/* Reply preview bar */}
+          {replyTo && (
+            <div className="flex items-center gap-2 mb-2 px-3 py-2 rounded-md bg-muted/60 border-l-2 border-primary">
+              <Reply className="h-3.5 w-3.5 text-primary shrink-0" />
+              <div className="flex-1 min-w-0">
+                <span className="text-xs font-medium text-primary">{replyTo.role === 'user' ? 'You' : 'Assistant'}</span>
+                <p className="text-xs text-muted-foreground truncate">{replyTo.content.slice(0, 120)}</p>
+              </div>
+              <button onClick={() => setReplyTo(null)} className="shrink-0 p-0.5 hover:bg-muted rounded">
+                <X className="h-3.5 w-3.5 text-muted-foreground" />
+              </button>
+            </div>
+          )}
           {/* Attached files bar */}
           {attachedFiles.length > 0 && (
             <div className="flex flex-wrap gap-1.5 mb-2">
@@ -574,22 +665,43 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
               ))}
             </div>
           )}
+          {/* Hidden file input for native upload */}
+          <input
+            ref={fileInputRef}
+            type="file"
+            multiple
+            className="hidden"
+            onChange={handleFileInputChange}
+          />
           <div className="flex gap-2">
-            <Button
-              variant="ghost"
-              size="icon"
-              className="shrink-0 h-10 w-10"
-              onClick={openFilePicker}
-              disabled={sending}
-              title="Attach files"
-            >
-              <Paperclip className="h-4 w-4" />
-            </Button>
+            <div className="flex flex-col gap-0.5 shrink-0">
+              <Button
+                variant="ghost"
+                size="icon"
+                className="shrink-0 h-5 w-10"
+                onClick={openFilePicker}
+                disabled={sending}
+                title="Attach workspace file"
+              >
+                <Paperclip className="h-4 w-4" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="shrink-0 h-5 w-10"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={sending}
+                title="Upload file from device"
+              >
+                <Upload className="h-4 w-4" />
+              </Button>
+            </div>
             <textarea
               ref={inputRef}
               value={input}
               onChange={(e) => setInput(e.target.value)}
               placeholder={isDragOver ? 'Drop files here...' : `Message ${project.name}...`}
+              onPaste={handlePaste}
               onKeyDown={(e) => {
                 if (e.key === 'Enter' && !e.shiftKey) {
                   e.preventDefault();

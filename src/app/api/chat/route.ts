@@ -1,18 +1,112 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { chatStream } from '@/lib/gateway/client';
-import { db, messages, threads, projects } from '@/lib/db';
+import { db, messages, threads, projects, settings, vault } from '@/lib/db';
 import { eq, desc } from 'drizzle-orm';
 import { v4 as uuidv4 } from 'uuid';
+import { redactSecrets } from '@/lib/redact';
 import fs from 'fs/promises';
 import path from 'path';
 
 const WORKSPACE_PATH = process.env.OPENCLAW_WORKSPACE_PATH || '';
+const HISTORY_LIMIT = 50;
+
+const DEFAULT_GLOBAL_PROMPT = `Never share API keys or secrets in chat. All credentials are stored in the shared vault (.env). Reference them by name, never paste actual values.`;
+
+// ---------------------------------------------------------------------------
+// General project detection
+// ---------------------------------------------------------------------------
+
+function isGeneralProject(projectId: string): boolean {
+  const project = db.select().from(projects).where(eq(projects.id, projectId)).get();
+  if (!project) return false;
+  return project.name.toLowerCase() === 'general';
+}
+
+// ---------------------------------------------------------------------------
+// Context builders
+// ---------------------------------------------------------------------------
+
+function getGlobalContext(): string {
+  const row = db.select().from(settings).where(eq(settings.key, 'global_system_prompt')).get();
+  const prompt = row?.value ?? DEFAULT_GLOBAL_PROMPT;
+
+  const vaultEntries = db.select({ key: vault.key }).from(vault).all();
+  const lines: string[] = ['[Global System Prompt]', prompt];
+
+  if (vaultEntries.length > 0) {
+    const keyNames = vaultEntries.map(e => e.key).join(', ');
+    lines.push('', `Available credentials in vault: ${keyNames}`);
+  }
+
+  return lines.join('\n');
+}
 
 /**
- * Build project context to prepend to user messages.
+ * Build meta-context for the General project: summary of all projects + vault + API instructions.
  */
+function buildGeneralContext(): string {
+  const allProjects = db.select().from(projects).all();
+  const lines: string[] = [
+    '[Command Center — General Project]',
+    'You are in the General project, which serves as a command center for managing all Clawdify projects.',
+    '',
+    `## All Projects (${allProjects.length})`,
+  ];
+
+  for (const p of allProjects) {
+    const thread = db.select().from(threads).where(eq(threads.projectId, p.id)).get();
+    let lastActivity = 'no messages';
+    if (thread) {
+      const lastMsg = db
+        .select({ createdAt: messages.createdAt })
+        .from(messages)
+        .where(eq(messages.threadId, thread.id))
+        .orderBy(desc(messages.createdAt))
+        .limit(1)
+        .get();
+      if (lastMsg?.createdAt) {
+        lastActivity = `last message: ${lastMsg.createdAt instanceof Date ? lastMsg.createdAt.toISOString() : lastMsg.createdAt}`;
+      }
+    }
+    lines.push(`- ${p.icon || '📁'} **${p.name}** [${p.status}] — ${p.description || 'no description'} | workspace: ${p.workspacePath} | ${lastActivity}`);
+  }
+
+  const vaultEntries = db.select({ key: vault.key }).from(vault).all();
+  if (vaultEntries.length > 0) {
+    lines.push('', `## Vault Keys: ${vaultEntries.map(e => e.key).join(', ')}`);
+  } else {
+    lines.push('', '## Vault: empty');
+  }
+
+  lines.push('', `## Clawdify Management API`,
+    'To manage projects and vault, use these local REST endpoints:',
+    '',
+    '### Projects',
+    '- **List:** GET http://localhost:3000/api/projects',
+    '- **Create:** POST http://localhost:3000/api/projects',
+    '  Body: { "name": "My Project", "description": "...", "icon": "🚀", "color": "#hex" }',
+    '- **Update:** PUT http://localhost:3000/api/projects/:id',
+    '  Body: { "name": "...", "description": "...", "icon": "...", "color": "...", "status": "active|archived" }',
+    '- **Delete:** DELETE http://localhost:3000/api/projects/:id',
+    '',
+    '### Vault (Credentials)',
+    '- **List keys:** GET http://localhost:3000/api/vault',
+    '- **Set:** POST http://localhost:3000/api/vault',
+    '  Body: { "key": "MY_API_KEY", "value": "secret123" }',
+    '- **Delete:** DELETE http://localhost:3000/api/vault/:key',
+    '',
+    'Use your tools (e.g., web_fetch or exec with curl) to call these endpoints.',
+  );
+
+  return lines.join('\n');
+}
+
 async function buildProjectContext(projectId: string): Promise<string> {
   try {
+    if (isGeneralProject(projectId)) {
+      return buildGeneralContext();
+    }
+
     const project = db.select().from(projects).where(eq(projects.id, projectId)).get();
     if (!project) return '';
 
@@ -55,9 +149,6 @@ async function buildProjectContext(projectId: string): Promise<string> {
   }
 }
 
-/**
- * Read attached files and format them as context blocks.
- */
 async function readAttachedFiles(filePaths: string[]): Promise<string> {
   if (!filePaths.length || !WORKSPACE_PATH) return '';
 
@@ -96,9 +187,6 @@ async function readAttachedFiles(filePaths: string[]): Promise<string> {
   return blocks.join('\n\n');
 }
 
-/**
- * Get or create the default thread for a project.
- */
 function getOrCreateThread(projectId: string): string {
   const existing = db.select().from(threads).where(eq(threads.projectId, projectId)).get();
   if (existing) return existing.id;
@@ -116,7 +204,30 @@ function getOrCreateThread(projectId: string): string {
   return threadId;
 }
 
-// GET /api/chat?projectId=xxx — load chat history
+// ---------------------------------------------------------------------------
+// Load conversation history from DB
+// ---------------------------------------------------------------------------
+
+function loadHistory(threadId: string, limit: number = HISTORY_LIMIT): Array<{ role: string; content: string }> {
+  const rows = db
+    .select({ role: messages.role, content: messages.content })
+    .from(messages)
+    .where(eq(messages.threadId, threadId))
+    .orderBy(desc(messages.createdAt))
+    .limit(limit)
+    .all();
+
+  // Reverse to chronological order
+  return rows.reverse().map(r => ({
+    role: r.role,
+    content: r.content,
+  }));
+}
+
+// ---------------------------------------------------------------------------
+// GET /api/chat?projectId=xxx
+// ---------------------------------------------------------------------------
+
 export async function GET(request: NextRequest) {
   const projectId = request.nextUrl.searchParams.get('projectId');
   if (!projectId) {
@@ -145,7 +256,10 @@ export async function GET(request: NextRequest) {
   });
 }
 
-// POST /api/chat — send message + stream response
+// ---------------------------------------------------------------------------
+// POST /api/chat
+// ---------------------------------------------------------------------------
+
 export async function POST(request: NextRequest) {
   try {
     const { message, projectId, sessionKey, attachedFiles } = await request.json();
@@ -154,49 +268,65 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Message is required' }, { status: 400 });
     }
 
-    // Get or create thread for this project
     const threadId = projectId ? getOrCreateThread(projectId) : null;
 
-    // Save user message to DB
+    // Save user message
     const userMsgId = uuidv4();
     if (threadId) {
       db.insert(messages).values({
         id: userMsgId,
         threadId,
         role: 'user',
-        content: message,
+        content: redactSecrets(message),
         createdAt: new Date(),
       }).run();
     }
 
-    // Build project context
-    let fullMessage = message;
-    if (projectId) {
-      const context = await buildProjectContext(projectId);
-      if (context) {
-        fullMessage = `${context}\n\n[User Message]\n${message}`;
-      }
-    }
+    // Build system context
+    const globalContext = getGlobalContext();
+    const projectContext = projectId ? await buildProjectContext(projectId) : '';
+    const systemContent = projectContext
+      ? `${globalContext}\n\n${projectContext}`
+      : globalContext;
 
-    // Attach referenced files
+    // Build user message (with attached files if any)
+    let userContent = message;
     if (Array.isArray(attachedFiles) && attachedFiles.length > 0) {
       const fileContext = await readAttachedFiles(attachedFiles);
       if (fileContext) {
-        fullMessage = `${fullMessage}\n\n[Attached Files]\n${fileContext}`;
+        userContent = `${message}\n\n[Attached Files]\n${fileContext}`;
       }
     }
 
-    // Determine session key
+    // Build messages array: system + history + current message
+    const chatMessages: Array<{ role: string; content: string }> = [
+      { role: 'system', content: systemContent },
+    ];
+
+    // Load conversation history (excludes the message we just saved since we'll add it explicitly)
+    if (threadId) {
+      const history = loadHistory(threadId, HISTORY_LIMIT);
+      // History includes the message we just saved; drop the last one (we'll add it with full content below)
+      if (history.length > 0 && history[history.length - 1].role === 'user') {
+        history.pop();
+      }
+      chatMessages.push(...history);
+    }
+
+    // Add current user message (with attachments, unredacted)
+    chatMessages.push({ role: 'user', content: userContent });
+
     const effectiveSessionKey = sessionKey || (
       projectId
         ? `clawdify:project:${projectId}`
         : 'agent:main:main'
     );
 
-    // Call Gateway with streaming
+    // Call Gateway — the agent loop handles tools natively
     const gatewayResponse = await chatStream({
-      messages: [{ role: 'user', content: fullMessage }],
+      messages: chatMessages,
       sessionKey: effectiveSessionKey,
+      user: effectiveSessionKey,
     });
 
     if (!gatewayResponse.body) {
@@ -205,59 +335,60 @@ export async function POST(request: NextRequest) {
 
     const encoder = new TextEncoder();
     const decoder = new TextDecoder();
-    let fullContent = '';
 
     const stream = new ReadableStream({
       async start(controller) {
-        const reader = gatewayResponse.body!.getReader();
-
         try {
+          let content = '';
+          const reader = gatewayResponse.body!.getReader();
+          let buffer = '';
+
           while (true) {
             const { done, value } = await reader.read();
             if (done) break;
 
-            const chunk = decoder.decode(value, { stream: true });
+            buffer += decoder.decode(value, { stream: true });
+            const lines = buffer.split('\n');
+            buffer = lines.pop() || '';
 
-            const lines = chunk.split('\n');
             for (const line of lines) {
-              if (line.startsWith('data: ')) {
-                const data = line.slice(6);
-                if (data === '[DONE]') {
-                  controller.enqueue(encoder.encode(`data: [DONE]\n\n`));
-                  continue;
-                }
-                try {
-                  const parsed = JSON.parse(data);
-                  const delta = parsed.choices?.[0]?.delta?.content;
-                  if (delta) {
-                    fullContent += delta;
-                  }
-                } catch {
-                  // skip
-                }
+              if (!line.startsWith('data: ')) continue;
+              const data = line.slice(6).trim();
+              if (data === '[DONE]') {
+                controller.enqueue(encoder.encode('data: [DONE]\n\n'));
+                continue;
               }
+              try {
+                const parsed = JSON.parse(data);
+                const delta = parsed.choices?.[0]?.delta;
+                if (delta?.content) {
+                  content += delta.content;
+                }
+              } catch {
+                // skip
+              }
+              controller.enqueue(encoder.encode(line + '\n\n'));
             }
-
-            controller.enqueue(value);
           }
-        } catch (error) {
-          console.error('Stream error:', error);
-          controller.error(error);
-        } finally {
-          // Save assistant message to DB
-          if (threadId && fullContent) {
+
+          // Save assistant response
+          if (threadId && content) {
             try {
               db.insert(messages).values({
                 id: uuidv4(),
                 threadId,
                 role: 'assistant',
-                content: fullContent,
+                content: redactSecrets(content),
                 createdAt: new Date(),
               }).run();
             } catch (dbError) {
               console.error('Error saving message:', dbError);
             }
           }
+        } catch (error) {
+          console.error('Stream error:', error);
+          controller.error(error);
+        } finally {
           controller.close();
         }
       },
@@ -274,7 +405,7 @@ export async function POST(request: NextRequest) {
     console.error('Chat error:', error);
     return NextResponse.json(
       { error: error instanceof Error ? error.message : 'Chat failed' },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

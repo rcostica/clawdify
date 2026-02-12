@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db, projects, threads, messages } from '@/lib/db';
 import { v4 as uuidv4 } from 'uuid';
 import { logAudit } from '@/lib/audit';
+import { redactSecrets } from '@/lib/redact';
 import fs from 'fs/promises';
 import path from 'path';
 
@@ -88,7 +89,7 @@ export async function POST(request: NextRequest) {
         id: uuidv4(),
         threadId,
         role: msg.role,
-        content: msg.content,
+        content: redactSecrets(msg.content),
         createdAt: new Date(now.getTime() + i * 1000), // offset for ordering
       }).run();
     }

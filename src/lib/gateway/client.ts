@@ -22,22 +22,31 @@ export async function chatStream(opts: {
   messages: Array<{ role: string; content: string }>;
   sessionKey?: string;
   model?: string;
+  user?: string;
 }) {
-  const { messages, sessionKey, model } = opts;
+  const { messages, sessionKey, model, user } = opts;
   
   const extraHeaders: Record<string, string> = {};
   if (sessionKey) {
     extraHeaders['x-openclaw-session-key'] = sessionKey;
   }
 
+  const body: Record<string, unknown> = {
+    model: model || 'openclaw:main',
+    messages,
+    stream: true,
+  };
+  // Send user field for stable session derivation by the Gateway
+  if (user) {
+    body.user = user;
+  } else if (sessionKey) {
+    body.user = sessionKey;
+  }
+
   const response = await fetch(`${GATEWAY_URL}/v1/chat/completions`, {
     method: 'POST',
     headers: headers(extraHeaders),
-    body: JSON.stringify({
-      model: model || 'openclaw:main',
-      messages,
-      stream: true,
-    }),
+    body: JSON.stringify(body),
   });
 
   if (!response.ok) {
@@ -55,22 +64,30 @@ export async function chat(opts: {
   messages: Array<{ role: string; content: string }>;
   sessionKey?: string;
   model?: string;
+  user?: string;
 }) {
-  const { messages, sessionKey, model } = opts;
+  const { messages, sessionKey, model, user } = opts;
   
   const extraHeaders: Record<string, string> = {};
   if (sessionKey) {
     extraHeaders['x-openclaw-session-key'] = sessionKey;
   }
 
+  const body: Record<string, unknown> = {
+    model: model || 'openclaw:main',
+    messages,
+    stream: false,
+  };
+  if (user) {
+    body.user = user;
+  } else if (sessionKey) {
+    body.user = sessionKey;
+  }
+
   const response = await fetch(`${GATEWAY_URL}/v1/chat/completions`, {
     method: 'POST',
     headers: headers(extraHeaders),
-    body: JSON.stringify({
-      model: model || 'openclaw:main',
-      messages,
-      stream: false,
-    }),
+    body: JSON.stringify(body),
   });
 
   if (!response.ok) {

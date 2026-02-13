@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Skeleton } from '@/components/ui/skeleton';
+import { TaskDetailModal } from '@/components/task-detail-modal';
 import { Plus, GripVertical, Trash2, ArrowRight, Loader2, Calendar, Clock } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -73,6 +74,8 @@ export default function KanbanPage() {
   const [addingToColumn, setAddingToColumn] = useState<Task['status'] | null>(null);
   const [projects, setProjects] = useState<Array<{ id: string; name: string; icon: string }>>([]);
   const [selectedProject, setSelectedProject] = useState<string>('');
+  const [selectedTask, setSelectedTask] = useState<Task | null>(null);
+  const [modalOpen, setModalOpen] = useState(false);
 
   const fetchTasks = useCallback(async () => {
     try {
@@ -170,6 +173,23 @@ export default function KanbanPage() {
     }
   };
 
+  const handleTaskClick = (task: Task, e: React.MouseEvent) => {
+    // Don't open modal if clicking on action buttons
+    if ((e.target as HTMLElement).closest('button')) return;
+    setSelectedTask(task);
+    setModalOpen(true);
+  };
+
+  const handleTaskUpdate = (updatedTask: Task) => {
+    setTasks((prev) =>
+      prev.map((t) => (t.id === updatedTask.id ? updatedTask : t))
+    );
+  };
+
+  const handleTaskDelete = (taskId: string) => {
+    setTasks((prev) => prev.filter((t) => t.id !== taskId));
+  };
+
   const getNextStatus = (status: Task['status']): Task['status'] | null => {
     const idx = COLUMNS.findIndex((c) => c.key === status);
     return idx < COLUMNS.length - 1 ? COLUMNS[idx + 1].key : null;
@@ -250,7 +270,11 @@ export default function KanbanPage() {
                 <ScrollArea className="flex-1 bg-muted/20 rounded-b-lg border border-t-0">
                   <div className="p-2 space-y-2">
                     {columnTasks.map((task) => (
-                      <Card key={task.id} className="shadow-sm">
+                      <Card 
+                        key={task.id} 
+                        className="shadow-sm cursor-pointer hover:bg-muted/50 transition-colors"
+                        onClick={(e) => handleTaskClick(task, e)}
+                      >
                         <CardContent className="p-3">
                           <div className="flex items-start justify-between gap-2">
                             <p className="text-sm font-medium flex-1">{task.title}</p>
@@ -369,6 +393,15 @@ export default function KanbanPage() {
           })}
         </div>
       </div>
+
+      {/* Task Detail Modal */}
+      <TaskDetailModal
+        task={selectedTask}
+        open={modalOpen}
+        onOpenChange={setModalOpen}
+        onUpdate={handleTaskUpdate}
+        onDelete={handleTaskDelete}
+      />
     </div>
   );
 }

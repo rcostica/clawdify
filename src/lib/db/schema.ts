@@ -9,6 +9,7 @@ export const projects = sqliteTable('projects', {
   icon: text('icon').default('📁'),
   color: text('color'),
   status: text('status', { enum: ['active', 'archived'] }).default('active').notNull(),
+  sortOrder: integer('sort_order').default(0).notNull(),
   workspacePath: text('workspace_path').notNull(),
   sessionKey: text('session_key'), // null = use shared main session
   createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),

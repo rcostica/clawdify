@@ -3,6 +3,7 @@ import { AppSidebar } from '@/components/app-sidebar';
 import { Separator } from '@/components/ui/separator';
 import { SearchModal } from '@/components/search-modal';
 import { KeyboardShortcuts } from '@/components/keyboard-shortcuts';
+import { MobileNav } from '@/components/mobile-nav';
 
 export default function MainLayout({
   children,
@@ -18,10 +19,11 @@ export default function MainLayout({
           <Separator orientation="vertical" className="mr-2 h-4" />
           <div className="flex-1" />
         </header>
-        <main className="flex-1 overflow-auto">
+        <main className="flex-1 overflow-auto pb-16 md:pb-0">
           {children}
         </main>
       </SidebarInset>
+      <MobileNav />
       <SearchModal />
       <KeyboardShortcuts />
     </SidebarProvider>

@@ -37,7 +37,7 @@ export async function PATCH(
   try {
     const { id } = await params;
     const body = await request.json();
-    const { name, description, parentId, icon, color, status, sessionKey } = body;
+    const { name, description, parentId, icon, color, status, sessionKey, sortOrder } = body;
 
     const existing = db.select().from(projects).where(eq(projects.id, id)).get();
     if (!existing) {
@@ -58,6 +58,7 @@ export async function PATCH(
     if (color !== undefined) updates.color = color;
     if (status !== undefined) updates.status = status;
     if (sessionKey !== undefined) updates.sessionKey = sessionKey;
+    if (sortOrder !== undefined) updates.sortOrder = sortOrder;
 
     db.update(projects).set(updates).where(eq(projects.id, id)).run();
 

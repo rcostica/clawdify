@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import fs from 'fs/promises';
 import path from 'path';
 
-const SESSIONS_PATH = process.env.OPENCLAW_SESSIONS_PATH || '/home/razvan/.openclaw/agents/main/sessions';
+const SESSIONS_PATH = process.env.OPENCLAW_SESSIONS_PATH || path.join(process.env.HOME || '/tmp', '.openclaw/agents/main/sessions');
 
 interface SessionInfo {
   id: string;

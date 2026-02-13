@@ -234,7 +234,7 @@ export default function SettingsPage() {
         <CardContent>
           <div className="space-y-2">
             <label className="text-sm font-medium">Workspace Path</label>
-            <Input value="/home/razvan/.openclaw/workspace" disabled className="bg-muted font-mono text-xs" />
+            <Input value={process.env.OPENCLAW_WORKSPACE_PATH || '~/.openclaw/workspace'} disabled className="bg-muted font-mono text-xs" />
           </div>
         </CardContent>
       </Card>

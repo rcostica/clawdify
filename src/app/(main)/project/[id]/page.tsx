@@ -477,7 +477,7 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
                   message.role === 'user' ? 'justify-end' : 'justify-start'
                 }`}
               >
-                <div className={`flex items-start gap-1 max-w-[85%] ${message.role === 'user' ? 'flex-row-reverse' : ''}`}>
+                <div className="max-w-[85%]">
                   <div
                     className={`rounded-lg px-4 py-2.5 ${
                       message.role === 'user'
@@ -500,34 +500,34 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
                       </div>
                     )}
                     <p className="whitespace-pre-wrap text-sm leading-relaxed">{message.content}</p>
-                  </div>
-                  <div className={`flex flex-col gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity`}>
-                    <button
-                      onClick={() => copyMessage(message)}
-                      className={`p-1.5 rounded ${
-                        message.role === 'user'
-                          ? 'hover:bg-primary/20 text-primary-foreground/70 hover:text-primary-foreground'
-                          : 'hover:bg-muted text-muted-foreground hover:text-foreground'
-                      }`}
-                      title="Copy as markdown"
-                    >
-                      {copiedId === message.id ? (
-                        <Check className="h-3.5 w-3.5" />
-                      ) : (
-                        <Copy className="h-3.5 w-3.5" />
-                      )}
-                    </button>
-                    <button
-                      onClick={() => { setReplyTo(message); inputRef.current?.focus(); }}
-                      className={`p-1.5 rounded ${
-                        message.role === 'user'
-                          ? 'hover:bg-primary/20 text-primary-foreground/70 hover:text-primary-foreground'
-                          : 'hover:bg-muted text-muted-foreground hover:text-foreground'
-                      }`}
-                      title="Reply"
-                    >
-                      <Reply className="h-3.5 w-3.5" />
-                    </button>
+                    <div className="flex items-center gap-1 mt-2 justify-end">
+                      <button
+                        onClick={() => copyMessage(message)}
+                        className={`p-1 rounded transition-colors ${
+                          message.role === 'user'
+                            ? 'text-primary-foreground/50 hover:text-primary-foreground'
+                            : 'text-muted-foreground/50 hover:text-muted-foreground'
+                        }`}
+                        title="Copy as markdown"
+                      >
+                        {copiedId === message.id ? (
+                          <Check className="h-3 w-3" />
+                        ) : (
+                          <Copy className="h-3 w-3" />
+                        )}
+                      </button>
+                      <button
+                        onClick={() => { setReplyTo(message); inputRef.current?.focus(); }}
+                        className={`p-1 rounded transition-colors ${
+                          message.role === 'user'
+                            ? 'text-primary-foreground/50 hover:text-primary-foreground'
+                            : 'text-muted-foreground/50 hover:text-muted-foreground'
+                        }`}
+                        title="Reply"
+                      >
+                        <Reply className="h-3 w-3" />
+                      </button>
+                    </div>
                   </div>
                 </div>
               </div>

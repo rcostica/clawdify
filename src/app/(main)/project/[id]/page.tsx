@@ -4,11 +4,14 @@ import { useEffect, useState, useRef, useCallback, use } from 'react';
 import { useProjectsStore } from '@/lib/stores/projects';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Button } from '@/components/ui/button';
-import { Send, MessageSquare, Square, Loader2, Paperclip, X, FileText, FileCode, File as FileIcon, Search, Copy, Check, Reply, Upload, ChevronUp, ChevronDown } from 'lucide-react';
+import { Send, MessageSquare, Square, Loader2, Paperclip, X, FileText, FileCode, File as FileIcon, Search, Copy, Check, Reply, Upload, ChevronUp, ChevronDown, FolderKanban, Files } from 'lucide-react';
 import { useChatAttachmentsStore } from '@/lib/stores/chat-attachments';
 import { useNotificationsStore, getLastSeen, setLastSeen } from '@/lib/stores/notifications';
 import { useSearchParams } from 'next/navigation';
 import { toast } from 'sonner';
+import { SplitPane } from '@/components/split-pane';
+import { TasksPanel } from '@/components/tasks-panel';
+import { FilesPanel } from '@/components/files-panel';
 import type { Project } from '@/lib/db/schema';
 
 interface AttachedFile {
@@ -516,6 +519,8 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
     abortControllerRef.current?.abort();
   };
 
+  const [leftPaneView, setLeftPaneView] = useState<'tasks' | 'files'>('tasks');
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-full">
@@ -532,7 +537,7 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
     );
   }
 
-  return (
+  const chatContent = (
     <div className="flex flex-col h-full">
       {/* Header with search toggle */}
       {messages.length > 0 && !showSearch && (
@@ -870,5 +875,52 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
         </div>
       </div>
     </div>
+  );
+
+  const leftPane = (
+    <div className="flex flex-col h-full">
+      {/* Toggle bar */}
+      <div className="border-b px-2 py-1.5 flex items-center gap-1">
+        <Button
+          variant={leftPaneView === 'tasks' ? 'secondary' : 'ghost'}
+          size="sm"
+          className="h-7 text-xs gap-1.5"
+          onClick={() => setLeftPaneView('tasks')}
+        >
+          <FolderKanban className="h-3.5 w-3.5" />
+          Tasks
+        </Button>
+        <Button
+          variant={leftPaneView === 'files' ? 'secondary' : 'ghost'}
+          size="sm"
+          className="h-7 text-xs gap-1.5"
+          onClick={() => setLeftPaneView('files')}
+        >
+          <Files className="h-3.5 w-3.5" />
+          Files
+        </Button>
+      </div>
+      {/* Panel content */}
+      <div className="flex-1 overflow-hidden">
+        {leftPaneView === 'tasks' ? (
+          <TasksPanel projectId={id} />
+        ) : (
+          <FilesPanel projectId={id} />
+        )}
+      </div>
+    </div>
+  );
+
+  return (
+    <>
+      {/* Desktop: split pane */}
+      <div className="hidden lg:block h-full">
+        <SplitPane left={leftPane} right={chatContent} />
+      </div>
+      {/* Mobile: chat only (tabs handle navigation to files/tasks) */}
+      <div className="lg:hidden h-full">
+        {chatContent}
+      </div>
+    </>
   );
 }

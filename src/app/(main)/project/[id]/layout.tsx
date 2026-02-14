@@ -43,7 +43,8 @@ export default function ProjectLayout({
             )}
           </div>
         </div>
-        <div className="flex px-4 mt-2 gap-1">
+        {/* Tabs: visible only on mobile, hidden on desktop where split-pane is used */}
+        <div className="flex px-4 mt-2 gap-1 lg:hidden">
           {tabs.map((tab) => {
             const isActive = tab.exact
               ? pathname === tab.href

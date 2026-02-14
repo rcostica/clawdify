@@ -604,7 +604,7 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
             </p>
           </div>
         ) : (
-          <div className="space-y-4 max-w-3xl mx-auto pb-4">
+          <div className="space-y-4 max-w-full pb-4">
             {messages.map((message) => (
               <div
                 key={message.id}
@@ -612,7 +612,7 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
                   message.role === 'user' ? 'justify-end' : 'justify-start'
                 }`}
               >
-                <div className="max-w-[85%]">
+                <div className="max-w-[85%] overflow-hidden">
                   <div
                     className={`rounded-lg px-4 py-2.5 ${
                       message.role === 'user'
@@ -677,7 +677,7 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
             {/* Streaming response */}
             {streamingContent && (
               <div className="flex justify-start">
-                <div className="max-w-[85%] rounded-lg px-4 py-2.5 bg-muted">
+                <div className="max-w-[85%] overflow-hidden rounded-lg px-4 py-2.5 bg-muted">
                   <p className="whitespace-pre-wrap text-sm leading-relaxed">{streamingContent}</p>
                   <span className="inline-block w-2 h-4 bg-foreground/50 animate-pulse ml-0.5" />
                 </div>
@@ -774,7 +774,7 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
       >
-        <div className="max-w-3xl mx-auto">
+        <div className="max-w-full">
           {/* Reply preview bar */}
           {replyTo && (
             <div className="flex items-center gap-2 mb-2 px-3 py-2 rounded-md bg-muted/60 border-l-2 border-primary">
@@ -914,11 +914,11 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
   return (
     <>
       {/* Desktop: split pane */}
-      <div className="hidden lg:block h-full">
+      <div className="hidden lg:flex h-full w-full overflow-hidden">
         <SplitPane left={leftPane} right={chatContent} />
       </div>
       {/* Mobile: chat only (tabs handle navigation to files/tasks) */}
-      <div className="lg:hidden h-full">
+      <div className="lg:hidden h-full overflow-hidden">
         {chatContent}
       </div>
     </>

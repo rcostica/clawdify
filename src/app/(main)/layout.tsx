@@ -22,7 +22,7 @@ export default function MainLayout({
           <div className="flex-1" />
           <SearchTrigger />
         </header>
-        <main className="flex-1 overflow-auto pb-16 md:pb-0">
+        <main className="flex-1 overflow-hidden pb-16 md:pb-0 min-w-0">
           {children}
         </main>
       </SidebarInset>

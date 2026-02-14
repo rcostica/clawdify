@@ -4,7 +4,7 @@ import { useEffect, useState, useRef, useCallback, use } from 'react';
 import { useProjectsStore } from '@/lib/stores/projects';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Button } from '@/components/ui/button';
-import { Send, MessageSquare, Square, Loader2, Paperclip, X, FileText, FileCode, File as FileIcon, Search, Copy, Check, Reply, Upload } from 'lucide-react';
+import { Send, MessageSquare, Square, Loader2, Paperclip, X, FileText, FileCode, File as FileIcon, Search, Copy, Check, Reply, Upload, ChevronUp, ChevronDown } from 'lucide-react';
 import { useChatAttachmentsStore } from '@/lib/stores/chat-attachments';
 import type { Project } from '@/lib/db/schema';
 
@@ -23,6 +23,33 @@ interface Message {
   createdAt: Date;
 }
 
+function HighlightedText({ text, query }: { text: string; query: string }) {
+  if (!query.trim()) return <>{text}</>;
+  const regex = new RegExp(`(${query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi');
+  const parts = text.split(regex);
+  let matchIdx = 0;
+  return (
+    <>
+      {parts.map((part, i) => {
+        if (regex.test(part)) {
+          regex.lastIndex = 0; // reset after test
+          const idx = matchIdx++;
+          return (
+            <mark
+              key={i}
+              data-search-match={idx}
+              className="search-match bg-yellow-300/70 dark:bg-yellow-500/40 rounded-sm px-0.5"
+            >
+              {part}
+            </mark>
+          );
+        }
+        return <span key={i}>{part}</span>;
+      })}
+    </>
+  );
+}
+
 export default function ProjectPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const { selectProject } = useProjectsStore();
@@ -39,6 +66,8 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
   const [showFilePicker, setShowFilePicker] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [showSearch, setShowSearch] = useState(false);
+  const [currentMatchIndex, setCurrentMatchIndex] = useState(0);
+  const [totalMatches, setTotalMatches] = useState(0);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [replyTo, setReplyTo] = useState<Message | null>(null);
   const [pickerFiles, setPickerFiles] = useState<any[]>([]);
@@ -113,34 +142,75 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, streamingContent]);
 
-  // Cmd+F to toggle search within chat
+  // Cmd+F / Cmd+K to toggle search within chat
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key === 'f' && !e.shiftKey) {
-        // Only intercept if we have messages
+      if ((e.metaKey || e.ctrlKey) && (e.key === 'f' || e.key === 'k') && !e.shiftKey) {
         if (messages.length > 0) {
           e.preventDefault();
-          setShowSearch(prev => !prev);
-          if (!showSearch) {
-            setTimeout(() => document.getElementById('chat-search-input')?.focus(), 50);
-          } else {
+          e.stopPropagation();
+          if (showSearch) {
+            setShowSearch(false);
             setSearchQuery('');
+            setCurrentMatchIndex(0);
+            setTotalMatches(0);
+          } else {
+            setShowSearch(true);
+            setTimeout(() => document.getElementById('chat-search-input')?.focus(), 50);
           }
         }
       }
       if (e.key === 'Escape' && showSearch) {
         setShowSearch(false);
         setSearchQuery('');
+        setCurrentMatchIndex(0);
+        setTotalMatches(0);
       }
     };
-    document.addEventListener('keydown', handler);
-    return () => document.removeEventListener('keydown', handler);
+    document.addEventListener('keydown', handler, true);
+    return () => document.removeEventListener('keydown', handler, true);
   }, [messages.length, showSearch]);
 
-  // Filter messages by search query
-  const filteredMessages = searchQuery.trim()
-    ? messages.filter(m => m.content.toLowerCase().includes(searchQuery.toLowerCase()))
-    : messages;
+  // Count matches and scroll to current match
+  useEffect(() => {
+    if (!searchQuery.trim()) {
+      setTotalMatches(0);
+      setCurrentMatchIndex(0);
+      return;
+    }
+    // Use requestAnimationFrame to wait for DOM to update with highlights
+    requestAnimationFrame(() => {
+      const marks = document.querySelectorAll('[data-search-match]');
+      setTotalMatches(marks.length);
+      if (marks.length > 0) {
+        setCurrentMatchIndex(prev => Math.min(prev, marks.length - 1));
+      } else {
+        setCurrentMatchIndex(0);
+      }
+    });
+  }, [searchQuery, messages]);
+
+  // Scroll to current match
+  useEffect(() => {
+    if (totalMatches === 0) return;
+    requestAnimationFrame(() => {
+      const marks = document.querySelectorAll('[data-search-match]');
+      marks.forEach((m, i) => {
+        (m as HTMLElement).classList.toggle('search-match-current', i === currentMatchIndex);
+      });
+      if (marks[currentMatchIndex]) {
+        marks[currentMatchIndex].scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+    });
+  }, [currentMatchIndex, totalMatches, searchQuery]);
+
+  const goToNextMatch = useCallback(() => {
+    setCurrentMatchIndex(prev => (prev + 1) % Math.max(totalMatches, 1));
+  }, [totalMatches]);
+
+  const goToPrevMatch = useCallback(() => {
+    setCurrentMatchIndex(prev => (prev - 1 + Math.max(totalMatches, 1)) % Math.max(totalMatches, 1));
+  }, [totalMatches]);
 
   // Copy message as markdown
   const copyMessage = useCallback(async (message: Message) => {
@@ -438,18 +508,28 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
           <input
             id="chat-search-input"
             type="text"
-            placeholder="Search messages..."
+            placeholder="Find in chat..."
             value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
+            onChange={(e) => { setSearchQuery(e.target.value); setCurrentMatchIndex(0); }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') { e.preventDefault(); e.shiftKey ? goToPrevMatch() : goToNextMatch(); }
+              if (e.key === 'Escape') { setShowSearch(false); setSearchQuery(''); setCurrentMatchIndex(0); setTotalMatches(0); }
+            }}
             className="flex-1 bg-transparent outline-none text-sm placeholder:text-muted-foreground"
           />
-          {searchQuery && (
-            <span className="text-xs text-muted-foreground">
-              {filteredMessages.length} of {messages.length}
+          {searchQuery.trim() && (
+            <span className="text-xs text-muted-foreground whitespace-nowrap">
+              {totalMatches > 0 ? `${currentMatchIndex + 1} of ${totalMatches}` : 'No results'}
             </span>
           )}
+          <button onClick={goToPrevMatch} className="text-muted-foreground hover:text-foreground disabled:opacity-30" disabled={totalMatches === 0} title="Previous (Shift+Enter)">
+            <ChevronUp className="h-4 w-4" />
+          </button>
+          <button onClick={goToNextMatch} className="text-muted-foreground hover:text-foreground disabled:opacity-30" disabled={totalMatches === 0} title="Next (Enter)">
+            <ChevronDown className="h-4 w-4" />
+          </button>
           <button
-            onClick={() => { setShowSearch(false); setSearchQuery(''); }}
+            onClick={() => { setShowSearch(false); setSearchQuery(''); setCurrentMatchIndex(0); setTotalMatches(0); }}
             className="text-muted-foreground hover:text-foreground"
           >
             <X className="h-4 w-4" />
@@ -470,7 +550,7 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
           </div>
         ) : (
           <div className="space-y-4 max-w-3xl mx-auto pb-4">
-            {filteredMessages.map((message) => (
+            {messages.map((message) => (
               <div
                 key={message.id}
                 className={`flex group ${
@@ -499,7 +579,13 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
                         ))}
                       </div>
                     )}
-                    <p className="whitespace-pre-wrap text-sm leading-relaxed">{message.content}</p>
+                    <p className="whitespace-pre-wrap text-sm leading-relaxed">
+                      {showSearch && searchQuery.trim() ? (
+                        <HighlightedText text={message.content} query={searchQuery} />
+                      ) : (
+                        message.content
+                      )}
+                    </p>
                     <div className="flex items-center gap-1 mt-2 justify-end">
                       <button
                         onClick={() => copyMessage(message)}

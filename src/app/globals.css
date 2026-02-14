@@ -147,3 +147,16 @@ body {
     @apply bg-background text-foreground;
   }
 }
+
+/* Chat search highlights */
+.search-match-current {
+  background-color: rgb(249 115 22 / 0.6) !important;
+  outline: 2px solid rgb(249 115 22 / 0.8);
+  outline-offset: 1px;
+  border-radius: 2px;
+}
+
+:is(.dark) .search-match-current {
+  background-color: rgb(249 115 22 / 0.5) !important;
+  outline-color: rgb(249 115 22 / 0.7);
+}

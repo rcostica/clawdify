@@ -25,7 +25,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Plus, ArrowRight, Trash2, Calendar, Clock, GripVertical } from 'lucide-react';
+import { Plus, ArrowRight, Trash2, Calendar, Clock, GripVertical, Check, X } from 'lucide-react';
 import { toast } from 'sonner';
 
 export interface KanbanTask {
@@ -64,6 +64,7 @@ function SortableTaskCard({
   onTaskClick?: (task: KanbanTask, e: React.MouseEvent) => void;
   showDueDate?: boolean;
 }) {
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: task.id,
     data: { type: 'task', task },
@@ -94,25 +95,50 @@ function SortableTaskCard({
             <p className="text-sm font-medium flex-1">{task.title}</p>
           </div>
           <div className="flex items-center gap-0.5 shrink-0">
-            {nextStatus && (
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-6 w-6"
-                onClick={(e) => { e.stopPropagation(); onMove(task.id, nextStatus); }}
-                title={`Move to ${nextStatus}`}
-              >
-                <ArrowRight className="h-3 w-3" />
-              </Button>
+            {confirmDelete ? (
+              <>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-6 w-6 text-destructive hover:bg-destructive/10"
+                  onClick={(e) => { e.stopPropagation(); onDelete(task.id); setConfirmDelete(false); }}
+                  title="Confirm delete"
+                >
+                  <Check className="h-3 w-3" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-6 w-6 text-muted-foreground"
+                  onClick={(e) => { e.stopPropagation(); setConfirmDelete(false); }}
+                  title="Cancel"
+                >
+                  <X className="h-3 w-3" />
+                </Button>
+              </>
+            ) : (
+              <>
+                {nextStatus && (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-6 w-6"
+                    onClick={(e) => { e.stopPropagation(); onMove(task.id, nextStatus); }}
+                    title={`Move to ${nextStatus}`}
+                  >
+                    <ArrowRight className="h-3 w-3" />
+                  </Button>
+                )}
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-6 w-6 text-muted-foreground hover:text-destructive"
+                  onClick={(e) => { e.stopPropagation(); setConfirmDelete(true); }}
+                >
+                  <Trash2 className="h-3 w-3" />
+                </Button>
+              </>
             )}
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-6 w-6 text-muted-foreground hover:text-destructive"
-              onClick={(e) => { e.stopPropagation(); onDelete(task.id); }}
-            >
-              <Trash2 className="h-3 w-3" />
-            </Button>
           </div>
         </div>
         {task.description && (

@@ -538,7 +538,7 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
   }
 
   const chatContent = (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-full overflow-hidden">
       {/* Header with search toggle */}
       {messages.length > 0 && !showSearch && (
         <div className="border-b px-4 py-2 flex items-center justify-between">
@@ -593,7 +593,7 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
       )}
 
       {/* Chat Area */}
-      <div className="flex-1 overflow-y-auto p-4">
+      <div className="flex-1 overflow-y-auto overflow-x-hidden p-4">
         {messages.length === 0 && !streamingContent ? (
           <div className="flex flex-col items-center justify-center h-full text-center">
             <MessageSquare className="h-12 w-12 text-muted-foreground/30 mb-4" />

@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'clawdify-v2';
+const CACHE_VERSION = 'clawdify-v3';
 const STATIC_CACHE = `static-${CACHE_VERSION}`;
 const DYNAMIC_CACHE = `dynamic-${CACHE_VERSION}`;
 
@@ -51,21 +51,21 @@ self.addEventListener('fetch', (e) => {
     return;
   }
 
-  // Cache-first for static assets (_next/static, images, fonts)
+  // Stale-while-revalidate for static assets
+  // Next.js hashes filenames so new deploys get new URLs automatically
   if (
     url.pathname.startsWith('/_next/static/') ||
     url.pathname.match(/\.(png|jpg|jpeg|svg|gif|webp|ico|woff2?|ttf|eot)$/)
   ) {
     e.respondWith(
-      caches.match(request).then(
-        (cached) =>
-          cached ||
-          fetch(request).then((res) => {
-            const clone = res.clone();
-            caches.open(STATIC_CACHE).then((cache) => cache.put(request, clone));
-            return res;
-          })
-      )
+      caches.open(STATIC_CACHE).then(async (cache) => {
+        const cached = await cache.match(request);
+        const fetchPromise = fetch(request).then((res) => {
+          if (res.ok) cache.put(request, res.clone());
+          return res;
+        }).catch(() => cached);
+        return cached || fetchPromise;
+      })
     );
     return;
   }

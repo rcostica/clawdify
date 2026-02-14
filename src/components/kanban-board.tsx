@@ -184,7 +184,7 @@ function DroppableColumn({
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: columnKey });
   return (
-    <div ref={setNodeRef} className={`flex-1 min-h-[100px] ${isOver ? 'bg-accent/30' : ''} transition-colors rounded-b-lg`}>
+    <div ref={setNodeRef} className={`flex-1 min-h-[100px] overflow-hidden ${isOver ? 'bg-accent/30' : ''} transition-colors rounded-b-lg`}>
       {children}
     </div>
   );
@@ -346,12 +346,12 @@ export function KanbanBoard({
       onDragOver={handleDragOver}
       onDragEnd={handleDragEnd}
     >
-      <div className="flex gap-4 h-full min-w-max">
+      <div className="flex gap-4 h-full max-h-[calc(100vh-16rem)] min-w-max">
         {COLUMNS.map((column) => {
           const columnTasks = tasks.filter((t) => t.status === column.key);
 
           return (
-            <div key={column.key} className="w-64 sm:w-72 flex flex-col">
+            <div key={column.key} className="w-64 sm:w-72 flex flex-col h-full overflow-hidden">
               <div className={`rounded-t-lg border-t-4 ${column.color} bg-muted/50 px-3 py-2 flex items-center justify-between`}>
                 <h2 className="font-medium text-sm">{column.label}</h2>
                 <span className="text-xs text-muted-foreground bg-background rounded-full px-2 py-0.5">

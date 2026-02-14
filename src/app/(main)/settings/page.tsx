@@ -5,7 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { ChevronDown, ChevronRight, CheckCircle, XCircle, Loader2, Sun, Moon, RefreshCw, Plus, Trash2, Save, Eye, EyeOff } from 'lucide-react';
+import { ChevronDown, ChevronRight, CheckCircle, XCircle, Loader2, RefreshCw, Plus, Trash2, Save, Eye, EyeOff } from 'lucide-react';
 import Link from 'next/link';
 
 interface AuditLog {
@@ -30,7 +30,6 @@ export default function SettingsPage() {
   const [newPin, setNewPin] = useState('');
   const [pinMessage, setPinMessage] = useState('');
   const [pinLoading, setPinLoading] = useState(false);
-  const [theme, setTheme] = useState<'light' | 'dark'>('light');
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
   const [auditOpen, setAuditOpen] = useState(false);
   const [auditLoading, setAuditLoading] = useState(false);
@@ -138,20 +137,6 @@ export default function SettingsPage() {
   const deleteVaultEntry = async (id: string) => {
     await fetch(`/api/vault?id=${id}`, { method: 'DELETE' });
     fetchVault();
-  };
-
-  // Theme
-  useEffect(() => {
-    const saved = localStorage.getItem('clawdify-theme') || 'light';
-    setTheme(saved as 'light' | 'dark');
-    document.documentElement.classList.toggle('dark', saved === 'dark');
-  }, []);
-
-  const toggleTheme = () => {
-    const next = theme === 'light' ? 'dark' : 'light';
-    setTheme(next);
-    localStorage.setItem('clawdify-theme', next);
-    document.documentElement.classList.toggle('dark', next === 'dark');
   };
 
   // Change PIN
@@ -321,19 +306,6 @@ export default function SettingsPage() {
             </Button>
           </div>
           {vaultMessage && <p className="text-sm">{vaultMessage}</p>}
-        </CardContent>
-      </Card>
-
-      {/* Theme */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Appearance</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <Button variant="outline" onClick={toggleTheme} className="gap-2">
-            {theme === 'light' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
-            {theme === 'light' ? 'Light' : 'Dark'} Mode
-          </Button>
         </CardContent>
       </Card>
 

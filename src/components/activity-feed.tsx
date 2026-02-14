@@ -25,6 +25,37 @@ function getActionIcon(action: string, entityType?: string) {
   return <Activity className="h-3.5 w-3.5 text-muted-foreground" />;
 }
 
+function parseDetails(action: string, details?: string): string {
+  if (!details) return action;
+  
+  // Try to parse JSON details
+  try {
+    if (details.startsWith('{') || details.startsWith('[')) {
+      const parsed = JSON.parse(details);
+      // Project actions
+      if (parsed.name) {
+        if (action.includes('create')) return `Created project "${parsed.name}"`;
+        if (action.includes('update')) return `Updated project "${parsed.name}"`;
+        return parsed.name;
+      }
+      // Task actions
+      if (parsed.title) {
+        if (action.includes('create')) return `Created task "${parsed.title}"`;
+        if (action.includes('update')) return `Updated task "${parsed.title}"`;
+        return parsed.title;
+      }
+      // Generic: try to find a meaningful field
+      const meaningful = parsed.title || parsed.name || parsed.description || parsed.message;
+      if (meaningful) return String(meaningful);
+      // Fallback: show action
+      return action;
+    }
+  } catch {
+    // Not JSON, use as-is
+  }
+  return details;
+}
+
 function formatTime(dateStr: string) {
   const date = new Date(dateStr);
   const now = new Date();
@@ -55,7 +86,7 @@ export function ActivityFeed() {
           action: log.action || 'Unknown action',
           entityType: log.entityType,
           entityId: log.entityId,
-          details: log.details || log.description || `${log.action} ${log.entityType || ''}`.trim(),
+          details: parseDetails(log.action, log.details) || log.description || `${log.action} ${log.entityType || ''}`.trim(),
           createdAt: log.createdAt,
         }));
 
@@ -115,14 +146,14 @@ export function ActivityFeed() {
         ) : entries.length === 0 ? (
           <p className="text-sm text-muted-foreground">No recent activity</p>
         ) : (
-          <div className="space-y-1">
+          <div className="space-y-1 overflow-x-hidden">
             {entries.map((entry) => (
-              <div key={entry.id} className="flex items-start gap-3 py-1.5 group">
+              <div key={entry.id} className="flex items-start gap-3 py-1.5 group overflow-hidden">
                 <div className="mt-0.5 shrink-0">
                   {getActionIcon(entry.action, entry.entityType)}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm truncate">{entry.details || entry.action}</p>
+                  <p className="text-sm truncate break-words">{entry.details || entry.action}</p>
                   <p className="text-xs text-muted-foreground">{formatTime(entry.createdAt)}</p>
                 </div>
               </div>

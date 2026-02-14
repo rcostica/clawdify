@@ -10,7 +10,8 @@ import {
   Files,
   Settings,
   LogOut,
-  GripVertical
+  GripVertical,
+  Activity
 } from 'lucide-react';
 import {
   Sidebar,
@@ -31,6 +32,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { useProjectsStore, buildProjectTree } from '@/lib/stores/projects';
+import { useNotificationsStore } from '@/lib/stores/notifications';
 import { toast } from 'sonner';
 import type { Project } from '@/lib/db/schema';
 import { ThemeToggle } from '@/components/theme-toggle';
@@ -58,7 +60,9 @@ type ProjectNode = Project & { children: any[] };
 
 function SortableProjectItem({ project }: { project: ProjectNode }) {
   const { selectedProjectId, selectProject } = useProjectsStore();
+  const { unreadProjects } = useNotificationsStore();
   const isSelected = selectedProjectId === project.id;
+  const hasUnread = unreadProjects.has(project.id);
   const hasChildren = project.children.length > 0;
   const {
     attributes,
@@ -129,7 +133,10 @@ function SortableProjectItem({ project }: { project: ProjectNode }) {
               <GripVertical className="h-3 w-3" />
             </span>
             <span>{project.icon || '📁'}</span>
-            <span>{project.name}</span>
+            <span className="flex-1">{project.name}</span>
+            {hasUnread && (
+              <span className="h-2 w-2 rounded-full bg-blue-500 shrink-0" />
+            )}
           </Link>
         </SidebarMenuButton>
       </SidebarMenuItem>
@@ -139,7 +146,9 @@ function SortableProjectItem({ project }: { project: ProjectNode }) {
 
 function ProjectTreeItem({ project, level = 0 }: { project: ProjectNode; level?: number }) {
   const { selectedProjectId, selectProject } = useProjectsStore();
+  const { unreadProjects } = useNotificationsStore();
   const isSelected = selectedProjectId === project.id;
+  const hasUnread = unreadProjects.has(project.id);
   const hasChildren = project.children.length > 0;
 
   if (hasChildren) {
@@ -179,7 +188,10 @@ function ProjectTreeItem({ project, level = 0 }: { project: ProjectNode; level?:
       >
         <Link href={`/project/${project.id}`}>
           <span>{project.icon || '📁'}</span>
-          <span>{project.name}</span>
+          <span className="flex-1">{project.name}</span>
+          {hasUnread && (
+            <span className="h-2 w-2 rounded-full bg-blue-500 shrink-0" />
+          )}
         </Link>
       </SidebarMenuButton>
     </SidebarMenuItem>
@@ -342,6 +354,14 @@ export function AppSidebar() {
                   <Link href="/files">
                     <Files className="h-4 w-4" />
                     <span>Files</span>
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+              <SidebarMenuItem>
+                <SidebarMenuButton isActive={pathname === '/sessions'} asChild>
+                  <Link href="/sessions">
+                    <Activity className="h-4 w-4" />
+                    <span>Sessions</span>
                   </Link>
                 </SidebarMenuButton>
               </SidebarMenuItem>

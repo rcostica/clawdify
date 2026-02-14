@@ -27,7 +27,8 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Plus, ArrowRight, Trash2, Calendar, Clock, GripVertical, Check, X } from 'lucide-react';
+import { Plus, ArrowRight, Trash2, Calendar, Clock, GripVertical, Check, X, Sparkles } from 'lucide-react';
+import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 
 export interface KanbanTask {
@@ -67,6 +68,7 @@ function SortableTaskCard({
   showDueDate?: boolean;
 }) {
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const router = useRouter();
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: task.id,
     data: { type: 'task', task },
@@ -124,6 +126,19 @@ function SortableTaskCard({
               </>
             ) : (
               <>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-6 w-6 text-muted-foreground hover:text-amber-500"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    const prompt = `Please work on this task: ${task.title}${task.description ? `. Description: ${task.description}` : ''}`;
+                    router.push(`/project/${task.projectId}?prompt=${encodeURIComponent(prompt)}`);
+                  }}
+                  title="Ask agent to work on this"
+                >
+                  <Sparkles className="h-3 w-3" />
+                </Button>
                 {nextStatus && (
                   <Button
                     variant="ghost"

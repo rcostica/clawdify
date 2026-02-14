@@ -5,6 +5,7 @@ import { SearchModal } from '@/components/search-modal';
 import { KeyboardShortcuts } from '@/components/keyboard-shortcuts';
 import { MobileNav } from '@/components/mobile-nav';
 import { SearchTrigger } from '@/components/search-trigger';
+import { NotificationPermission } from '@/components/notification-permission';
 
 export default function MainLayout({
   children,
@@ -28,6 +29,7 @@ export default function MainLayout({
       <MobileNav />
       <SearchModal />
       <KeyboardShortcuts />
+      <NotificationPermission />
     </SidebarProvider>
   );
 }

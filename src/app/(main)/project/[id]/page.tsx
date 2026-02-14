@@ -6,6 +6,9 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Button } from '@/components/ui/button';
 import { Send, MessageSquare, Square, Loader2, Paperclip, X, FileText, FileCode, File as FileIcon, Search, Copy, Check, Reply, Upload, ChevronUp, ChevronDown } from 'lucide-react';
 import { useChatAttachmentsStore } from '@/lib/stores/chat-attachments';
+import { useNotificationsStore, getLastSeen, setLastSeen } from '@/lib/stores/notifications';
+import { useSearchParams } from 'next/navigation';
+import { toast } from 'sonner';
 import type { Project } from '@/lib/db/schema';
 
 interface AttachedFile {
@@ -53,6 +56,8 @@ function HighlightedText({ text, query }: { text: string; query: string }) {
 export default function ProjectPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const { selectProject } = useProjectsStore();
+  const { markUnread, markRead } = useNotificationsStore();
+  const searchParams = useSearchParams();
   const [project, setProject] = useState<Project | null>(null);
   const [loading, setLoading] = useState(true);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -119,6 +124,36 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
 
     return () => selectProject(null);
   }, [id, selectProject]);
+
+  // Pre-fill from query param (kanban quick action)
+  useEffect(() => {
+    const prompt = searchParams.get('prompt');
+    if (prompt) {
+      setInput(prompt);
+      // Clean URL without triggering navigation
+      window.history.replaceState({}, '', `/project/${id}`);
+      setTimeout(() => inputRef.current?.focus(), 100);
+    }
+  }, [searchParams, id]);
+
+  // Track last seen & show new message toast
+  useEffect(() => {
+    const lastSeen = getLastSeen(id);
+    markRead(id);
+
+    if (messages.length > 0 && lastSeen > 0) {
+      const newMsgs = messages.filter(
+        (m) => m.role === 'assistant' && new Date(m.createdAt).getTime() > lastSeen
+      );
+      if (newMsgs.length > 0) {
+        toast.info(`${newMsgs.length} new message${newMsgs.length !== 1 ? 's' : ''}`);
+      }
+    }
+
+    return () => {
+      setLastSeen(id);
+    };
+  }, [id, messages.length, markRead]);
 
   // Pick up pending attachments from file browser "Send to Chat"
   useEffect(() => {
@@ -433,6 +468,21 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
           createdAt: new Date(),
         };
         setMessages((prev) => [...prev, assistantMessage]);
+
+        // Browser notification if tab not focused
+        if (document.hidden && Notification.permission === 'granted') {
+          try {
+            new Notification(project?.name || 'Clawdify', {
+              body: accumulated.slice(0, 100) + (accumulated.length > 100 ? '...' : ''),
+              icon: '/icon-192.png',
+            });
+          } catch { /* ignore */ }
+        }
+
+        // Mark as unread for sidebar indicator (if navigated away)
+        if (document.hidden) {
+          markUnread(id);
+        }
       }
     } catch (error) {
       if ((error as Error).name === 'AbortError') {

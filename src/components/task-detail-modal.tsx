@@ -17,7 +17,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Calendar, Clock, Trash2, X, Save, Loader2 } from 'lucide-react';
+import { Calendar, Clock, Trash2, X, Save, Loader2, AlertTriangle } from 'lucide-react';
 import { toast } from 'sonner';
 
 interface Task {
@@ -68,6 +68,7 @@ export function TaskDetailModal({
   const [dueDate, setDueDate] = useState('');
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
 
   // Sync form state when task changes
   useEffect(() => {
@@ -121,7 +122,11 @@ export function TaskDetailModal({
 
   const handleDelete = async () => {
     if (!task) return;
-    if (!window.confirm('Are you sure you want to delete this task?')) return;
+
+    if (!confirmingDelete) {
+      setConfirmingDelete(true);
+      return;
+    }
 
     setDeleting(true);
     try {
@@ -136,6 +141,7 @@ export function TaskDetailModal({
       toast.error('Failed to delete task');
     } finally {
       setDeleting(false);
+      setConfirmingDelete(false);
     }
   };
 
@@ -245,45 +251,73 @@ export function TaskDetailModal({
           </div>
 
           {/* Actions */}
-          <div className="flex items-center justify-between pt-2">
-            <Button
-              variant="ghost"
-              size="sm"
-              className="text-destructive hover:text-destructive hover:bg-destructive/10"
-              onClick={handleDelete}
-              disabled={deleting || saving}
-            >
-              {deleting ? (
-                <Loader2 className="h-4 w-4 animate-spin mr-1" />
-              ) : (
-                <Trash2 className="h-4 w-4 mr-1" />
-              )}
-              Delete
-            </Button>
-
-            <div className="flex gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => onOpenChange(false)}
-                disabled={saving || deleting}
-              >
-                Cancel
-              </Button>
-              <Button
-                size="sm"
-                onClick={handleSave}
-                disabled={!hasChanges || !title.trim() || saving || deleting}
-              >
-                {saving ? (
-                  <Loader2 className="h-4 w-4 animate-spin mr-1" />
-                ) : (
-                  <Save className="h-4 w-4 mr-1" />
-                )}
-                Save
-              </Button>
+          {confirmingDelete ? (
+            <div className="flex items-center justify-between pt-2 px-3 py-2 rounded-md bg-destructive/10 border border-destructive/20">
+              <div className="flex items-center gap-2 text-sm text-destructive">
+                <AlertTriangle className="h-4 w-4 shrink-0" />
+                <span>Delete this task?</span>
+              </div>
+              <div className="flex gap-2">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setConfirmingDelete(false)}
+                  disabled={deleting}
+                >
+                  No
+                </Button>
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  onClick={handleDelete}
+                  disabled={deleting}
+                >
+                  {deleting ? (
+                    <Loader2 className="h-4 w-4 animate-spin mr-1" />
+                  ) : (
+                    <Trash2 className="h-4 w-4 mr-1" />
+                  )}
+                  Yes, delete
+                </Button>
+              </div>
             </div>
-          </div>
+          ) : (
+            <div className="flex items-center justify-between pt-2">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                onClick={handleDelete}
+                disabled={deleting || saving}
+              >
+                <Trash2 className="h-4 w-4 mr-1" />
+                Delete
+              </Button>
+
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => onOpenChange(false)}
+                  disabled={saving || deleting}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  size="sm"
+                  onClick={handleSave}
+                  disabled={!hasChanges || !title.trim() || saving || deleting}
+                >
+                  {saving ? (
+                    <Loader2 className="h-4 w-4 animate-spin mr-1" />
+                  ) : (
+                    <Save className="h-4 w-4 mr-1" />
+                  )}
+                  Save
+                </Button>
+              </div>
+            </div>
+          )}
         </div>
       </DialogContent>
     </Dialog>

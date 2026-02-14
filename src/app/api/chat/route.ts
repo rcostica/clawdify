@@ -13,6 +13,32 @@ const HISTORY_LIMIT = 50;
 const DEFAULT_GLOBAL_PROMPT = `Never share API keys or secrets in chat. All credentials are stored in the shared vault (.env). Reference them by name, never paste actual values.`;
 
 // ---------------------------------------------------------------------------
+// Shared task management instructions (injected into all project contexts)
+// ---------------------------------------------------------------------------
+
+function buildTaskApiDocs(projectId: string): string {
+  return [
+    '',
+    '## Auto Task Management',
+    'IMPORTANT: When you plan work or start executing tasks, you MUST create corresponding kanban tasks automatically.',
+    '- Before starting a multi-step task, create tasks for each step in the kanban (status: "in-progress" for current, "backlog" for upcoming).',
+    '- When you finish a task, update its status to "done".',
+    '- When you start a new step, update its status to "in-progress".',
+    '- Keep task titles short and descriptive.',
+    '',
+    '### Task API',
+    `- **List:** GET http://localhost:3000/api/tasks?projectId=${projectId}`,
+    '- **Create:** POST http://localhost:3000/api/tasks',
+    `  Body: { "projectId": "${projectId}", "title": "...", "description": "...", "status": "backlog|in-progress|review|done", "priority": "low|medium|high" }`,
+    '- **Update:** PATCH http://localhost:3000/api/tasks/:id',
+    '  Body: { "status": "in-progress|done|...", "title": "..." }',
+    '- **Delete:** DELETE http://localhost:3000/api/tasks/:id',
+    '',
+    'Use your tools (e.g., web_fetch or exec with curl) to call these endpoints.',
+  ].join('\n');
+}
+
+// ---------------------------------------------------------------------------
 // General project detection
 // ---------------------------------------------------------------------------
 
@@ -44,7 +70,7 @@ function getGlobalContext(): string {
 /**
  * Build meta-context for the General project: summary of all projects + vault + API instructions.
  */
-function buildGeneralContext(): string {
+function buildGeneralContext(projectId?: string): string {
   const allProjects = db.select().from(projects).all();
   const lines: string[] = [
     '[Command Center — General Project]',
@@ -98,13 +124,15 @@ function buildGeneralContext(): string {
     'Use your tools (e.g., web_fetch or exec with curl) to call these endpoints.',
   );
 
+  if (projectId) lines.push(buildTaskApiDocs(projectId));
+
   return lines.join('\n');
 }
 
 async function buildProjectContext(projectId: string): Promise<string> {
   try {
     if (isGeneralProject(projectId)) {
-      return buildGeneralContext();
+      return buildGeneralContext(projectId);
     }
 
     const project = db.select().from(projects).where(eq(projects.id, projectId)).get();
@@ -141,6 +169,8 @@ async function buildProjectContext(projectId: string): Promise<string> {
         // Directory doesn't exist yet
       }
     }
+
+    lines.push(buildTaskApiDocs(projectId));
 
     return lines.join('\n');
   } catch (error) {

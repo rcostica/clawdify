@@ -33,6 +33,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/component
 import { useProjectsStore, buildProjectTree } from '@/lib/stores/projects';
 import { toast } from 'sonner';
 import type { Project } from '@/lib/db/schema';
+import { ThemeToggle } from '@/components/theme-toggle';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import {
@@ -359,6 +360,7 @@ export function AppSidebar() {
               </Link>
             </SidebarMenuButton>
           </SidebarMenuItem>
+          <ThemeToggle />
           <SidebarMenuItem>
             <SidebarMenuButton onClick={handleLogout} disabled={logoutLoading}>
               <LogOut className="h-4 w-4" />

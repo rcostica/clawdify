@@ -133,7 +133,7 @@ export default function ProjectTasksPage({ params }: { params: Promise<{ id: str
         </div>
       )}
 
-      <div className="flex-1 overflow-x-auto p-4">
+      <div className="flex-1 overflow-auto p-4">
         <KanbanBoard
           tasks={filteredTasks}
           setTasks={setTasks}

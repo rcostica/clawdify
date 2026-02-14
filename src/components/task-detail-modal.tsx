@@ -121,6 +121,7 @@ export function TaskDetailModal({
 
   const handleDelete = async () => {
     if (!task) return;
+    if (!window.confirm('Are you sure you want to delete this task?')) return;
 
     setDeleting(true);
     try {
@@ -154,7 +155,7 @@ export function TaskDetailModal({
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               placeholder="Task title"
-              className="text-lg font-medium border-0 px-0 focus-visible:ring-0 focus-visible:ring-offset-0"
+              className="text-lg font-medium border-0 px-0 focus-visible:ring-0 focus-visible:ring-offset-0 dark:bg-transparent dark:text-zinc-100"
             />
           </div>
 
@@ -164,7 +165,7 @@ export function TaskDetailModal({
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               placeholder="Add a description..."
-              className="min-h-[100px] resize-none"
+              className="min-h-[100px] resize-none dark:bg-zinc-800 dark:border-zinc-700 dark:text-zinc-100"
             />
           </div>
 
@@ -220,7 +221,7 @@ export function TaskDetailModal({
                 type="date"
                 value={dueDate}
                 onChange={(e) => setDueDate(e.target.value)}
-                className="flex-1 text-sm border rounded-md px-3 py-2 bg-background"
+                className="flex-1 text-sm border rounded-md px-3 py-2 bg-background dark:bg-zinc-800 dark:border-zinc-700 dark:text-zinc-100"
               />
               {dueDate && (
                 <Button
@@ -236,7 +237,7 @@ export function TaskDetailModal({
           </div>
 
           {/* Metadata */}
-          <div className="text-xs text-muted-foreground pt-2 border-t">
+          <div className="text-xs text-muted-foreground dark:text-zinc-400 pt-2 border-t dark:border-zinc-700">
             Created {new Date(task.createdAt).toLocaleDateString()}
             {task.updatedAt && task.updatedAt !== task.createdAt && (
               <> · Updated {new Date(task.updatedAt).toLocaleDateString()}</>

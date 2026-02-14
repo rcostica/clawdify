@@ -7,8 +7,6 @@ import {
   closestCorners,
   KeyboardSensor,
   PointerSensor,
-  TouchSensor,
-  MouseSensor,
   useSensor,
   useSensors,
   type DragStartEvent,
@@ -90,7 +88,7 @@ function SortableTaskCard({
         <div className="flex items-start justify-between gap-2">
           <div className="flex items-start gap-1.5 flex-1 min-w-0">
             <button
-              className="mt-0.5 cursor-grab active:cursor-grabbing text-muted-foreground hover:text-foreground shrink-0"
+              className="mt-0.5 cursor-grab active:cursor-grabbing text-muted-foreground hover:text-foreground shrink-0 touch-none"
               {...attributes}
               {...listeners}
             >
@@ -236,8 +234,7 @@ export function KanbanBoard({
   const [activeTask, setActiveTask] = useState<KanbanTask | null>(null);
 
   const sensors = useSensors(
-    useSensor(MouseSensor, { activationConstraint: { distance: 5 } }),
-    useSensor(TouchSensor, { activationConstraint: { delay: 250, tolerance: 5 } }),
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   );
 

@@ -73,6 +73,7 @@ function SortableTaskCard({
     transform: CSS.Transform.toString(transform),
     transition,
     opacity: isDragging ? 0.4 : 1,
+    touchAction: 'none' as const,
   };
 
   const nextStatus = getNextStatus(task.status);
@@ -83,17 +84,13 @@ function SortableTaskCard({
       style={style}
       className={`shadow-sm cursor-pointer hover:bg-muted/50 transition-colors ${isDragging ? 'ring-2 ring-primary shadow-lg' : ''}`}
       onClick={(e) => onTaskClick?.(task, e)}
+      {...attributes}
+      {...listeners}
     >
       <CardContent className="p-3">
         <div className="flex items-start justify-between gap-2">
           <div className="flex items-start gap-1.5 flex-1 min-w-0">
-            <button
-              className="mt-0.5 cursor-grab active:cursor-grabbing text-muted-foreground hover:text-foreground shrink-0 touch-none"
-              {...attributes}
-              {...listeners}
-            >
-              <GripVertical className="h-3.5 w-3.5" />
-            </button>
+            <GripVertical className="h-3.5 w-3.5 mt-0.5 text-muted-foreground shrink-0" />
             <p className="text-sm font-medium flex-1">{task.title}</p>
           </div>
           <div className="flex items-center gap-0.5 shrink-0">

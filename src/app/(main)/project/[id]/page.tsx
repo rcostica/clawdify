@@ -12,6 +12,7 @@ import { toast } from 'sonner';
 import { SplitPane } from '@/components/split-pane';
 import { TasksPanel } from '@/components/tasks-panel';
 import { FilesPanel } from '@/components/files-panel';
+import { ProjectMobileTabs, type ProjectMobileTab } from '@/components/project-mobile-tabs';
 import type { Project } from '@/lib/db/schema';
 
 interface AttachedFile {
@@ -520,6 +521,7 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
   };
 
   const [leftPaneView, setLeftPaneView] = useState<'tasks' | 'files'>('tasks');
+  const [mobileTab, setMobileTab] = useState<ProjectMobileTab>('chat');
 
   if (loading) {
     return (
@@ -917,9 +919,17 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
       <div className="hidden lg:flex h-full w-full overflow-hidden">
         <SplitPane left={leftPane} right={chatContent} />
       </div>
-      {/* Mobile: chat only (tabs handle navigation to files/tasks) */}
-      <div className="lg:hidden h-full overflow-hidden">
-        {chatContent}
+      {/* Mobile: tabbed view (Chat/Tasks/Files) */}
+      <div className="lg:hidden flex flex-col h-full overflow-hidden">
+        <ProjectMobileTabs
+          activeTab={mobileTab}
+          onTabChange={setMobileTab}
+        />
+        <div className="flex-1 overflow-hidden">
+          {mobileTab === 'chat' && chatContent}
+          {mobileTab === 'tasks' && <TasksPanel projectId={id} />}
+          {mobileTab === 'files' && <FilesPanel projectId={id} />}
+        </div>
       </div>
     </>
   );

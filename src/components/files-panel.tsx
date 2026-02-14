@@ -9,7 +9,7 @@ import { Input } from '@/components/ui/input';
 import {
   Folder, FileText, FileCode, FileImage, File as FileIcon,
   ChevronRight, ArrowLeft, Download, FolderPlus,
-  Loader2, Plus, MessageSquare
+  Loader2, Plus, MessageSquare, Upload
 } from 'lucide-react';
 import { useChatAttachmentsStore } from '@/lib/stores/chat-attachments';
 import { toast } from 'sonner';
@@ -64,6 +64,8 @@ export function FilesPanel({ projectId }: { projectId: string }) {
   const [creating, setCreating] = useState<'file' | 'folder' | null>(null);
   const [newName, setNewName] = useState('');
   const [selectedFiles, setSelectedFiles] = useState<Set<string>>(new Set());
+  const [isDragOver, setIsDragOver] = useState(false);
+  const [uploading, setUploading] = useState(false);
 
   const toggleFileSelection = useCallback((entry: FileEntry) => {
     if (entry.type === 'directory') return;
@@ -126,6 +128,53 @@ export function FilesPanel({ projectId }: { projectId: string }) {
   useEffect(() => {
     if (basePath) fetchDirectory('');
   }, [basePath, fetchDirectory]);
+
+  const uploadFile = useCallback(async (file: File) => {
+    if (!basePath) return;
+    const formData = new FormData();
+    formData.append('file', file);
+    // Upload to current directory
+    const directory = currentSubPath ? `${basePath}/${currentSubPath}` : basePath;
+    formData.append('directory', directory);
+    
+    try {
+      const res = await fetch('/api/files/upload', { method: 'POST', body: formData });
+      if (!res.ok) throw new Error('Upload failed');
+      const data = await res.json();
+      toast.success(`Uploaded ${data.name}`);
+      fetchDirectory(currentSubPath);
+    } catch (err) {
+      console.error('File upload failed:', err);
+      toast.error('Upload failed');
+    }
+  }, [basePath, currentSubPath, fetchDirectory]);
+
+  const handleFileDrop = useCallback(async (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragOver(false);
+    
+    const files = e.dataTransfer.files;
+    if (!files || files.length === 0) return;
+    
+    setUploading(true);
+    try {
+      for (const file of Array.from(files)) {
+        await uploadFile(file);
+      }
+    } finally {
+      setUploading(false);
+    }
+  }, [uploadFile]);
+
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragOver(true);
+  }, []);
+
+  const handleDragLeave = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragOver(false);
+  }, []);
 
   const fetchFile = useCallback(async (filePath: string) => {
     setFileLoading(true);
@@ -255,9 +304,28 @@ export function FilesPanel({ projectId }: { projectId: string }) {
             <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setCreating('file')}>
               <Plus className="h-3 w-3" />
             </Button>
-            <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setCreating('folder')}>
+            <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setCreating('folder')} title="New folder">
               <FolderPlus className="h-3 w-3" />
             </Button>
+            <label className="cursor-pointer">
+              <input
+                type="file"
+                multiple
+                className="hidden"
+                onChange={(e) => {
+                  const files = e.target.files;
+                  if (files) {
+                    setUploading(true);
+                    Promise.all(Array.from(files).map(uploadFile))
+                      .finally(() => setUploading(false));
+                  }
+                  e.target.value = '';
+                }}
+              />
+              <Button variant="ghost" size="icon" className="h-6 w-6" asChild title="Upload file">
+                <span><Upload className="h-3 w-3" /></span>
+              </Button>
+            </label>
           </div>
 
           {breadcrumbs.length > 0 && (
@@ -279,7 +347,28 @@ export function FilesPanel({ projectId }: { projectId: string }) {
             </div>
           )}
 
-          <ScrollArea className="flex-1">
+          <ScrollArea 
+            className={`flex-1 transition-colors ${isDragOver ? 'bg-primary/5 ring-2 ring-primary ring-inset' : ''}`}
+            onDragOver={handleDragOver}
+            onDragLeave={handleDragLeave}
+            onDrop={handleFileDrop}
+          >
+            {/* Upload indicator */}
+            {uploading && (
+              <div className="px-3 py-2 border-b bg-muted/50 flex items-center gap-2">
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                <span className="text-xs text-muted-foreground">Uploading...</span>
+              </div>
+            )}
+            
+            {/* Drag overlay */}
+            {isDragOver && (
+              <div className="px-3 py-6 border-b text-center">
+                <Upload className="h-6 w-6 text-primary mx-auto mb-1" />
+                <p className="text-xs text-primary font-medium">Drop files to upload</p>
+              </div>
+            )}
+            
             {creating && (
               <div className="px-3 py-2 border-b space-y-2">
                 <p className="text-xs text-muted-foreground">New {creating}:</p>

@@ -5,6 +5,8 @@ import {
   DndContext,
   DragOverlay,
   closestCorners,
+  rectIntersection,
+  pointerWithin,
   KeyboardSensor,
   PointerSensor,
   useSensor,
@@ -74,7 +76,6 @@ function SortableTaskCard({
     transform: CSS.Transform.toString(transform),
     transition,
     opacity: isDragging ? 0.4 : 1,
-    touchAction: 'none' as const,
   };
 
   const nextStatus = getNextStatus(task.status);
@@ -85,13 +86,18 @@ function SortableTaskCard({
       style={style}
       className={`shadow-sm cursor-pointer hover:bg-muted/50 transition-colors ${isDragging ? 'ring-2 ring-primary shadow-lg' : ''}`}
       onClick={(e) => onTaskClick?.(task, e)}
-      {...attributes}
-      {...listeners}
     >
       <CardContent className="p-3">
         <div className="flex items-start justify-between gap-2">
           <div className="flex items-start gap-1.5 flex-1 min-w-0">
-            <GripVertical className="h-3.5 w-3.5 mt-0.5 text-muted-foreground shrink-0" />
+            <button
+              className="mt-0.5 cursor-grab active:cursor-grabbing text-muted-foreground hover:text-foreground shrink-0 p-1 -m-1"
+              style={{ touchAction: 'none' }}
+              {...attributes}
+              {...listeners}
+            >
+              <GripVertical className="h-4 w-4" />
+            </button>
             <p className="text-sm font-medium flex-1">{task.title}</p>
           </div>
           <div className="flex items-center gap-0.5 shrink-0">
@@ -257,7 +263,7 @@ export function KanbanBoard({
   const [activeTask, setActiveTask] = useState<KanbanTask | null>(null);
 
   const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { delay: 2000, tolerance: 5 } }),
+    useSensor(PointerSensor, { activationConstraint: { delay: 300, tolerance: 5 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   );
 
@@ -329,7 +335,13 @@ export function KanbanBoard({
   return (
     <DndContext
       sensors={sensors}
-      collisionDetection={closestCorners}
+      collisionDetection={(args) => {
+        // First check if pointer is within a droppable (works for empty columns)
+        const pointerCollisions = pointerWithin(args);
+        if (pointerCollisions.length > 0) return pointerCollisions;
+        // Fallback to closestCorners
+        return closestCorners(args);
+      }}
       onDragStart={handleDragStart}
       onDragOver={handleDragOver}
       onDragEnd={handleDragEnd}

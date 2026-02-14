@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Loader2, Search, Filter, X } from 'lucide-react';
 import { KanbanBoard } from '@/components/kanban-board';
+import { TaskDetailModal } from '@/components/task-detail-modal';
 import { toast } from 'sonner';
 
 interface Task {
@@ -14,6 +15,10 @@ interface Task {
   description?: string | null;
   status: 'backlog' | 'in-progress' | 'review' | 'done';
   priority: 'low' | 'medium' | 'high';
+  assignedTo?: string | null;
+  dueDate?: Date | string | null;
+  createdAt: Date;
+  updatedAt: Date;
 }
 
 const PRIORITIES: Task['priority'][] = ['low', 'medium', 'high'];
@@ -27,6 +32,8 @@ export default function ProjectTasksPage({ params }: { params: Promise<{ id: str
   const [searchQuery, setSearchQuery] = useState('');
   const [priorityFilter, setPriorityFilter] = useState<Task['priority'] | 'all'>('all');
   const [showFilters, setShowFilters] = useState(false);
+  const [selectedTask, setSelectedTask] = useState<Task | null>(null);
+  const [modalOpen, setModalOpen] = useState(false);
 
   useEffect(() => {
     async function fetchTasks() {
@@ -136,8 +143,25 @@ export default function ProjectTasksPage({ params }: { params: Promise<{ id: str
           setNewTaskTitle={setNewTaskTitle}
           onAddTask={addTask}
           onDeleteTask={deleteTask}
+          onTaskClick={(task, e) => {
+            if ((e.target as HTMLElement).closest('button')) return;
+            setSelectedTask(task);
+            setModalOpen(true);
+          }}
         />
       </div>
+
+      <TaskDetailModal
+        task={selectedTask}
+        open={modalOpen}
+        onOpenChange={setModalOpen}
+        onUpdate={(updated) => {
+          setTasks((prev) => prev.map((t) => (t.id === updated.id ? updated : t)));
+        }}
+        onDelete={(taskId) => {
+          setTasks((prev) => prev.filter((t) => t.id !== taskId));
+        }}
+      />
     </div>
   );
 }

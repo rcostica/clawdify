@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'clawdify-v3';
+const CACHE_VERSION = 'clawdify-v4';
 const STATIC_CACHE = `static-${CACHE_VERSION}`;
 const DYNAMIC_CACHE = `dynamic-${CACHE_VERSION}`;
 

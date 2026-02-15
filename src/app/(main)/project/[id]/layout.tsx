@@ -43,28 +43,30 @@ export default function ProjectLayout({
             )}
           </div>
         </div>
-        {/* Tabs: visible only on mobile, hidden on desktop where split-pane is used */}
-        <div className="flex px-4 mt-2 gap-1 lg:hidden">
-          {tabs.map((tab) => {
-            const isActive = tab.exact
-              ? pathname === tab.href
-              : pathname.startsWith(tab.href);
-            return (
-              <Link
-                key={tab.href}
-                href={tab.href}
-                className={`flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-t-md border-b-2 transition-colors ${
-                  isActive
-                    ? 'border-primary text-foreground font-medium'
-                    : 'border-transparent text-muted-foreground hover:text-foreground'
-                }`}
-              >
-                <tab.icon className="h-3.5 w-3.5" />
-                {tab.label}
-              </Link>
-            );
-          })}
-        </div>
+        {/* Tabs: only on sub-pages (files/tasks), hidden on main project page which has its own tabs */}
+        {pathname !== `/project/${id}` && (
+          <div className="flex px-4 mt-2 gap-1 lg:hidden">
+            {tabs.map((tab) => {
+              const isActive = tab.exact
+                ? pathname === tab.href
+                : pathname.startsWith(tab.href);
+              return (
+                <Link
+                  key={tab.href}
+                  href={tab.href}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-t-md border-b-2 transition-colors ${
+                    isActive
+                      ? 'border-primary text-foreground font-medium'
+                      : 'border-transparent text-muted-foreground hover:text-foreground'
+                  }`}
+                >
+                  <tab.icon className="h-3.5 w-3.5" />
+                  {tab.label}
+                </Link>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       {/* Content */}

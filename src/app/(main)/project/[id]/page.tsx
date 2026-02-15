@@ -905,7 +905,7 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
       {/* Panel content */}
       <div className="flex-1 overflow-hidden">
         {leftPaneView === 'tasks' ? (
-          <TasksPanel projectId={id} />
+          <TasksPanel projectId={id} showAll={project?.name?.toLowerCase() === "general"} />
         ) : (
           <FilesPanel projectId={id} />
         )}
@@ -927,7 +927,7 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
         />
         <div className="flex-1 overflow-hidden">
           {mobileTab === 'chat' && chatContent}
-          {mobileTab === 'tasks' && <TasksPanel projectId={id} />}
+          {mobileTab === 'tasks' && <TasksPanel projectId={id} showAll={project?.name?.toLowerCase() === "general"} />}
           {mobileTab === 'files' && <FilesPanel projectId={id} />}
         </div>
       </div>

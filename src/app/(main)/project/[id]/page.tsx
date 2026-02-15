@@ -93,6 +93,7 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
   const initialScrollDone = useRef(false);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
+  const sendingRef = useRef(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -136,6 +137,40 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
 
     return () => selectProject(null);
   }, [id, selectProject]);
+
+  // Recover from background suspension (mobile PWA)
+  // When user switches apps mid-stream, the fetch connection dies.
+  // On return, refetch history from DB to get the completed response.
+  useEffect(() => {
+    const handleVisibility = async () => {
+      if (document.visibilityState === 'visible' && sendingRef.current) {
+        // Give the server a moment to finish writing the response
+        await new Promise(r => setTimeout(r, 1500));
+        try {
+          const res = await fetch(`/api/chat?projectId=${id}`);
+          if (res.ok) {
+            const data = await res.json();
+            if (data.messages?.length) {
+              setMessages(data.messages.map((m: any) => ({
+                id: m.id,
+                role: m.role,
+                content: m.content,
+                createdAt: new Date(m.createdAt),
+              })));
+            }
+          }
+        } catch { /* ignore fetch errors during recovery */ }
+        // Clean up sending state
+        setSending(false);
+        sendingRef.current = false;
+        setStreamingContent('');
+        abortControllerRef.current?.abort();
+        abortControllerRef.current = null;
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+    return () => document.removeEventListener('visibilitychange', handleVisibility);
+  }, [id]);
 
   // Pre-fill from query param (kanban quick action)
   useEffect(() => {
@@ -438,6 +473,7 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
     setAttachedFiles([]);
     setReplyTo(null);
     setSending(true);
+    sendingRef.current = true;
     setStreamingContent('');
 
     const controller = new AbortController();
@@ -532,15 +568,36 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
         }
       } else {
         console.error('Chat error:', error);
+        const errMsg = (error as Error).message || '';
+        // Network errors (e.g. PWA suspended mid-stream) — try to recover from DB
+        if (errMsg.includes('network') || errMsg.includes('Failed to fetch') || errMsg.includes('terminated')) {
+          try {
+            await new Promise(r => setTimeout(r, 2000));
+            const res = await fetch(`/api/chat?projectId=${id}`);
+            if (res.ok) {
+              const data = await res.json();
+              if (data.messages?.length) {
+                setMessages(data.messages.map((m: any) => ({
+                  id: m.id,
+                  role: m.role,
+                  content: m.content,
+                  createdAt: new Date(m.createdAt),
+                })));
+                return; // Recovered successfully, no error shown
+              }
+            }
+          } catch { /* recovery failed, show error below */ }
+        }
         setMessages((prev) => [...prev, {
           id: `msg-${Date.now()}-error`,
           role: 'assistant',
-          content: `⚠️ Error: ${(error as Error).message}`,
+          content: `⚠️ Error: ${errMsg}`,
           createdAt: new Date(),
         }]);
       }
     } finally {
       setSending(false);
+      sendingRef.current = false;
       setStreamingContent('');
       abortControllerRef.current = null;
       inputRef.current?.focus();

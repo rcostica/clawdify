@@ -375,61 +375,72 @@ export async function POST(request: NextRequest) {
     const encoder = new TextEncoder();
     const decoder = new TextDecoder();
 
-    const stream = new ReadableStream({
-      async start(controller) {
-        try {
-          let content = '';
-          const reader = gatewayResponse.body!.getReader();
-          let buffer = '';
+    // Read gateway stream independently so DB save happens even if client disconnects
+    let clientCancelled = false;
+    let streamController: ReadableStreamDefaultController | null = null;
+    
+    const gatewayPromise = (async () => {
+      let content = '';
+      const reader = gatewayResponse.body!.getReader();
+      let buffer = '';
 
-          while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
 
-            buffer += decoder.decode(value, { stream: true });
-            const lines = buffer.split('\n');
-            buffer = lines.pop() || '';
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\n');
+          buffer = lines.pop() || '';
 
-            for (const line of lines) {
-              if (!line.startsWith('data: ')) continue;
-              const data = line.slice(6).trim();
-              if (data === '[DONE]') {
-                controller.enqueue(encoder.encode('data: [DONE]\n\n'));
-                continue;
-              }
-              try {
-                const parsed = JSON.parse(data);
-                const delta = parsed.choices?.[0]?.delta;
-                if (delta?.content) {
-                  content += delta.content;
-                }
-              } catch {
-                // skip
-              }
-              controller.enqueue(encoder.encode(line + '\n\n'));
+          for (const line of lines) {
+            if (!line.startsWith('data: ')) continue;
+            const data = line.slice(6).trim();
+            if (data === '[DONE]') {
+              if (!clientCancelled) try { streamController?.enqueue(encoder.encode('data: [DONE]\n\n')); } catch {}
+              continue;
             }
-          }
-
-          // Save assistant response
-          if (threadId && content) {
             try {
-              db.insert(messages).values({
-                id: uuidv4(),
-                threadId,
-                role: 'assistant',
-                content: redactSecrets(content),
-                createdAt: new Date(),
-              }).run();
-            } catch (dbError) {
-              console.error('Error saving message:', dbError);
+              const parsed = JSON.parse(data);
+              const delta = parsed.choices?.[0]?.delta;
+              if (delta?.content) {
+                content += delta.content;
+              }
+            } catch {
+              // skip
             }
+            if (!clientCancelled) try { streamController?.enqueue(encoder.encode(line + '\n\n')); } catch {}
           }
-        } catch (error) {
-          console.error('Stream error:', error);
-          controller.error(error);
-        } finally {
-          controller.close();
         }
+      } catch (error) {
+        console.error('Gateway stream error:', error);
+      }
+
+      // Always save assistant response to DB, even if client disconnected
+      if (threadId && content) {
+        try {
+          db.insert(messages).values({
+            id: uuidv4(),
+            threadId,
+            role: 'assistant',
+            content: redactSecrets(content),
+            createdAt: new Date(),
+          }).run();
+        } catch (dbError) {
+          console.error('Error saving message:', dbError);
+        }
+      }
+
+      if (!clientCancelled) try { streamController?.close(); } catch {}
+    })();
+
+    const stream = new ReadableStream({
+      start(controller) {
+        streamController = controller;
+      },
+      cancel() {
+        clientCancelled = true;
+        // gatewayPromise continues running — DB save will still happen
       },
     });
 

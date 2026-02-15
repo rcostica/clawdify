@@ -2,58 +2,27 @@
 
 import { useEffect, useState } from 'react';
 import { 
-  CheckCircle2, MessageSquare, FileText, Plus, Edit3, 
-  Activity, Clock 
+  CheckCircle2, MessageSquare, Plus, Edit3, 
+  FolderKanban, Clock, ArrowRight
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 
-interface AuditEntry {
+interface ActivityEntry {
   id: string;
-  action: string;
-  entityType?: string;
-  entityId?: string;
-  details?: string;
+  type: 'task_created' | 'task_updated' | 'task_completed' | 'message' | 'project_created';
+  title: string;
+  detail?: string;
   createdAt: string;
 }
 
-function getActionIcon(action: string, entityType?: string) {
-  if (action?.includes('create') || action?.includes('Created')) return <Plus className="h-3.5 w-3.5 text-green-500" />;
-  if (action?.includes('update') || action?.includes('Updated')) return <Edit3 className="h-3.5 w-3.5 text-blue-500" />;
-  if (action?.includes('message') || entityType === 'message') return <MessageSquare className="h-3.5 w-3.5 text-purple-500" />;
-  if (action?.includes('file') || entityType === 'file') return <FileText className="h-3.5 w-3.5 text-orange-500" />;
-  if (action?.includes('complete') || action?.includes('done')) return <CheckCircle2 className="h-3.5 w-3.5 text-green-500" />;
-  return <Activity className="h-3.5 w-3.5 text-muted-foreground" />;
-}
-
-function parseDetails(action: string, details?: string): string {
-  if (!details) return action;
-  
-  // Try to parse JSON details
-  try {
-    if (details.startsWith('{') || details.startsWith('[')) {
-      const parsed = JSON.parse(details);
-      // Project actions
-      if (parsed.name) {
-        if (action.includes('create')) return `Created project "${parsed.name}"`;
-        if (action.includes('update')) return `Updated project "${parsed.name}"`;
-        return parsed.name;
-      }
-      // Task actions
-      if (parsed.title) {
-        if (action.includes('create')) return `Created task "${parsed.title}"`;
-        if (action.includes('update')) return `Updated task "${parsed.title}"`;
-        return parsed.title;
-      }
-      // Generic: try to find a meaningful field
-      const meaningful = parsed.title || parsed.name || parsed.description || parsed.message;
-      if (meaningful) return String(meaningful);
-      // Fallback: show action
-      return action;
-    }
-  } catch {
-    // Not JSON, use as-is
+function getIcon(type: ActivityEntry['type']) {
+  switch (type) {
+    case 'task_created': return <Plus className="h-3.5 w-3.5 text-green-500" />;
+    case 'task_updated': return <ArrowRight className="h-3.5 w-3.5 text-blue-500" />;
+    case 'task_completed': return <CheckCircle2 className="h-3.5 w-3.5 text-green-500" />;
+    case 'message': return <MessageSquare className="h-3.5 w-3.5 text-purple-500" />;
+    case 'project_created': return <FolderKanban className="h-3.5 w-3.5 text-orange-500" />;
   }
-  return details;
 }
 
 function formatTime(dateStr: string) {
@@ -70,49 +39,78 @@ function formatTime(dateStr: string) {
 }
 
 export function ActivityFeed() {
-  const [entries, setEntries] = useState<AuditEntry[]>([]);
+  const [entries, setEntries] = useState<ActivityEntry[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     async function fetchActivity() {
       try {
-        const [auditRes, tasksRes] = await Promise.all([
-          fetch('/api/audit').then(r => r.json()).catch(() => ({ logs: [] })),
+        const [tasksRes, projectsRes, auditRes] = await Promise.all([
           fetch('/api/tasks').then(r => r.json()).catch(() => ({ tasks: [] })),
+          fetch('/api/projects').then(r => r.json()).catch(() => ({ projects: [] })),
+          fetch('/api/audit').then(r => r.json()).catch(() => ({ logs: [] })),
         ]);
 
-        const auditEntries: AuditEntry[] = (auditRes.logs || []).slice(0, 20).map((log: any) => ({
-          id: log.id || String(Math.random()),
-          action: log.action || 'Unknown action',
-          entityType: log.entityType,
-          entityId: log.entityId,
-          details: parseDetails(log.action, log.details) || log.description || `${log.action} ${log.entityType || ''}`.trim(),
-          createdAt: log.createdAt,
-        }));
+        const items: ActivityEntry[] = [];
 
-        // If audit logs are sparse, supplement with recent task updates
-        if (auditEntries.length < 5 && tasksRes.tasks) {
-          const recentTasks = tasksRes.tasks
-            .filter((t: any) => t.updatedAt)
-            .sort((a: any, b: any) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
-            .slice(0, 10);
-          
-          for (const task of recentTasks) {
-            if (!auditEntries.find(e => e.entityId === task.id && e.entityType === 'task')) {
-              auditEntries.push({
-                id: `task-${task.id}`,
-                action: 'Updated',
-                entityType: 'task',
-                entityId: task.id,
-                details: `Task "${task.title}" — ${task.status}`,
-                createdAt: task.updatedAt,
-              });
-            }
-          }
-          auditEntries.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+        // Recent task activity (created or updated)
+        const tasks = (tasksRes.tasks || [])
+          .filter((t: any) => t.updatedAt || t.createdAt)
+          .sort((a: any, b: any) => new Date(b.updatedAt || b.createdAt).getTime() - new Date(a.updatedAt || a.createdAt).getTime())
+          .slice(0, 15);
+
+        for (const task of tasks) {
+          const isNew = task.createdAt === task.updatedAt;
+          const isDone = task.status === 'done';
+          items.push({
+            id: `task-${task.id}`,
+            type: isDone ? 'task_completed' : isNew ? 'task_created' : 'task_updated',
+            title: task.title,
+            detail: isDone ? 'Completed' : isNew ? 'Created' : `Moved to ${task.status.replace('-', ' ')}`,
+            createdAt: task.updatedAt || task.createdAt,
+          });
         }
 
-        setEntries(auditEntries.slice(0, 20));
+        // Recent projects
+        const projects = (projectsRes.projects || [])
+          .sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+          .slice(0, 5);
+
+        for (const project of projects) {
+          items.push({
+            id: `project-${project.id}`,
+            type: 'project_created',
+            title: `${project.icon || '📁'} ${project.name}`,
+            detail: 'Project created',
+            createdAt: project.createdAt,
+          });
+        }
+
+        // Meaningful audit entries (skip auth_login/auth_logout)
+        const meaningfulAudit = (auditRes.logs || [])
+          .filter((log: any) => !log.action?.startsWith('auth_'))
+          .slice(0, 10);
+
+        for (const log of meaningfulAudit) {
+          let title = log.action;
+          try {
+            if (log.details) {
+              const parsed = JSON.parse(log.details);
+              title = parsed.name || parsed.title || log.action;
+            }
+          } catch { /* not JSON */ }
+          items.push({
+            id: `audit-${log.id}`,
+            type: 'task_updated',
+            title,
+            detail: log.action,
+            createdAt: log.createdAt,
+          });
+        }
+
+        // Sort by date, take top 20
+        items.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+        setEntries(items.slice(0, 20));
       } catch {
         setEntries([]);
       } finally {
@@ -148,13 +146,13 @@ export function ActivityFeed() {
         ) : (
           <div className="space-y-1 overflow-x-hidden">
             {entries.map((entry) => (
-              <div key={entry.id} className="flex items-start gap-3 py-1.5 group overflow-hidden">
+              <div key={entry.id} className="flex items-start gap-3 py-1.5 overflow-hidden">
                 <div className="mt-0.5 shrink-0">
-                  {getActionIcon(entry.action, entry.entityType)}
+                  {getIcon(entry.type)}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm truncate break-words">{entry.details || entry.action}</p>
-                  <p className="text-xs text-muted-foreground">{formatTime(entry.createdAt)}</p>
+                  <p className="text-sm truncate">{entry.title}</p>
+                  <p className="text-xs text-muted-foreground">{entry.detail} · {formatTime(entry.createdAt)}</p>
                 </div>
               </div>
             ))}

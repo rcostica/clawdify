@@ -23,21 +23,32 @@ interface Task {
 
 const PRIORITIES: Task['priority'][] = ['low', 'medium', 'high'];
 
-export function TasksPanel({ projectId }: { projectId: string }) {
+export function TasksPanel({ projectId, showAll = false }: { projectId: string; showAll?: boolean }) {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
   const [newTaskTitle, setNewTaskTitle] = useState('');
   const [addingToColumn, setAddingToColumn] = useState<Task['status'] | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [priorityFilter, setPriorityFilter] = useState<Task['priority'] | 'all'>('all');
+  const [selectedProjectFilter, setSelectedProjectFilter] = useState<string>('');
+  const [projects, setProjects] = useState<Array<{ id: string; name: string; icon: string }>>([]);
   const [showFilters, setShowFilters] = useState(false);
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
 
   useEffect(() => {
+    if (showAll) {
+      fetch('/api/projects').then(r => r.json()).then(d => setProjects(d.projects || [])).catch(() => {});
+    }
+  }, [showAll]);
+
+  useEffect(() => {
     async function fetchTasks() {
       try {
-        const res = await fetch(`/api/tasks?projectId=${projectId}`);
+        const params = showAll
+          ? (selectedProjectFilter ? `?projectId=${selectedProjectFilter}` : '')
+          : `?projectId=${projectId}`;
+        const res = await fetch(`/api/tasks${params}`);
         const data = await res.json();
         setTasks(data.tasks || []);
       } catch {
@@ -47,7 +58,7 @@ export function TasksPanel({ projectId }: { projectId: string }) {
       }
     }
     fetchTasks();
-  }, [projectId]);
+  }, [projectId, showAll, selectedProjectFilter]);
 
   const filteredTasks = useMemo(() => {
     return tasks.filter((task) => {
@@ -68,7 +79,7 @@ export function TasksPanel({ projectId }: { projectId: string }) {
       const res = await fetch('/api/tasks', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ projectId, title: newTaskTitle.trim(), status }),
+        body: JSON.stringify({ projectId: selectedProjectFilter || projectId, title: newTaskTitle.trim(), status }),
       });
       const data = await res.json();
       if (data.task) { setTasks((prev) => [...prev, data.task]); toast.success('Task created'); }
@@ -115,6 +126,18 @@ export function TasksPanel({ projectId }: { projectId: string }) {
           {hasActiveFilters && <span className="ml-1 px-1 py-0.5 text-[10px] bg-primary text-primary-foreground rounded-full">{(searchQuery ? 1 : 0) + (priorityFilter !== 'all' ? 1 : 0)}</span>}
         </Button>
         {hasActiveFilters && <Button variant="ghost" size="sm" onClick={() => { setSearchQuery(''); setPriorityFilter('all'); }} className="h-8 text-xs text-muted-foreground">Clear</Button>}
+        {showAll && (
+          <select
+            value={selectedProjectFilter}
+            onChange={(e) => setSelectedProjectFilter(e.target.value)}
+            className="h-8 text-xs rounded-md border bg-background px-2"
+          >
+            <option value="">All Projects</option>
+            {projects.map((p) => (
+              <option key={p.id} value={p.id}>{p.icon} {p.name}</option>
+            ))}
+          </select>
+        )}
         <div className="text-xs text-muted-foreground ml-auto">{filteredTasks.length}/{tasks.length}</div>
       </div>
 

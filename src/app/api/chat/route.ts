@@ -10,6 +10,10 @@ import path from 'path';
 const WORKSPACE_PATH = process.env.OPENCLAW_WORKSPACE_PATH || '';
 const HISTORY_LIMIT = 50;
 
+// Module-level set to prevent GC of background gateway-read tasks
+// when client disconnects before the response is fully streamed
+const _pendingTasks = new Set<Promise<void>>();
+
 const DEFAULT_GLOBAL_PROMPT = `Never share API keys or secrets in chat. All credentials are stored in the shared vault (.env). Reference them by name, never paste actual values.`;
 
 // ---------------------------------------------------------------------------
@@ -375,11 +379,12 @@ export async function POST(request: NextRequest) {
     const encoder = new TextEncoder();
     const decoder = new TextDecoder();
 
-    // Read gateway stream independently so DB save happens even if client disconnects
+    // Read gateway response fully in the background, save to DB regardless of client state.
+    // We keep a module-level reference so the promise isn't GC'd if the client disconnects.
     let clientCancelled = false;
     let streamController: ReadableStreamDefaultController | null = null;
-    
-    const gatewayPromise = (async () => {
+
+    const backgroundTask = (async () => {
       let content = '';
       const reader = gatewayResponse.body!.getReader();
       let buffer = '';
@@ -416,7 +421,7 @@ export async function POST(request: NextRequest) {
         console.error('Gateway stream error:', error);
       }
 
-      // Always save assistant response to DB, even if client disconnected
+      // Always save assistant response to DB
       if (threadId && content) {
         try {
           db.insert(messages).values({
@@ -434,13 +439,16 @@ export async function POST(request: NextRequest) {
       if (!clientCancelled) try { streamController?.close(); } catch {}
     })();
 
+    // Prevent GC of the background task
+    _pendingTasks.add(backgroundTask);
+    backgroundTask.finally(() => _pendingTasks.delete(backgroundTask));
+
     const stream = new ReadableStream({
       start(controller) {
         streamController = controller;
       },
       cancel() {
         clientCancelled = true;
-        // gatewayPromise continues running — DB save will still happen
       },
     });
 

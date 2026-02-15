@@ -184,12 +184,15 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
     }
   }, [pendingAttachments, clearPending]);
 
-  // Scroll helper that works in both mobile and split-pane desktop
-  const scrollToBottom = useCallback((instant = false) => {
-    const container = messagesContainerRef.current;
-    if (container) {
-      container.scrollTop = container.scrollHeight;
-    }
+  // Scroll helper — find the VISIBLE messages container (ref won't work because
+  // chatContent is rendered twice: once in SplitPane, once in mobile wrapper)
+  const scrollToBottom = useCallback(() => {
+    const containers = document.querySelectorAll('[data-messages-scroll]');
+    containers.forEach(el => {
+      if (el.clientHeight > 0) {
+        el.scrollTop = el.scrollHeight;
+      }
+    });
   }, []);
 
   // Auto-scroll to bottom on initial load (instant) 
@@ -197,8 +200,8 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
     if (messages.length > 0 && !initialScrollDone.current) {
       initialScrollDone.current = true;
       // Use setTimeout to ensure DOM has rendered after split-pane layout
-      setTimeout(() => scrollToBottom(true), 50);
-      setTimeout(() => scrollToBottom(true), 200);
+      setTimeout(() => scrollToBottom(), 50);
+      setTimeout(() => scrollToBottom(), 200);
     }
   }, [messages.length, scrollToBottom]);
 
@@ -623,7 +626,7 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
       )}
 
       {/* Chat Area */}
-      <div ref={messagesContainerRef} className="flex-1 overflow-y-auto overflow-x-hidden p-4">
+      <div data-messages-scroll ref={messagesContainerRef} className="flex-1 overflow-y-auto overflow-x-hidden p-4">
         {messages.length === 0 && !streamingContent ? (
           <div className="flex flex-col items-center justify-center h-full text-center">
             <MessageSquare className="h-12 w-12 text-muted-foreground/30 mb-4" />

@@ -15,6 +15,12 @@ import { FilesPanel } from '@/components/files-panel';
 import { ProjectMobileTabs, type ProjectMobileTab } from '@/components/project-mobile-tabs';
 import type { Project } from '@/lib/db/schema';
 
+const IMAGE_EXTENSIONS = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg'];
+function isImageFile(name: string): boolean {
+  const ext = name.split('.').pop()?.toLowerCase() || '';
+  return IMAGE_EXTENSIONS.includes(ext);
+}
+
 interface AttachedFile {
   path: string;    // relative to workspace
   name: string;
@@ -83,6 +89,7 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
   const [pickerPath, setPickerPath] = useState('');
   const [pickerLoading, setPickerLoading] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const initialScrollDone = useRef(false);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -176,9 +183,22 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
     }
   }, [pendingAttachments, clearPending]);
 
-  // Auto-scroll to bottom
+  // Auto-scroll to bottom on initial load (instant) 
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    if (messages.length > 0 && !initialScrollDone.current) {
+      initialScrollDone.current = true;
+      // Use setTimeout to ensure DOM has rendered
+      setTimeout(() => {
+        messagesEndRef.current?.scrollIntoView({ behavior: 'instant' as ScrollBehavior });
+      }, 0);
+    }
+  }, [messages.length]);
+
+  // Auto-scroll to bottom on new messages/streaming (smooth)
+  useEffect(() => {
+    if (initialScrollDone.current) {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }
   }, [messages, streamingContent]);
 
   // Cmd+F / Cmd+K to toggle search within chat
@@ -630,7 +650,15 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
                             className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded bg-black/10 dark:bg-white/10"
                             title={f.path}
                           >
-                            <FileText className="h-3 w-3" />
+                            {isImageFile(f.name) ? (
+                              <img
+                                src={`/api/files?path=${encodeURIComponent(f.path)}`}
+                                alt={f.name}
+                                className="h-8 w-8 rounded object-cover"
+                              />
+                            ) : (
+                              <FileText className="h-3 w-3" />
+                            )}
                             {f.name}
                           </span>
                         ))}
@@ -799,7 +827,15 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
                   className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded-md bg-muted border group"
                   title={f.path}
                 >
-                  <FileText className="h-3 w-3 text-muted-foreground" />
+                  {isImageFile(f.name) ? (
+                    <img
+                      src={`/api/files?path=${encodeURIComponent(f.path)}`}
+                      alt={f.name}
+                      className="h-8 w-8 rounded object-cover"
+                    />
+                  ) : (
+                    <FileText className="h-3 w-3 text-muted-foreground" />
+                  )}
                   <span className="max-w-[150px] truncate">{f.name}</span>
                   <button onClick={() => removeFile(f.path)} className="ml-0.5 opacity-60 hover:opacity-100">
                     <X className="h-3 w-3" />

@@ -206,9 +206,18 @@ async function readAttachedFiles(filePaths: string[]): Promise<string> {
         continue;
       }
 
-      const content = await fs.readFile(absPath, 'utf-8');
-      totalSize += stat.size;
-      blocks.push(`<file path="${relPath}">\n${content}\n</file>`);
+      const ext = path.extname(relPath).slice(1).toLowerCase();
+      const imageExts = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'bmp', 'ico'];
+      if (imageExts.includes(ext)) {
+        const buffer = await fs.readFile(absPath);
+        const base64 = buffer.toString('base64');
+        totalSize += stat.size;
+        blocks.push(`<file path="${relPath}" type="image/${ext === 'jpg' ? 'jpeg' : ext}">[Image: ${(stat.size / 1024).toFixed(1)}KB, base64-encoded]\ndata:image/${ext === 'jpg' ? 'jpeg' : ext};base64,${base64}\n</file>`);
+      } else {
+        const content = await fs.readFile(absPath, 'utf-8');
+        totalSize += stat.size;
+        blocks.push(`<file path="${relPath}">\n${content}\n</file>`);
+      }
     } catch {
       blocks.push(`<file path="${relPath}">[FILE NOT FOUND]</file>`);
     }

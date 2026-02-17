@@ -35,6 +35,7 @@ export const messages = sqliteTable('messages', {
   content: text('content').notNull(),
   model: text('model'),
   tokensUsed: integer('tokens_used'),
+  bookmarked: integer('bookmarked').default(0).notNull(),
   createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
 });
 
@@ -50,6 +51,7 @@ export const tasks = sqliteTable('tasks', {
   subAgentSessionId: text('sub_agent_session_id'),
   dueDate: integer('due_date', { mode: 'timestamp' }),
   sortOrder: integer('sort_order').default(0).notNull(),
+  parentTaskId: text('parent_task_id'),
   createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
   updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull(),
 });
@@ -102,7 +104,17 @@ export const sessionSummaries = sqliteTable('session_summaries', {
   createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
 });
 
+// Message reactions
+export const messageReactions = sqliteTable('message_reactions', {
+  id: text('id').primaryKey(),
+  messageId: text('message_id').references(() => messages.id).notNull(),
+  emoji: text('emoji').notNull(),
+  createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
+});
+
 // Type exports
+export type MessageReaction = typeof messageReactions.$inferSelect;
+export type NewMessageReaction = typeof messageReactions.$inferInsert;
 export type SessionSummary = typeof sessionSummaries.$inferSelect;
 export type NewSessionSummary = typeof sessionSummaries.$inferInsert;
 export type Project = typeof projects.$inferSelect;

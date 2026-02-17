@@ -4,7 +4,7 @@ import { useEffect, useState, useRef, useCallback, use } from 'react';
 import { useProjectsStore } from '@/lib/stores/projects';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Button } from '@/components/ui/button';
-import { Send, MessageSquare, Square, Loader2, Paperclip, X, FileText, FileCode, File as FileIcon, Search, Copy, Check, Reply, Upload, ChevronUp, ChevronDown, FolderKanban, Files, Mic } from 'lucide-react';
+import { Send, MessageSquare, Square, Loader2, Paperclip, X, FileText, FileCode, File as FileIcon, Search, Copy, Check, Reply, Upload, ChevronUp, ChevronDown, FolderKanban, Files, Mic, Bookmark, BookmarkCheck, SmilePlus, RotateCcw, AlertCircle } from 'lucide-react';
 import { useChatAttachmentsStore } from '@/lib/stores/chat-attachments';
 import { useNotificationsStore, getLastSeen, setLastSeen } from '@/lib/stores/notifications';
 import { useSearchParams } from 'next/navigation';
@@ -35,12 +35,21 @@ interface AttachedFile {
   extension?: string;
 }
 
+interface Reaction {
+  emoji: string;
+  id: string;
+}
+
 interface Message {
   id: string;
   role: 'user' | 'assistant';
   content: string;
   attachedFiles?: AttachedFile[];
+  bookmarked?: boolean;
+  reactions?: Reaction[];
   createdAt: Date;
+  failed?: boolean;
+  _sendPayload?: { message: string; projectId: string; tabId: string; attachedFiles?: string[]; replyTo?: { id: string; content: string } };
 }
 
 function HighlightedText({ text, query }: { text: string; query: string }) {
@@ -103,6 +112,8 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
   const abortControllerRef = useRef<AbortController | null>(null);
   const sendingRef = useRef(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [showBookmarksOnly, setShowBookmarksOnly] = useState(false);
+  const [emojiPickerMessageId, setEmojiPickerMessageId] = useState<string | null>(null);
   const [isRecording, setIsRecording] = useState(false);
   const [recordingDuration, setRecordingDuration] = useState(0);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -139,6 +150,8 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
               id: m.id,
               role: m.role,
               content: m.content,
+              bookmarked: m.bookmarked || false,
+              reactions: m.reactions || [],
               createdAt: new Date(m.createdAt),
             })));
           }
@@ -170,6 +183,8 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
               id: msg.id,
               role: msg.role,
               content: msg.content,
+              bookmarked: msg.bookmarked || false,
+              reactions: msg.reactions || [],
               createdAt: new Date(msg.createdAt),
             }];
           });
@@ -201,6 +216,8 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
                 id: m.id,
                 role: m.role,
                 content: m.content,
+                bookmarked: m.bookmarked || false,
+                reactions: m.reactions || [],
                 createdAt: new Date(m.createdAt),
               })));
             }
@@ -292,6 +309,19 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
       scrollToBottom();
     }
   }, [messages, streamingContent, scrollToBottom]);
+
+  // Close emoji picker when clicking outside
+  useEffect(() => {
+    if (!emojiPickerMessageId) return;
+    const handler = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (!target.closest('[data-emoji-picker]') && !target.closest('[title="Add reaction"]')) {
+        setEmojiPickerMessageId(null);
+      }
+    };
+    document.addEventListener('click', handler);
+    return () => document.removeEventListener('click', handler);
+  }, [emojiPickerMessageId]);
 
   // Cmd+F / Cmd+K to toggle search within chat
   useEffect(() => {
@@ -390,6 +420,47 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
       console.error('Copy failed:', err);
     }
   }, []);
+
+  // Toggle bookmark on a message
+  const toggleBookmark = useCallback(async (message: Message) => {
+    try {
+      const res = await fetch(`/api/messages/${message.id}/bookmark`, { method: 'PATCH' });
+      if (!res.ok) throw new Error('Failed to toggle bookmark');
+      const data = await res.json();
+      setMessages(prev => prev.map(m =>
+        m.id === message.id ? { ...m, bookmarked: data.bookmarked } : m
+      ));
+    } catch (err) {
+      console.error('Bookmark toggle failed:', err);
+    }
+  }, []);
+
+  // Toggle reaction on a message
+  const toggleReaction = useCallback(async (messageId: string, emoji: string) => {
+    try {
+      const res = await fetch(`/api/messages/${messageId}/reactions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ emoji }),
+      });
+      if (!res.ok) throw new Error('Failed to toggle reaction');
+      const data = await res.json();
+      setMessages(prev => prev.map(m => {
+        if (m.id !== messageId) return m;
+        const currentReactions = m.reactions || [];
+        if (data.action === 'added') {
+          return { ...m, reactions: [...currentReactions, { emoji: data.emoji, id: data.id }] };
+        } else {
+          return { ...m, reactions: currentReactions.filter(r => r.emoji !== emoji) };
+        }
+      }));
+      setEmojiPickerMessageId(null);
+    } catch (err) {
+      console.error('Reaction toggle failed:', err);
+    }
+  }, []);
+
+  const REACTION_EMOJIS = ['👍', '❤️', '😂', '🎉', '🤔', '👀', '🔥', '✅'];
 
   // File picker: browse workspace files
   const loadPickerDir = useCallback(async (dirPath: string) => {
@@ -677,18 +748,23 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
 
     const currentFiles = [...attachedFiles];
     const messageText = input.trim() || (currentFiles.some(f => isAudioFile(f.name)) ? '🎙️' : '📎');
+    const sendPayload = {
+      message: messageText,
+      projectId: id,
+      tabId,
+      attachedFiles: currentFiles.map(f => f.path),
+      ...(replyTo ? { replyTo: { id: replyTo.id, content: replyTo.content?.slice(0, 200) } } : {}),
+    };
     const userMessage: Message = {
       id: `msg-${Date.now()}`,
       role: 'user',
       content: messageText,
       attachedFiles: currentFiles.length > 0 ? currentFiles : undefined,
       createdAt: new Date(),
+      _sendPayload: sendPayload,
     };
 
     setMessages((prev) => [...prev, userMessage]);
-    const sendText = messageText;
-    const replyToId = replyTo?.id;
-    const replyToContent = replyTo?.content;
     setInput('');
     setAttachedFiles([]);
     setReplyTo(null);
@@ -703,13 +779,7 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
       const res = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          message: sendText,
-          projectId: id,
-          tabId,
-          attachedFiles: currentFiles.map(f => f.path),
-          ...(replyToId ? { replyTo: { id: replyToId, content: replyToContent?.slice(0, 200) } } : {}),
-        }),
+        body: JSON.stringify(sendPayload),
         signal: controller.signal,
       });
 
@@ -805,6 +875,8 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
                   id: m.id,
                   role: m.role,
                   content: m.content,
+                  bookmarked: m.bookmarked || false,
+                  reactions: m.reactions || [],
                   createdAt: new Date(m.createdAt),
                 })));
                 return; // Recovered successfully, no error shown
@@ -812,12 +884,11 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
             }
           } catch { /* recovery failed, show error below */ }
         }
-        setMessages((prev) => [...prev, {
-          id: `msg-${Date.now()}-error`,
-          role: 'assistant',
-          content: `⚠️ Error: ${errMsg}`,
-          createdAt: new Date(),
-        }]);
+        // Mark the user message as failed so they can retry
+        setMessages((prev) => prev.map(m =>
+          m.id === userMessage.id ? { ...m, failed: true } : m
+        ));
+        toast.error(`Send failed: ${errMsg}`);
       }
     } finally {
       setSending(false);
@@ -832,6 +903,78 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
   const handleStop = () => {
     abortControllerRef.current?.abort();
   };
+
+  const handleRetry = useCallback(async (failedMsg: Message) => {
+    if (sending || !failedMsg._sendPayload) return;
+
+    // Clear failed state
+    setMessages(prev => prev.map(m => m.id === failedMsg.id ? { ...m, failed: false } : m));
+    setSending(true);
+    sendingRef.current = true;
+    setStreamingContent('');
+
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+
+    try {
+      const res = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(failedMsg._sendPayload),
+        signal: controller.signal,
+      });
+
+      if (!res.ok) {
+        const error = await res.json().catch(() => ({ error: 'Unknown error' }));
+        throw new Error(error.error || `Error ${res.status}`);
+      }
+
+      if (!res.body) throw new Error('No response body');
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let accumulated = '';
+      let lineBuf = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        lineBuf += decoder.decode(value, { stream: true });
+        const parts = lineBuf.split('\n');
+        lineBuf = parts.pop() || '';
+        for (const line of parts) {
+          const trimmed = line.trim();
+          if (!trimmed.startsWith('data: ')) continue;
+          const data = trimmed.slice(6);
+          if (data === '[DONE]') continue;
+          try {
+            const parsed = JSON.parse(data);
+            const delta = parsed.choices?.[0]?.delta?.content;
+            if (delta) { accumulated += delta; setStreamingContent(accumulated); }
+          } catch { /* skip */ }
+        }
+      }
+
+      if (accumulated) {
+        setMessages(prev => [...prev, {
+          id: `msg-${Date.now()}-assistant`,
+          role: 'assistant',
+          content: accumulated,
+          createdAt: new Date(),
+        }]);
+      }
+    } catch (error) {
+      if ((error as Error).name === 'AbortError') return;
+      // Mark failed again
+      setMessages(prev => prev.map(m => m.id === failedMsg.id ? { ...m, failed: true } : m));
+      toast.error(`Retry failed: ${(error as Error).message}`);
+    } finally {
+      setSending(false);
+      sendingRef.current = false;
+      setStreamingContent('');
+      abortControllerRef.current = null;
+    }
+  }, [sending, id]);
 
   const [leftPaneView, setLeftPaneView] = useState<'tasks' | 'files' | 'docs'>('tasks');
   const [mobileTab, setMobileTab] = useState<ProjectMobileTab>('chat');
@@ -854,20 +997,41 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
 
   const chatContent = (
     <div className="flex flex-col h-full overflow-hidden">
-      {/* Header with search toggle */}
+      {/* Header with search toggle and bookmarks filter */}
       {messages.length > 0 && !showSearch && (
         <div className="border-b px-4 py-2 flex items-center justify-between">
-          <span className="text-sm text-muted-foreground">{messages.length} message{messages.length !== 1 ? 's' : ''}</span>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-7 text-xs"
-            onClick={() => { setShowSearch(true); setTimeout(() => document.getElementById('chat-search-input')?.focus(), 50); }}
-          >
-            <Search className="h-3.5 w-3.5 mr-1" />
-            Search
-            <kbd className="ml-2 px-1 py-0.5 rounded bg-muted border text-[10px]">⌘F</kbd>
-          </Button>
+          <span className="text-sm text-muted-foreground">
+            {showBookmarksOnly
+              ? `${messages.filter(m => m.bookmarked).length} bookmarked`
+              : `${messages.length} message${messages.length !== 1 ? 's' : ''}`
+            }
+          </span>
+          <div className="flex items-center gap-1">
+            <Button
+              variant={showBookmarksOnly ? 'secondary' : 'ghost'}
+              size="sm"
+              className="h-7 text-xs gap-1"
+              onClick={() => setShowBookmarksOnly(prev => !prev)}
+              title="Show bookmarked messages only"
+            >
+              {showBookmarksOnly ? (
+                <BookmarkCheck className="h-3.5 w-3.5 text-amber-500" />
+              ) : (
+                <Bookmark className="h-3.5 w-3.5" />
+              )}
+              Bookmarks
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 text-xs"
+              onClick={() => { setShowSearch(true); setTimeout(() => document.getElementById('chat-search-input')?.focus(), 50); }}
+            >
+              <Search className="h-3.5 w-3.5 mr-1" />
+              Search
+              <kbd className="ml-2 px-1 py-0.5 rounded bg-muted border text-[10px]">⌘F</kbd>
+            </Button>
+          </div>
         </div>
       )}
 
@@ -920,7 +1084,7 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
           </div>
         ) : (
           <div className="space-y-4 max-w-full pb-4">
-            {messages.map((message) => (
+            {(showBookmarksOnly ? messages.filter(m => m.bookmarked) : messages).map((message) => (
               <div
                 key={message.id}
                 className={`flex group ${
@@ -930,10 +1094,12 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
                 <div className="max-w-[85%] overflow-hidden">
                   <div
                     className={`rounded-lg px-4 py-2.5 ${
-                      message.role === 'user'
-                        ? 'bg-primary text-primary-foreground'
-                        : 'bg-muted'
-                    }`}
+                      message.failed
+                        ? 'bg-red-100 dark:bg-red-950/40 border border-red-300 dark:border-red-800 text-red-900 dark:text-red-200'
+                        : message.role === 'user'
+                          ? 'bg-primary text-primary-foreground'
+                          : 'bg-muted'
+                    } ${message.bookmarked ? 'ring-2 ring-amber-400/50 ring-offset-1 ring-offset-background' : ''}`}
                   >
                     {message.attachedFiles && message.attachedFiles.length > 0 && (
                       <div className="flex flex-wrap gap-1.5 mb-2">
@@ -975,6 +1141,24 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
                         message.content
                       )}
                     </p>
+                    {/* Failed message indicator + retry */}
+                    {message.failed && (
+                      <div className="flex items-center gap-2 mt-2 pt-2 border-t border-red-200 dark:border-red-800">
+                        <AlertCircle className="h-3.5 w-3.5 text-red-500 shrink-0" />
+                        <span className="text-xs text-red-600 dark:text-red-400 flex-1">Failed to send</span>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-6 text-xs text-red-600 dark:text-red-400 hover:text-red-700 hover:bg-red-100 dark:hover:bg-red-900/50"
+                          onClick={(e) => { e.stopPropagation(); handleRetry(message); }}
+                          disabled={sending}
+                        >
+                          <RotateCcw className="h-3 w-3 mr-1" />
+                          Retry
+                        </Button>
+                      </div>
+                    )}
+                    {/* Message actions: copy, reply, bookmark, react */}
                     <div className="flex items-center gap-1 mt-2 justify-end">
                       <button
                         onClick={() => copyMessage(message)}
@@ -1002,8 +1186,77 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
                       >
                         <Reply className="h-3 w-3" />
                       </button>
+                      <button
+                        onClick={() => toggleBookmark(message)}
+                        className={`p-1 rounded transition-colors ${
+                          message.bookmarked
+                            ? 'text-amber-500 hover:text-amber-600'
+                            : message.role === 'user'
+                              ? 'text-primary-foreground/50 hover:text-primary-foreground'
+                              : 'text-muted-foreground/50 hover:text-muted-foreground'
+                        }`}
+                        title={message.bookmarked ? 'Remove bookmark' : 'Bookmark'}
+                      >
+                        {message.bookmarked ? (
+                          <BookmarkCheck className="h-3 w-3" />
+                        ) : (
+                          <Bookmark className="h-3 w-3" />
+                        )}
+                      </button>
+                      <div className="relative">
+                        <button
+                          onClick={() => setEmojiPickerMessageId(prev => prev === message.id ? null : message.id)}
+                          className={`p-1 rounded transition-colors ${
+                            message.role === 'user'
+                              ? 'text-primary-foreground/50 hover:text-primary-foreground'
+                              : 'text-muted-foreground/50 hover:text-muted-foreground'
+                          }`}
+                          title="Add reaction"
+                        >
+                          <SmilePlus className="h-3 w-3" />
+                        </button>
+                        {emojiPickerMessageId === message.id && (
+                          <div data-emoji-picker className={`absolute z-50 bottom-full mb-1 ${message.role === 'user' ? 'right-0' : 'left-0'} bg-popover border rounded-lg shadow-lg p-1.5 flex gap-0.5`}>
+                            {REACTION_EMOJIS.map(emoji => {
+                              const hasReaction = message.reactions?.some(r => r.emoji === emoji);
+                              return (
+                                <button
+                                  key={emoji}
+                                  onClick={() => toggleReaction(message.id, emoji)}
+                                  className={`w-7 h-7 flex items-center justify-center rounded hover:bg-muted text-base transition-transform hover:scale-125 ${hasReaction ? 'bg-muted ring-1 ring-primary/30' : ''}`}
+                                  title={emoji}
+                                >
+                                  {emoji}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
                     </div>
                   </div>
+                  {/* Reaction pills below message */}
+                  {message.reactions && message.reactions.length > 0 && (
+                    <div className={`flex flex-wrap gap-1 mt-1 ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                      {/* Group reactions by emoji and count */}
+                      {Object.entries(
+                        message.reactions.reduce<Record<string, number>>((acc, r) => {
+                          acc[r.emoji] = (acc[r.emoji] || 0) + 1;
+                          return acc;
+                        }, {})
+                      ).map(([emoji, count]) => (
+                        <button
+                          key={emoji}
+                          onClick={() => toggleReaction(message.id, emoji)}
+                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-muted/80 hover:bg-muted border text-xs transition-colors"
+                          title={`${emoji} — click to toggle`}
+                        >
+                          <span>{emoji}</span>
+                          {count > 1 && <span className="text-muted-foreground">{count}</span>}
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </div>
             ))}

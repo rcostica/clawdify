@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { chatStream } from '@/lib/gateway/client';
-import { db, messages, threads, projects, settings, vault } from '@/lib/db';
+import { db, messages, threads, projects, settings, vault, messageReactions } from '@/lib/db';
 import { eq, desc } from 'drizzle-orm';
 import { v4 as uuidv4 } from 'uuid';
 import { redactSecrets } from '@/lib/redact';
@@ -757,11 +757,28 @@ export async function GET(request: NextRequest) {
     .orderBy(messages.createdAt)
     .all();
 
+  // Load all reactions for this thread's messages
+  const messageIds = history.map(m => m.id);
+  const allReactions = messageIds.length > 0
+    ? db.select().from(messageReactions).all().filter(r => messageIds.includes(r.messageId))
+    : [];
+
+  // Group reactions by messageId
+  const reactionsByMessage = new Map<string, Array<{ emoji: string; id: string }>>();
+  for (const r of allReactions) {
+    if (!reactionsByMessage.has(r.messageId)) {
+      reactionsByMessage.set(r.messageId, []);
+    }
+    reactionsByMessage.get(r.messageId)!.push({ emoji: r.emoji, id: r.id });
+  }
+
   return NextResponse.json({
     messages: history.map((m) => ({
       id: m.id,
       role: m.role,
       content: m.content,
+      bookmarked: m.bookmarked === 1,
+      reactions: reactionsByMessage.get(m.id) || [],
       createdAt: m.createdAt,
     })),
   });

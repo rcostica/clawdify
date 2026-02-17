@@ -17,6 +17,7 @@ export async function PATCH(
       return NextResponse.json({ error: 'Task not found' }, { status: 404 });
     }
 
+    const { parentTaskId } = body;
     const updates: Record<string, unknown> = { updatedAt: new Date() };
     if (title !== undefined) updates.title = title;
     if (description !== undefined) updates.description = description;
@@ -25,6 +26,7 @@ export async function PATCH(
     if (assignedTo !== undefined) updates.assignedTo = assignedTo;
     if (sortOrder !== undefined) updates.sortOrder = sortOrder;
     if (dueDate !== undefined) updates.dueDate = dueDate ? new Date(dueDate) : null;
+    if (parentTaskId !== undefined) updates.parentTaskId = parentTaskId;
 
     db.update(tasks).set(updates).where(eq(tasks.id, id)).run();
     const updated = db.select().from(tasks).where(eq(tasks.id, id)).get();

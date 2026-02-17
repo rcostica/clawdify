@@ -28,3 +28,30 @@ sqlite.exec(`
     created_at INTEGER NOT NULL
   );
 `);
+
+// Auto-migration: add parent_task_id column to tasks table (for sub-tasks)
+try {
+  sqlite.exec(`ALTER TABLE tasks ADD COLUMN parent_task_id TEXT`);
+} catch {
+  // Column already exists — ignore
+}
+
+// Migration: message_reactions table
+sqlite.exec(`
+  CREATE TABLE IF NOT EXISTS message_reactions (
+    id TEXT PRIMARY KEY,
+    message_id TEXT NOT NULL REFERENCES messages(id),
+    emoji TEXT NOT NULL,
+    created_at INTEGER NOT NULL
+  );
+`);
+
+// Unique constraint on (message_id, emoji) — one of each emoji per message
+try {
+  sqlite.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_message_reactions_unique ON message_reactions(message_id, emoji);`);
+} catch { /* index already exists */ }
+
+// Migration: bookmarked column on messages
+try {
+  sqlite.exec(`ALTER TABLE messages ADD COLUMN bookmarked INTEGER NOT NULL DEFAULT 0;`);
+} catch { /* column already exists */ }

@@ -84,31 +84,42 @@ function SortableProjectItem({ project }: { project: ProjectNode }) {
       <div ref={setNodeRef} style={style} className="group/project">
         <Collapsible asChild className="group/collapsible">
           <SidebarMenuItem>
-            <CollapsibleTrigger asChild>
+            <div className="flex items-center w-full">
               <SidebarMenuButton
                 isActive={isSelected}
                 onClick={() => selectProject(project.id)}
+                asChild
+                className="flex-1 min-w-0"
               >
-                <span
-                  className="cursor-grab touch-none text-muted-foreground/50 hover:text-muted-foreground"
-                  {...attributes}
-                  {...listeners}
-                >
-                  <GripVertical className="h-3 w-3" />
-                </span>
-                <span>{project.icon || '📁'}</span>
-                <span className="flex-1">{project.name}</span>
-                <Link
-                  href={`/project/new?parentId=${project.id}`}
-                  onClick={(e) => e.stopPropagation()}
-                  className="hidden group-hover/project:flex h-4 w-4 items-center justify-center rounded-sm text-muted-foreground hover:text-foreground hover:bg-muted"
-                  title="New sub-project"
-                >
-                  <Plus className="h-3 w-3" />
+                <Link href={`/project/${project.id}`}>
+                  <span
+                    className="cursor-grab touch-none text-muted-foreground/50 hover:text-muted-foreground"
+                    {...attributes}
+                    {...listeners}
+                  >
+                    <GripVertical className="h-3 w-3" />
+                  </span>
+                  <span>{project.icon || '📁'}</span>
+                  <span className="flex-1 truncate">{project.name}</span>
+                  {hasUnread && (
+                    <span className="h-2 w-2 rounded-full bg-blue-500 shrink-0" />
+                  )}
                 </Link>
-                <ChevronRight className="ml-auto transition-transform duration-200 group-data-[state=open]/collapsible:rotate-90" />
               </SidebarMenuButton>
-            </CollapsibleTrigger>
+              <Link
+                href={`/project/new?parentId=${project.id}`}
+                onClick={(e) => e.stopPropagation()}
+                className="hidden group-hover/project:flex h-6 w-6 shrink-0 items-center justify-center rounded-sm text-muted-foreground hover:text-foreground hover:bg-muted"
+                title="New sub-project"
+              >
+                <Plus className="h-3 w-3" />
+              </Link>
+              <CollapsibleTrigger asChild>
+                <button className="flex h-6 w-6 shrink-0 items-center justify-center rounded-sm text-muted-foreground hover:text-foreground hover:bg-muted">
+                  <ChevronRight className="h-3 w-3 transition-transform duration-200 group-data-[state=open]/collapsible:rotate-90" />
+                </button>
+              </CollapsibleTrigger>
+            </div>
             <CollapsibleContent>
               <SidebarMenuSub>
                 {project.children.map((child: ProjectNode) => (
@@ -169,25 +180,35 @@ function ProjectTreeItem({ project, level = 0 }: { project: ProjectNode; level?:
   if (hasChildren) {
     return (
       <Collapsible className="group/subtree">
-        <CollapsibleTrigger asChild>
+        <div className="flex items-center w-full">
           <SidebarMenuSubButton
             isActive={isSelected}
             onClick={() => selectProject(project.id)}
-            className="w-full"
+            asChild
+            className="flex-1 min-w-0"
           >
-            <span>{project.icon || '📁'}</span>
-            <span className="flex-1">{project.name}</span>
-            <Link
-              href={`/project/new?parentId=${project.id}`}
-              onClick={(e) => e.stopPropagation()}
-              className="hidden group-hover/subtree:flex h-4 w-4 items-center justify-center rounded-sm text-muted-foreground hover:text-foreground hover:bg-muted"
-              title="New sub-project"
-            >
-              <Plus className="h-3 w-3" />
+            <Link href={`/project/${project.id}`}>
+              <span>{project.icon || '📁'}</span>
+              <span className="flex-1 truncate">{project.name}</span>
+              {hasUnread && (
+                <span className="h-2 w-2 rounded-full bg-blue-500 shrink-0" />
+              )}
             </Link>
-            <ChevronRight className="ml-auto transition-transform duration-200 group-data-[state=open]:rotate-90" />
           </SidebarMenuSubButton>
-        </CollapsibleTrigger>
+          <Link
+            href={`/project/new?parentId=${project.id}`}
+            onClick={(e) => e.stopPropagation()}
+            className="hidden group-hover/subtree:flex h-5 w-5 shrink-0 items-center justify-center rounded-sm text-muted-foreground hover:text-foreground hover:bg-muted"
+            title="New sub-project"
+          >
+            <Plus className="h-3 w-3" />
+          </Link>
+          <CollapsibleTrigger asChild>
+            <button className="flex h-5 w-5 shrink-0 items-center justify-center rounded-sm text-muted-foreground hover:text-foreground hover:bg-muted">
+              <ChevronRight className="h-3 w-3 transition-transform duration-200 group-data-[state=open]/subtree:rotate-90" />
+            </button>
+          </CollapsibleTrigger>
+        </div>
         <CollapsibleContent>
           <SidebarMenuSub>
             {project.children.map((child: ProjectNode) => (

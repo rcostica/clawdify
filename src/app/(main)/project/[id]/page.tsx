@@ -833,7 +833,7 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
     abortControllerRef.current?.abort();
   };
 
-  const [leftPaneView, setLeftPaneView] = useState<'tasks' | 'files'>('tasks');
+  const [leftPaneView, setLeftPaneView] = useState<'tasks' | 'files' | 'docs'>('tasks');
   const [mobileTab, setMobileTab] = useState<ProjectMobileTab>('chat');
 
   if (loading) {
@@ -1266,13 +1266,26 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
           <Files className="h-3.5 w-3.5" />
           Files
         </Button>
+        <Button
+          variant={leftPaneView === 'docs' ? 'secondary' : 'ghost'}
+          size="sm"
+          className="h-7 text-xs gap-1.5"
+          onClick={() => setLeftPaneView('docs')}
+        >
+          <FileText className="h-3.5 w-3.5" />
+          Docs
+        </Button>
       </div>
       {/* Panel content */}
       <div className="flex-1 overflow-hidden">
-        {leftPaneView === 'tasks' ? (
+        {leftPaneView === 'tasks' && (
           <TasksPanel projectId={id} showAll={project?.name?.toLowerCase() === "general"} />
-        ) : (
+        )}
+        {leftPaneView === 'files' && (
           <FilesPanel projectId={id} />
+        )}
+        {leftPaneView === 'docs' && (
+          <DocsPanel projectId={id} />
         )}
       </div>
     </div>

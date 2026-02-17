@@ -167,10 +167,6 @@ export function DocsPanel({ projectId }: { projectId: string }) {
     fetchMarkdownTree(basePath).then((nodes) => {
       setTree(nodes);
       setTreeLoading(false);
-      const readme = findFile(nodes, (name) =>
-        name.toLowerCase() === 'readme.md' || name.toLowerCase() === 'readme.mdx'
-      );
-      if (readme) setSelectedPath(readme.path);
     });
   }, [basePath]);
 

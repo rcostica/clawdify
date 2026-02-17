@@ -468,8 +468,8 @@ export default function SettingsPage() {
       {/* Migration */}
       <Card>
         <CardHeader>
-          <CardTitle>Data Migration</CardTitle>
-          <CardDescription>Import existing OpenClaw sessions</CardDescription>
+          <CardTitle>Migration</CardTitle>
+          <CardDescription>Transfer your entire Clawdify workspace between machines — export everything as a .zip, import on a new machine with project discovery, conflict handling, and workspace file restoration.</CardDescription>
         </CardHeader>
         <CardContent>
           <Link href="/settings/migration">

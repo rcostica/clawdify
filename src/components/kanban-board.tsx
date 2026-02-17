@@ -21,6 +21,7 @@ import {
   verticalListSortingStrategy,
   useSortable,
   sortableKeyboardCoordinates,
+  arrayMove,
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { Card, CardContent } from '@/components/ui/card';
@@ -39,6 +40,8 @@ export interface KanbanTask {
   status: 'backlog' | 'in-progress' | 'review' | 'done';
   priority: 'low' | 'medium' | 'high';
   dueDate?: Date | string | null;
+  sortOrder?: number;
+  parentTaskId?: string | null;
 }
 
 const COLUMNS: { key: KanbanTask['status']; label: string; color: string }[] = [
@@ -60,12 +63,14 @@ function SortableTaskCard({
   onMove,
   onTaskClick,
   showDueDate,
+  subTasks,
 }: {
   task: KanbanTask;
   onDelete: (id: string) => void;
   onMove: (id: string, status: KanbanTask['status']) => void;
   onTaskClick?: (task: KanbanTask, e: React.MouseEvent) => void;
   showDueDate?: boolean;
+  subTasks?: KanbanTask[];
 }) {
   const [confirmDelete, setConfirmDelete] = useState(false);
   const router = useRouter();
@@ -185,6 +190,19 @@ function SortableTaskCard({
             );
           })()}
         </div>
+        {subTasks && subTasks.length > 0 && (
+          <div className="mt-2 ml-5 space-y-0.5">
+            {subTasks.map((st) => (
+              <div key={st.id} className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                <Check className={`h-3 w-3 shrink-0 ${st.status === 'done' ? 'text-green-500' : 'text-muted-foreground/40'}`} />
+                <span className={st.status === 'done' ? 'line-through' : ''}>{st.title}</span>
+              </div>
+            ))}
+            <span className="text-[10px] text-muted-foreground/60">
+              {subTasks.filter(s => s.status === 'done').length}/{subTasks.length} done
+            </span>
+          </div>
+        )}
       </CardContent>
     </Card>
   );
@@ -329,23 +347,67 @@ export function KanbanBoard({
   };
 
   const handleDragEnd = async (event: DragEndEvent) => {
-    const { active } = event;
+    const { active, over } = event;
     setActiveTask(null);
 
-    const task = tasks.find(t => t.id === active.id);
-    if (!task) return;
+    if (!over) return;
 
-    // Persist the status change
+    const activeId = active.id as string;
+    const overId = over.id as string;
+
+    const activeTask = tasks.find(t => t.id === activeId);
+    if (!activeTask) return;
+
+    // Handle reordering within the same column
+    const overTask = tasks.find(t => t.id === overId);
+    if (overTask && activeTask.status === overTask.status && activeId !== overId) {
+      const columnTasks = tasks.filter(t => t.status === activeTask.status);
+      const oldIndex = columnTasks.findIndex(t => t.id === activeId);
+      const newIndex = columnTasks.findIndex(t => t.id === overId);
+      if (oldIndex !== -1 && newIndex !== -1) {
+        const reordered = arrayMove(columnTasks, oldIndex, newIndex);
+        // Update sort orders
+        const updatedTasks = tasks.map(t => {
+          const idx = reordered.findIndex(rt => rt.id === t.id);
+          if (idx !== -1) return { ...t, sortOrder: idx };
+          return t;
+        });
+        setTasks(updatedTasks);
+        // Persist all sort orders in the column
+        for (let i = 0; i < reordered.length; i++) {
+          fetch(`/api/tasks/${reordered[i].id}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ sortOrder: i }),
+          }).catch(() => {});
+        }
+        return;
+      }
+    }
+
+    // Persist the status change (cross-column move)
     try {
-      await fetch(`/api/tasks/${task.id}`, {
+      await fetch(`/api/tasks/${activeTask.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: task.status }),
+        body: JSON.stringify({ status: activeTask.status }),
       });
     } catch {
       toast.error('Failed to update task');
     }
   };
+
+  // Build sub-task map: parentId -> sub-tasks[]
+  const subTaskMap = new Map<string, KanbanTask[]>();
+  const topLevelTasks = tasks.filter(t => {
+    if (t.parentTaskId) {
+      const arr = subTaskMap.get(t.parentTaskId) || [];
+      arr.push(t);
+      subTaskMap.set(t.parentTaskId, arr);
+      return false;
+    }
+    return true;
+  });
 
   return (
     <DndContext
@@ -363,7 +425,7 @@ export function KanbanBoard({
     >
       <div className="flex gap-4 h-full max-h-[calc(100vh-16rem)] min-w-max">
         {COLUMNS.map((column) => {
-          const columnTasks = tasks.filter((t) => t.status === column.key);
+          const columnTasks = topLevelTasks.filter((t) => t.status === column.key).sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
 
           return (
             <div key={column.key} className="w-64 sm:w-72 flex flex-col h-full overflow-hidden">
@@ -386,6 +448,7 @@ export function KanbanBoard({
                           onMove={moveTask}
                           onTaskClick={onTaskClick}
                           showDueDate={showDueDate}
+                          subTasks={subTaskMap.get(task.id)}
                         />
                       ))}
 

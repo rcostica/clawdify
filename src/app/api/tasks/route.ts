@@ -27,7 +27,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { projectId, title, description, status, priority, dueDate } = body;
+    const { projectId, title, description, status, priority, dueDate, parentTaskId } = body;
 
     if (!projectId || !title) {
       return NextResponse.json({ error: 'projectId and title required' }, { status: 400 });
@@ -43,6 +43,7 @@ export async function POST(request: NextRequest) {
       priority: priority || 'medium',
       dueDate: dueDate ? new Date(dueDate) : null,
       sortOrder: Date.now(),
+      parentTaskId: parentTaskId || null,
       createdAt: now,
       updatedAt: now,
     };

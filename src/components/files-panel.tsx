@@ -9,7 +9,7 @@ import { Input } from '@/components/ui/input';
 import {
   Folder, FileText, FileCode, FileImage, File as FileIcon,
   ChevronRight, ArrowLeft, Download, FolderPlus,
-  Loader2, Plus, MessageSquare, Upload
+  Loader2, Plus, MessageSquare, Upload, Pencil
 } from 'lucide-react';
 import { useChatAttachmentsStore } from '@/lib/stores/chat-attachments';
 import { toast } from 'sonner';
@@ -66,6 +66,8 @@ export function FilesPanel({ projectId }: { projectId: string }) {
   const [selectedFiles, setSelectedFiles] = useState<Set<string>>(new Set());
   const [isDragOver, setIsDragOver] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [renamingPath, setRenamingPath] = useState<string | null>(null);
+  const [renameValue, setRenameValue] = useState('');
 
   const toggleFileSelection = useCallback((entry: FileEntry) => {
     if (entry.type === 'directory') return;
@@ -230,6 +232,41 @@ export function FilesPanel({ projectId }: { projectId: string }) {
     }
     setCreating(null);
     setNewName('');
+  };
+
+  const startRename = (entry: FileEntry) => {
+    setRenamingPath(entry.path);
+    setRenameValue(entry.name);
+  };
+
+  const handleRename = async () => {
+    if (!renamingPath || !renameValue.trim() || !basePath) return;
+    const oldName = renamingPath.split('/').pop();
+    if (renameValue.trim() === oldName) {
+      setRenamingPath(null);
+      setRenameValue('');
+      return;
+    }
+    const parentDir = renamingPath.substring(0, renamingPath.lastIndexOf('/'));
+    const destination = parentDir ? `${parentDir}/${renameValue.trim()}` : renameValue.trim();
+    try {
+      const res = await fetch('/api/files', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'rename',
+          filePath: renamingPath,
+          destination,
+        }),
+      });
+      if (!res.ok) throw new Error('Rename failed');
+      toast.success(`Renamed to ${renameValue.trim()}`);
+      fetchDirectory(currentSubPath);
+    } catch {
+      toast.error('Failed to rename');
+    }
+    setRenamingPath(null);
+    setRenameValue('');
   };
 
   const breadcrumbs = currentSubPath ? currentSubPath.split('/').filter(Boolean) : [];
@@ -409,7 +446,11 @@ export function FilesPanel({ projectId }: { projectId: string }) {
                 {entries.map((entry) => (
                   <div
                     key={entry.path}
-                    className="w-full flex items-center gap-1.5 px-2 py-1.5 text-sm hover:bg-muted transition-colors"
+                    className="w-full flex items-center gap-1.5 px-2 py-1.5 text-sm hover:bg-muted transition-colors group/entry"
+                    onContextMenu={(e) => {
+                      e.preventDefault();
+                      startRename(entry);
+                    }}
                   >
                     {entry.type === 'file' && (
                       <input
@@ -420,16 +461,43 @@ export function FilesPanel({ projectId }: { projectId: string }) {
                       />
                     )}
                     {entry.type === 'directory' && <span className="w-3.5" />}
-                    <button
-                      onClick={() => handleEntryClick(entry)}
-                      className="flex-1 flex items-center gap-2 text-left min-w-0"
-                    >
-                      {getFileIcon(entry)}
-                      <span className="flex-1 truncate text-xs">{entry.name}</span>
-                      {entry.size !== undefined && (
-                        <span className="text-[10px] text-muted-foreground">{formatSize(entry.size)}</span>
-                      )}
-                    </button>
+                    {renamingPath === entry.path ? (
+                      <div className="flex-1 flex items-center gap-1 min-w-0">
+                        {getFileIcon(entry)}
+                        <Input
+                          value={renameValue}
+                          onChange={(e) => setRenameValue(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') handleRename();
+                            if (e.key === 'Escape') { setRenamingPath(null); setRenameValue(''); }
+                          }}
+                          onBlur={handleRename}
+                          autoFocus
+                          className="h-6 text-xs flex-1"
+                        />
+                      </div>
+                    ) : (
+                      <>
+                        <button
+                          onClick={() => handleEntryClick(entry)}
+                          onDoubleClick={(e) => { e.preventDefault(); e.stopPropagation(); startRename(entry); }}
+                          className="flex-1 flex items-center gap-2 text-left min-w-0"
+                        >
+                          {getFileIcon(entry)}
+                          <span className="flex-1 truncate text-xs">{entry.name}</span>
+                          {entry.size !== undefined && (
+                            <span className="text-[10px] text-muted-foreground">{formatSize(entry.size)}</span>
+                          )}
+                        </button>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); startRename(entry); }}
+                          className="opacity-0 group-hover/entry:opacity-100 transition-opacity shrink-0 p-0.5 hover:bg-muted-foreground/10 rounded"
+                          title="Rename"
+                        >
+                          <Pencil className="h-3 w-3 text-muted-foreground" />
+                        </button>
+                      </>
+                    )}
                   </div>
                 ))}
               </div>

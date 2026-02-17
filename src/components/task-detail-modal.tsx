@@ -17,7 +17,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Calendar, Clock, Trash2, X, Save, Loader2, AlertTriangle } from 'lucide-react';
+import { Calendar, Clock, Trash2, X, Save, Loader2, AlertTriangle, Plus, CheckSquare, Square } from 'lucide-react';
 import { toast } from 'sonner';
 
 interface Task {
@@ -31,6 +31,12 @@ interface Task {
   dueDate?: Date | string | null;
   createdAt: Date;
   updatedAt: Date;
+}
+
+interface SubTask {
+  id: string;
+  title: string;
+  status: string;
 }
 
 interface TaskDetailModalProps {
@@ -69,6 +75,9 @@ export function TaskDetailModal({
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [subTasks, setSubTasks] = useState<SubTask[]>([]);
+  const [addingSubTask, setAddingSubTask] = useState(false);
+  const [newSubTaskTitle, setNewSubTaskTitle] = useState('');
 
   // Sync form state when task changes
   useEffect(() => {
@@ -80,6 +89,72 @@ export function TaskDetailModal({
       setDueDate(task.dueDate ? new Date(task.dueDate).toISOString().split('T')[0] : '');
     }
   }, [task]);
+
+  // Fetch sub-tasks when task changes
+  useEffect(() => {
+    if (!task) { setSubTasks([]); return; }
+    async function fetchSubTasks() {
+      try {
+        const res = await fetch(`/api/tasks?projectId=${task!.projectId}`);
+        if (!res.ok) return;
+        const data = await res.json();
+        const subs = (data.tasks || []).filter((t: { parentTaskId?: string | null }) => t.parentTaskId === task!.id);
+        setSubTasks(subs);
+      } catch { /* ignore */ }
+    }
+    fetchSubTasks();
+  }, [task]);
+
+  const addSubTask = async () => {
+    if (!task || !newSubTaskTitle.trim()) return;
+    try {
+      const res = await fetch('/api/tasks', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          projectId: task.projectId,
+          title: newSubTaskTitle.trim(),
+          status: 'backlog',
+          parentTaskId: task.id,
+        }),
+      });
+      if (!res.ok) throw new Error('Failed to create sub-task');
+      const data = await res.json();
+      setSubTasks(prev => [...prev, data.task]);
+      setNewSubTaskTitle('');
+      setAddingSubTask(false);
+      toast.success('Sub-task added');
+    } catch {
+      toast.error('Failed to add sub-task');
+    }
+  };
+
+  const toggleSubTask = async (subTask: SubTask) => {
+    const newStatus = subTask.status === 'done' ? 'backlog' : 'done';
+    setSubTasks(prev => prev.map(st => st.id === subTask.id ? { ...st, status: newStatus } : st));
+    try {
+      await fetch(`/api/tasks/${subTask.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: newStatus }),
+      });
+    } catch {
+      // Revert on failure
+      setSubTasks(prev => prev.map(st => st.id === subTask.id ? { ...st, status: subTask.status } : st));
+      toast.error('Failed to update sub-task');
+    }
+  };
+
+  const deleteSubTask = async (subTaskId: string) => {
+    const prev = subTasks;
+    setSubTasks(st => st.filter(s => s.id !== subTaskId));
+    try {
+      await fetch(`/api/tasks/${subTaskId}`, { method: 'DELETE' });
+    } catch {
+      setSubTasks(prev);
+      toast.error('Failed to delete sub-task');
+    }
+  };
 
   const hasChanges = task && (
     title !== task.title ||
@@ -240,6 +315,78 @@ export function TaskDetailModal({
                 </Button>
               )}
             </div>
+          </div>
+
+          {/* Sub-tasks */}
+          <div className="pt-2 border-t dark:border-zinc-700">
+            <div className="flex items-center justify-between mb-2">
+              <label className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
+                <CheckSquare className="h-3.5 w-3.5" />
+                Sub-tasks
+                {subTasks.length > 0 && (
+                  <span className="text-[10px] text-muted-foreground/70">
+                    ({subTasks.filter(s => s.status === 'done').length}/{subTasks.length})
+                  </span>
+                )}
+              </label>
+              {!addingSubTask && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-6 text-xs"
+                  onClick={() => setAddingSubTask(true)}
+                >
+                  <Plus className="h-3 w-3 mr-1" />
+                  Add
+                </Button>
+              )}
+            </div>
+            {subTasks.length > 0 && (
+              <div className="space-y-1 mb-2">
+                {subTasks.map((st) => (
+                  <div key={st.id} className="flex items-center gap-2 group/sub">
+                    <button
+                      onClick={() => toggleSubTask(st)}
+                      className="shrink-0"
+                    >
+                      {st.status === 'done' ? (
+                        <CheckSquare className="h-4 w-4 text-green-500" />
+                      ) : (
+                        <Square className="h-4 w-4 text-muted-foreground" />
+                      )}
+                    </button>
+                    <span className={`text-sm flex-1 ${st.status === 'done' ? 'line-through text-muted-foreground' : ''}`}>
+                      {st.title}
+                    </span>
+                    <button
+                      onClick={() => deleteSubTask(st.id)}
+                      className="opacity-0 group-hover/sub:opacity-100 transition-opacity p-0.5 hover:text-destructive"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+            {addingSubTask && (
+              <div className="flex items-center gap-2">
+                <Input
+                  placeholder="Sub-task title..."
+                  value={newSubTaskTitle}
+                  onChange={(e) => setNewSubTaskTitle(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') addSubTask();
+                    if (e.key === 'Escape') { setAddingSubTask(false); setNewSubTaskTitle(''); }
+                  }}
+                  autoFocus
+                  className="h-8 text-sm flex-1"
+                />
+                <Button size="sm" className="h-8 text-xs" onClick={addSubTask}>Add</Button>
+                <Button size="sm" variant="ghost" className="h-8 text-xs" onClick={() => { setAddingSubTask(false); setNewSubTaskTitle(''); }}>
+                  <X className="h-3 w-3" />
+                </Button>
+              </div>
+            )}
           </div>
 
           {/* Metadata */}

@@ -5,7 +5,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { ChevronDown, ChevronRight, CheckCircle, XCircle, Loader2, RefreshCw, Plus, Trash2, Save, Eye, EyeOff } from 'lucide-react';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { ChevronDown, ChevronRight, CheckCircle, XCircle, Loader2, RefreshCw, Plus, Trash2, Save, Eye, EyeOff, Download, Upload, AlertTriangle } from 'lucide-react';
+import { toast } from 'sonner';
 import Link from 'next/link';
 
 interface AuditLog {
@@ -39,6 +41,12 @@ export default function SettingsPage() {
   const [promptLoading, setPromptLoading] = useState(true);
   const [promptSaving, setPromptSaving] = useState(false);
   const [promptMessage, setPromptMessage] = useState('');
+
+  // Backup & Restore
+  const [backupLoading, setBackupLoading] = useState(false);
+  const [restoreLoading, setRestoreLoading] = useState(false);
+  const [restoreFile, setRestoreFile] = useState<File | null>(null);
+  const [restoreDialogOpen, setRestoreDialogOpen] = useState(false);
 
   // Vault
   const [vaultEntries, setVaultEntries] = useState<VaultEntry[]>([]);
@@ -182,6 +190,59 @@ export default function SettingsPage() {
     if (auditOpen && auditLogs.length === 0) fetchAuditLogs();
   }, [auditOpen]);
 
+  // Backup download
+  const handleDownloadBackup = async () => {
+    setBackupLoading(true);
+    try {
+      const res = await fetch('/api/backup');
+      if (!res.ok) {
+        const data = await res.json();
+        toast.error(data.error || 'Backup failed');
+        return;
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = res.headers.get('Content-Disposition')?.match(/filename="(.+)"/)?.[1] || 'clawdify-backup.tar.gz';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      toast.success('Backup downloaded');
+    } catch {
+      toast.error('Failed to create backup');
+    } finally {
+      setBackupLoading(false);
+    }
+  };
+
+  // Restore from backup
+  const handleRestore = async () => {
+    if (!restoreFile) return;
+    setRestoreLoading(true);
+    try {
+      const formData = new FormData();
+      formData.append('backup', restoreFile);
+      const res = await fetch('/api/backup/restore?confirm=true', {
+        method: 'POST',
+        body: formData,
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        toast.error(data.error || 'Restore failed');
+        return;
+      }
+      toast.success(data.message || 'Backup restored successfully');
+      setRestoreFile(null);
+      setRestoreDialogOpen(false);
+    } catch {
+      toast.error('Failed to restore backup');
+    } finally {
+      setRestoreLoading(false);
+    }
+  };
+
   return (
     <div className="p-4 sm:p-6 max-w-2xl mx-auto space-y-6">
       <h1 className="text-2xl font-bold">Settings</h1>
@@ -221,6 +282,68 @@ export default function SettingsPage() {
             <label className="text-sm font-medium">Workspace Path</label>
             <Input value={process.env.OPENCLAW_WORKSPACE_PATH || '~/.openclaw/workspace'} disabled className="bg-muted font-mono text-xs" />
           </div>
+        </CardContent>
+      </Card>
+
+      {/* Backup & Export */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Backup & Export</CardTitle>
+          <CardDescription>Download a full backup or restore from a previous one. Includes database and workspace files. Remote access is handled via Tailscale.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex flex-wrap gap-3">
+            <Button onClick={handleDownloadBackup} disabled={backupLoading} className="gap-2">
+              {backupLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+              Download Full Backup
+            </Button>
+            <Dialog open={restoreDialogOpen} onOpenChange={setRestoreDialogOpen}>
+              <Button variant="outline" className="gap-2" onClick={() => setRestoreDialogOpen(true)}>
+                <Upload className="h-4 w-4" />
+                Restore from Backup
+              </Button>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle className="flex items-center gap-2">
+                    <AlertTriangle className="h-5 w-5 text-destructive" />
+                    Restore from Backup
+                  </DialogTitle>
+                  <DialogDescription>
+                    This will <strong>overwrite</strong> your current database and workspace files. A safety copy of the current database will be saved before restoring. This cannot be easily undone.
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="space-y-3">
+                  <Input
+                    type="file"
+                    accept=".tar.gz,.tgz"
+                    onChange={(e) => setRestoreFile(e.target.files?.[0] || null)}
+                  />
+                  {restoreFile && (
+                    <p className="text-sm text-muted-foreground">
+                      Selected: {restoreFile.name} ({(restoreFile.size / 1024 / 1024).toFixed(2)} MB)
+                    </p>
+                  )}
+                </div>
+                <DialogFooter>
+                  <Button variant="outline" onClick={() => { setRestoreDialogOpen(false); setRestoreFile(null); }}>
+                    Cancel
+                  </Button>
+                  <Button
+                    variant="destructive"
+                    onClick={handleRestore}
+                    disabled={!restoreFile || restoreLoading}
+                    className="gap-2"
+                  >
+                    {restoreLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <AlertTriangle className="h-4 w-4" />}
+                    Restore
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Backups include the full SQLite database and all workspace files packaged as a .tar.gz archive.
+          </p>
         </CardContent>
       </Card>
 

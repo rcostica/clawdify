@@ -81,7 +81,7 @@ function SortableProjectItem({ project }: { project: ProjectNode }) {
 
   if (hasChildren) {
     return (
-      <div ref={setNodeRef} style={style}>
+      <div ref={setNodeRef} style={style} className="group/project">
         <Collapsible asChild className="group/collapsible">
           <SidebarMenuItem>
             <CollapsibleTrigger asChild>
@@ -98,6 +98,14 @@ function SortableProjectItem({ project }: { project: ProjectNode }) {
                 </span>
                 <span>{project.icon || '📁'}</span>
                 <span className="flex-1">{project.name}</span>
+                <Link
+                  href={`/project/new?parentId=${project.id}`}
+                  onClick={(e) => e.stopPropagation()}
+                  className="hidden group-hover/project:flex h-4 w-4 items-center justify-center rounded-sm text-muted-foreground hover:text-foreground hover:bg-muted"
+                  title="New sub-project"
+                >
+                  <Plus className="h-3 w-3" />
+                </Link>
                 <ChevronRight className="ml-auto transition-transform duration-200 group-data-[state=open]/collapsible:rotate-90" />
               </SidebarMenuButton>
             </CollapsibleTrigger>
@@ -117,7 +125,7 @@ function SortableProjectItem({ project }: { project: ProjectNode }) {
   }
 
   return (
-    <div ref={setNodeRef} style={style}>
+    <div ref={setNodeRef} style={style} className="group/project">
       <SidebarMenuItem>
         <SidebarMenuButton
           isActive={isSelected}
@@ -139,6 +147,13 @@ function SortableProjectItem({ project }: { project: ProjectNode }) {
             )}
           </Link>
         </SidebarMenuButton>
+        <Link
+          href={`/project/new?parentId=${project.id}`}
+          className="absolute right-1 top-1/2 -translate-y-1/2 hidden group-hover/project:flex h-5 w-5 items-center justify-center rounded-sm text-muted-foreground hover:text-foreground hover:bg-muted"
+          title="New sub-project"
+        >
+          <Plus className="h-3 w-3" />
+        </Link>
       </SidebarMenuItem>
     </div>
   );
@@ -153,35 +168,42 @@ function ProjectTreeItem({ project, level = 0 }: { project: ProjectNode; level?:
 
   if (hasChildren) {
     return (
-      <Collapsible asChild className="group/collapsible">
-        <SidebarMenuItem>
-          <CollapsibleTrigger asChild>
-            <SidebarMenuButton
-              isActive={isSelected}
-              onClick={() => selectProject(project.id)}
+      <Collapsible className="group/subtree">
+        <CollapsibleTrigger asChild>
+          <SidebarMenuSubButton
+            isActive={isSelected}
+            onClick={() => selectProject(project.id)}
+            className="w-full"
+          >
+            <span>{project.icon || '📁'}</span>
+            <span className="flex-1">{project.name}</span>
+            <Link
+              href={`/project/new?parentId=${project.id}`}
+              onClick={(e) => e.stopPropagation()}
+              className="hidden group-hover/subtree:flex h-4 w-4 items-center justify-center rounded-sm text-muted-foreground hover:text-foreground hover:bg-muted"
+              title="New sub-project"
             >
-              <span>{project.icon || '📁'}</span>
-              <span className="flex-1">{project.name}</span>
-              <ChevronRight className="ml-auto transition-transform duration-200 group-data-[state=open]/collapsible:rotate-90" />
-            </SidebarMenuButton>
-          </CollapsibleTrigger>
-          <CollapsibleContent>
-            <SidebarMenuSub>
-              {project.children.map((child: ProjectNode) => (
-                <SidebarMenuSubItem key={child.id}>
-                  <ProjectTreeItem project={child} level={level + 1} />
-                </SidebarMenuSubItem>
-              ))}
-            </SidebarMenuSub>
-          </CollapsibleContent>
-        </SidebarMenuItem>
+              <Plus className="h-3 w-3" />
+            </Link>
+            <ChevronRight className="ml-auto transition-transform duration-200 group-data-[state=open]:rotate-90" />
+          </SidebarMenuSubButton>
+        </CollapsibleTrigger>
+        <CollapsibleContent>
+          <SidebarMenuSub>
+            {project.children.map((child: ProjectNode) => (
+              <SidebarMenuSubItem key={child.id}>
+                <ProjectTreeItem project={child} level={level + 1} />
+              </SidebarMenuSubItem>
+            ))}
+          </SidebarMenuSub>
+        </CollapsibleContent>
       </Collapsible>
     );
   }
 
   return (
-    <SidebarMenuItem>
-      <SidebarMenuButton
+    <div className="group/subtree relative">
+      <SidebarMenuSubButton
         isActive={isSelected}
         onClick={() => selectProject(project.id)}
         asChild
@@ -193,8 +215,15 @@ function ProjectTreeItem({ project, level = 0 }: { project: ProjectNode; level?:
             <span className="h-2 w-2 rounded-full bg-blue-500 shrink-0" />
           )}
         </Link>
-      </SidebarMenuButton>
-    </SidebarMenuItem>
+      </SidebarMenuSubButton>
+      <Link
+        href={`/project/new?parentId=${project.id}`}
+        className="absolute right-1 top-1/2 -translate-y-1/2 hidden group-hover/subtree:flex h-5 w-5 items-center justify-center rounded-sm text-muted-foreground hover:text-foreground hover:bg-muted"
+        title="New sub-project"
+      >
+        <Plus className="h-3 w-3" />
+      </Link>
+    </div>
   );
 }
 

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import fs from 'fs/promises';
 import path from 'path';
+import { incrementFileAccess } from '@/lib/file-intelligence';
 
 const WORKSPACE_PATH = process.env.OPENCLAW_WORKSPACE_PATH || '';
 
@@ -74,6 +75,20 @@ export async function GET(request: NextRequest) {
       });
     } else {
       // It's a file — return its content
+
+      // Track file access for the memory system (fire-and-forget)
+      // Determine which project directory this file belongs to by checking
+      // if the path is inside a project workspace (first path segment)
+      const pathSegments = normalizedPath.split('/').filter(Boolean);
+      if (pathSegments.length >= 1) {
+        const projectWorkspace = pathSegments[0];
+        const projectDir = path.join(WORKSPACE_PATH, projectWorkspace);
+        const fileRelPath = pathSegments.slice(1).join('/');
+        if (fileRelPath) {
+          incrementFileAccess(projectDir, fileRelPath).catch(() => {});
+        }
+      }
+
       const ext = path.extname(fullPath).slice(1).toLowerCase();
       const isImage = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg'].includes(ext);
       const isBinary = ['pdf', 'zip', 'tar', 'gz', 'exe', 'bin', 'db', 'sqlite'].includes(ext);
@@ -86,6 +101,18 @@ export async function GET(request: NextRequest) {
         };
         return new Response(buffer, {
           headers: { 'Content-Type': mimeMap[ext] || 'application/octet-stream' },
+        });
+      }
+
+      const isAudio = ['webm', 'ogg', 'mp3', 'wav', 'm4a'].includes(ext);
+      if (isAudio) {
+        const buffer = await fs.readFile(fullPath);
+        const audioMimeMap: Record<string, string> = {
+          webm: 'audio/webm', ogg: 'audio/ogg', mp3: 'audio/mpeg',
+          wav: 'audio/wav', m4a: 'audio/mp4',
+        };
+        return new Response(buffer, {
+          headers: { 'Content-Type': audioMimeMap[ext] || 'application/octet-stream' },
         });
       }
 
@@ -139,6 +166,17 @@ export async function POST(request: NextRequest) {
     switch (action) {
       case 'create-file': {
         await fs.mkdir(path.dirname(fullPath), { recursive: true });
+        // Backup CONTEXT.md before overwriting
+        if (path.basename(fullPath) === 'CONTEXT.md') {
+          try {
+            const existing = await fs.readFile(fullPath, 'utf-8');
+            await fs.writeFile(
+              path.join(path.dirname(fullPath), '.CONTEXT.md.bak'),
+              existing,
+              'utf-8',
+            );
+          } catch { /* no existing file to backup */ }
+        }
         await fs.writeFile(fullPath, content || '', 'utf-8');
         return NextResponse.json({ success: true, path: normalizedPath });
       }

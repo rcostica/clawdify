@@ -4,7 +4,7 @@ import { useEffect, useState, useRef, useCallback, use } from 'react';
 import { useProjectsStore } from '@/lib/stores/projects';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Button } from '@/components/ui/button';
-import { Send, MessageSquare, Square, Loader2, Paperclip, X, FileText, FileCode, File as FileIcon, Search, Copy, Check, Reply, Upload, ChevronUp, ChevronDown, FolderKanban, Files } from 'lucide-react';
+import { Send, MessageSquare, Square, Loader2, Paperclip, X, FileText, FileCode, File as FileIcon, Search, Copy, Check, Reply, Upload, ChevronUp, ChevronDown, FolderKanban, Files, Mic } from 'lucide-react';
 import { useChatAttachmentsStore } from '@/lib/stores/chat-attachments';
 import { useNotificationsStore, getLastSeen, setLastSeen } from '@/lib/stores/notifications';
 import { useSearchParams } from 'next/navigation';
@@ -13,12 +13,19 @@ import { SplitPane } from '@/components/split-pane';
 import { TasksPanel } from '@/components/tasks-panel';
 import { FilesPanel } from '@/components/files-panel';
 import { ProjectMobileTabs, type ProjectMobileTab } from '@/components/project-mobile-tabs';
+import { DocsPanel } from '@/components/docs-panel';
 import type { Project } from '@/lib/db/schema';
 
 const IMAGE_EXTENSIONS = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg'];
 function isImageFile(name: string): boolean {
   const ext = name.split('.').pop()?.toLowerCase() || '';
   return IMAGE_EXTENSIONS.includes(ext);
+}
+
+const AUDIO_EXTENSIONS = ['webm', 'ogg', 'mp3', 'wav', 'm4a'];
+function isAudioFile(name: string): boolean {
+  const ext = name.split('.').pop()?.toLowerCase() || '';
+  return AUDIO_EXTENSIONS.includes(ext);
 }
 
 interface AttachedFile {
@@ -74,6 +81,7 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
   const [input, setInput] = useState('');
   const [sending, setSending] = useState(false);
   const [streamingContent, setStreamingContent] = useState('');
+  const [tabId] = useState(() => `tab-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`);
   const pendingAttachments = useChatAttachmentsStore((s) => s.pending);
   const clearPending = useChatAttachmentsStore((s) => s.clearPending);
   const [attachedFiles, setAttachedFiles] = useState<AttachedFile[]>([]);
@@ -95,6 +103,12 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
   const abortControllerRef = useRef<AbortController | null>(null);
   const sendingRef = useRef(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [isRecording, setIsRecording] = useState(false);
+  const [recordingDuration, setRecordingDuration] = useState(0);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const recordingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
+  const pendingVoiceRef = useRef<AttachedFile | null>(null);
 
   useEffect(() => {
     selectProject(id);
@@ -137,6 +151,38 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
 
     return () => selectProject(null);
   }, [id, selectProject]);
+
+  // Real-time cross-device sync via SSE
+  useEffect(() => {
+    const evtSource = new EventSource(`/api/events?projectId=${id}`);
+
+    evtSource.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        if (data.type === 'message' && data.message) {
+          // Skip events from our own tab
+          if (data.tabId === tabId) return;
+          const msg = data.message;
+          setMessages((prev) => {
+            // Skip if we already have this message by ID
+            if (prev.some((m) => m.id === msg.id)) return prev;
+            return [...prev, {
+              id: msg.id,
+              role: msg.role,
+              content: msg.content,
+              createdAt: new Date(msg.createdAt),
+            }];
+          });
+        }
+      } catch { /* ignore parse errors */ }
+    };
+
+    evtSource.onerror = () => {
+      // EventSource auto-reconnects; nothing to do here
+    };
+
+    return () => evtSource.close();
+  }, [id, tabId]);
 
   // Recover from background suspension (mobile PWA)
   // When user switches apps mid-stream, the fetch connection dies.
@@ -403,6 +449,179 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
     e.target.value = '';
   }, [uploadFile]);
 
+  // Start voice recording
+  const startRecording = useCallback(async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mimeOptions: MediaRecorderOptions = {};
+      if (typeof MediaRecorder !== 'undefined' && typeof MediaRecorder.isTypeSupported === 'function') {
+        if (MediaRecorder.isTypeSupported('audio/webm')) {
+          mimeOptions.mimeType = 'audio/webm';
+        } else if (MediaRecorder.isTypeSupported('audio/mp4')) {
+          mimeOptions.mimeType = 'audio/mp4';
+        } else if (MediaRecorder.isTypeSupported('audio/ogg')) {
+          mimeOptions.mimeType = 'audio/ogg';
+        }
+      }
+      const mediaRecorder = new MediaRecorder(stream, mimeOptions);
+      mediaRecorderRef.current = mediaRecorder;
+      audioChunksRef.current = [];
+
+      mediaRecorder.ondataavailable = (e) => {
+        if (e.data.size > 0) {
+          audioChunksRef.current.push(e.data);
+        }
+      };
+
+      mediaRecorder.onstop = async () => {
+        stream.getTracks().forEach(t => t.stop());
+        const recMime = mediaRecorder.mimeType;
+        const ext = recMime.includes('webm') ? 'webm' : recMime.includes('ogg') ? 'ogg' : recMime.includes('mp4') ? 'm4a' : 'webm';
+        const blob = new Blob(audioChunksRef.current, { type: recMime });
+        const file = new File([blob], `voice-${Date.now()}.${ext}`, { type: recMime });
+
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('directory', '_uploads');
+        try {
+          const res = await fetch('/api/files/upload', { method: 'POST', body: formData });
+          if (!res.ok) throw new Error('Upload failed');
+          const data = await res.json();
+          // Auto-send voice message immediately
+          const voiceFile = { path: data.path, name: data.name, size: data.size, extension: ext };
+          pendingVoiceRef.current = voiceFile;
+        } catch (err) {
+          console.error('Voice upload failed:', err);
+          toast.error('Failed to upload voice message');
+        }
+      };
+
+      mediaRecorder.start();
+      setIsRecording(true);
+      setRecordingDuration(0);
+      recordingTimerRef.current = setInterval(() => {
+        setRecordingDuration(prev => prev + 1);
+      }, 1000);
+    } catch (err) {
+      console.error('Mic access denied:', err);
+      toast.error('Microphone access denied');
+    }
+  }, []);
+
+  // Auto-send voice message once upload completes
+  const sendVoiceMessage = useCallback(async (voiceFile: AttachedFile) => {
+    const voiceMsg: Message = {
+      id: `msg-${Date.now()}`,
+      role: 'user',
+      content: '🎙️',
+      attachedFiles: [voiceFile],
+      createdAt: new Date(),
+    };
+    setMessages((prev) => [...prev, voiceMsg]);
+    setSending(true);
+    sendingRef.current = true;
+    setStreamingContent('');
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+    try {
+      const res = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          message: '🎙️ [Voice message]',
+          projectId: id,
+          tabId,
+          attachedFiles: [voiceFile.path],
+        }),
+        signal: controller.signal,
+      });
+      if (!res.ok) {
+        const error = await res.json().catch(() => ({ error: 'Unknown error' }));
+        throw new Error(error.error || `Error ${res.status}`);
+      }
+      if (!res.body) throw new Error('No response body');
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let accumulated = '';
+      let lineBuf = '';
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        lineBuf += decoder.decode(value, { stream: true });
+        const parts = lineBuf.split('\n');
+        lineBuf = parts.pop() || '';
+        for (const line of parts) {
+          const trimmed = line.trim();
+          if (!trimmed.startsWith('data: ')) continue;
+          const data = trimmed.slice(6);
+          if (data === '[DONE]') continue;
+          try {
+            const parsed = JSON.parse(data);
+            const delta = parsed.choices?.[0]?.delta?.content;
+            if (delta) { accumulated += delta; setStreamingContent(accumulated); }
+          } catch { /* skip */ }
+        }
+      }
+      if (accumulated) {
+        setMessages((prev) => [...prev, {
+          id: `msg-${Date.now()}-assistant`,
+          role: 'assistant',
+          content: accumulated,
+          createdAt: new Date(),
+        }]);
+      }
+    } catch (error) {
+      if ((error as Error).name !== 'AbortError') {
+        setMessages((prev) => [...prev, {
+          id: `msg-${Date.now()}-error`,
+          role: 'assistant',
+          content: `⚠️ Error: ${(error as Error).message}`,
+          createdAt: new Date(),
+        }]);
+      }
+    } finally {
+      setSending(false);
+      sendingRef.current = false;
+      setStreamingContent('');
+      abortControllerRef.current = null;
+    }
+  }, [id]);
+
+  // Stop voice recording
+  const stopRecording = useCallback(() => {
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+      mediaRecorderRef.current.stop();
+    }
+    setIsRecording(false);
+    if (recordingTimerRef.current) {
+      clearInterval(recordingTimerRef.current);
+      recordingTimerRef.current = null;
+    }
+    // Poll for pending voice file (uploaded in onstop handler)
+    const checkInterval = setInterval(() => {
+      if (pendingVoiceRef.current) {
+        const voiceFile = pendingVoiceRef.current;
+        pendingVoiceRef.current = null;
+        clearInterval(checkInterval);
+        sendVoiceMessage(voiceFile);
+      }
+    }, 100);
+    // Safety timeout — stop checking after 10s
+    setTimeout(() => clearInterval(checkInterval), 10000);
+  }, [sendVoiceMessage]);
+
+  // Cleanup recording on unmount
+  useEffect(() => {
+    return () => {
+      if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+        mediaRecorderRef.current.stop();
+      }
+      if (recordingTimerRef.current) {
+        clearInterval(recordingTimerRef.current);
+      }
+    };
+  }, []);
+
   // Handle paste (for screenshots / images)
   const handlePaste = useCallback((e: React.ClipboardEvent) => {
     const items = e.clipboardData?.items;
@@ -454,19 +673,20 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
   }, [addFile]);
 
   const handleSend = useCallback(async () => {
-    if (!input.trim() || sending) return;
+    if ((!input.trim() && attachedFiles.length === 0) || sending) return;
 
     const currentFiles = [...attachedFiles];
+    const messageText = input.trim() || (currentFiles.some(f => isAudioFile(f.name)) ? '🎙️' : '📎');
     const userMessage: Message = {
       id: `msg-${Date.now()}`,
       role: 'user',
-      content: input.trim(),
+      content: messageText,
       attachedFiles: currentFiles.length > 0 ? currentFiles : undefined,
       createdAt: new Date(),
     };
 
     setMessages((prev) => [...prev, userMessage]);
-    const messageText = input.trim();
+    const sendText = messageText;
     const replyToId = replyTo?.id;
     const replyToContent = replyTo?.content;
     setInput('');
@@ -484,8 +704,9 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          message: messageText,
+          message: sendText,
           projectId: id,
+          tabId,
           attachedFiles: currentFiles.map(f => f.path),
           ...(replyToId ? { replyTo: { id: replyToId, content: replyToContent?.slice(0, 200) } } : {}),
         }),
@@ -499,33 +720,36 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
 
       if (!res.body) throw new Error('No response body');
 
-      // Read the SSE stream
+      // Read the SSE stream with proper line buffering
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
       let accumulated = '';
+      let lineBuf = ''; // buffer for partial lines across chunks
 
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
 
-        const chunk = decoder.decode(value, { stream: true });
-        const lines = chunk.split('\n');
+        lineBuf += decoder.decode(value, { stream: true });
+        const parts = lineBuf.split('\n');
+        // Keep the last part as it may be incomplete
+        lineBuf = parts.pop() || '';
 
-        for (const line of lines) {
-          if (line.startsWith('data: ')) {
-            const data = line.slice(6);
-            if (data === '[DONE]') continue;
+        for (const line of parts) {
+          const trimmed = line.trim();
+          if (!trimmed.startsWith('data: ')) continue;
+          const data = trimmed.slice(6);
+          if (data === '[DONE]') continue;
 
-            try {
-              const parsed = JSON.parse(data);
-              const delta = parsed.choices?.[0]?.delta?.content;
-              if (delta) {
-                accumulated += delta;
-                setStreamingContent(accumulated);
-              }
-            } catch {
-              // Not valid JSON, skip
+          try {
+            const parsed = JSON.parse(data);
+            const delta = parsed.choices?.[0]?.delta?.content;
+            if (delta) {
+              accumulated += delta;
+              setStreamingContent(accumulated);
             }
+          } catch {
+            // Incomplete JSON (shouldn't happen with line buffering, but be safe)
           }
         }
       }
@@ -602,7 +826,8 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
       abortControllerRef.current = null;
       inputRef.current?.focus();
     }
-  }, [input, sending, id, streamingContent]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [input, sending, id]);
 
   const handleStop = () => {
     abortControllerRef.current?.abort();
@@ -712,24 +937,35 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
                   >
                     {message.attachedFiles && message.attachedFiles.length > 0 && (
                       <div className="flex flex-wrap gap-1.5 mb-2">
-                        {message.attachedFiles.map((f) => (
-                          <span
-                            key={f.path}
-                            className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded bg-black/10 dark:bg-white/10"
-                            title={f.path}
-                          >
-                            {isImageFile(f.name) ? (
-                              <img
+                        {message.attachedFiles.map((f) =>
+                          isAudioFile(f.name) ? (
+                            <div key={f.path} className="w-full">
+                              <audio
+                                controls
+                                preload="metadata"
+                                className="h-8 max-w-[260px]"
                                 src={`/api/files?path=${encodeURIComponent(f.path)}`}
-                                alt={f.name}
-                                className="h-8 w-8 rounded object-cover"
                               />
-                            ) : (
-                              <FileText className="h-3 w-3" />
-                            )}
-                            {f.name}
-                          </span>
-                        ))}
+                            </div>
+                          ) : (
+                            <span
+                              key={f.path}
+                              className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded bg-black/10 dark:bg-white/10"
+                              title={f.path}
+                            >
+                              {isImageFile(f.name) ? (
+                                <img
+                                  src={`/api/files?path=${encodeURIComponent(f.path)}`}
+                                  alt={f.name}
+                                  className="h-8 w-8 rounded object-cover"
+                                />
+                              ) : (
+                                <FileText className="h-3 w-3" />
+                              )}
+                              {f.name}
+                            </span>
+                          )
+                        )}
                       </div>
                     )}
                     <p className="whitespace-pre-wrap text-sm leading-relaxed">
@@ -912,6 +1148,23 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
               ))}
             </div>
           )}
+          {/* Recording indicator */}
+          {isRecording && (
+            <div className="flex items-center gap-2 mb-2 px-3 py-2 rounded-md bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800">
+              <span className="h-2.5 w-2.5 rounded-full bg-red-500 animate-pulse" />
+              <span className="text-sm font-mono text-red-600 dark:text-red-400">
+                {Math.floor(recordingDuration / 60).toString().padStart(2, '0')}:{(recordingDuration % 60).toString().padStart(2, '0')}
+              </span>
+              <span className="text-xs text-red-500 dark:text-red-400">Recording...</span>
+              <button
+                onClick={stopRecording}
+                className="ml-auto p-1 rounded hover:bg-red-100 dark:hover:bg-red-900/50 text-red-600 dark:text-red-400"
+                title="Stop recording"
+              >
+                <Square className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          )}
           {/* Hidden file input for native upload */}
           <input
             ref={fileInputRef}
@@ -969,9 +1222,17 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
               <Button onClick={handleStop} variant="destructive" size="icon" className="shrink-0">
                 <Square className="h-4 w-4" />
               </Button>
-            ) : (
-              <Button onClick={handleSend} disabled={!input.trim()} size="icon" className="shrink-0">
+            ) : isRecording ? (
+              <Button onClick={stopRecording} variant="destructive" size="icon" className="shrink-0 animate-pulse">
+                <Square className="h-4 w-4" />
+              </Button>
+            ) : input.trim() || attachedFiles.length > 0 ? (
+              <Button onClick={handleSend} disabled={!input.trim() && attachedFiles.length === 0} size="icon" className="shrink-0">
                 <Send className="h-4 w-4" />
+              </Button>
+            ) : (
+              <Button onClick={startRecording} variant="ghost" size="icon" className="shrink-0">
+                <Mic className="h-4 w-4" />
               </Button>
             )}
           </div>
@@ -1033,6 +1294,7 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
           {mobileTab === 'chat' && chatContent}
           {mobileTab === 'tasks' && <TasksPanel projectId={id} showAll={project?.name?.toLowerCase() === "general"} />}
           {mobileTab === 'files' && <FilesPanel projectId={id} />}
+          {mobileTab === 'docs' && <DocsPanel projectId={id} />}
         </div>
       </div>
     </>

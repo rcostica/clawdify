@@ -43,7 +43,19 @@ export async function POST(request: NextRequest) {
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, '-')
       .replace(/^-|-$/g, '');
-    const workspacePath = `projects/${folderName}`;
+
+    // If parentId is provided, nest under parent's workspace path
+    let workspacePath = `projects/${folderName}`;
+    if (parentId) {
+      const parentProject = db.select().from(projects).where(eq(projects.id, parentId)).get();
+      if (!parentProject) {
+        return NextResponse.json(
+          { error: 'Parent project not found' },
+          { status: 404 }
+        );
+      }
+      workspacePath = `${parentProject.workspacePath}/${folderName}`;
+    }
 
     // Create the folder in workspace if configured
     if (WORKSPACE_PATH) {

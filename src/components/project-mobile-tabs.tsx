@@ -1,9 +1,9 @@
 "use client";
 
 import { cn } from "@/lib/utils";
-import { MessageSquare, CheckSquare, FolderOpen } from "lucide-react";
+import { MessageSquare, CheckSquare, FolderOpen, BookOpen } from "lucide-react";
 
-export type ProjectMobileTab = "chat" | "tasks" | "files";
+export type ProjectMobileTab = "chat" | "tasks" | "files" | "docs";
 
 interface ProjectMobileTabsProps {
   activeTab: ProjectMobileTab;
@@ -15,6 +15,7 @@ const tabs: { key: ProjectMobileTab; icon: typeof MessageSquare; label: string }
   { key: "chat", icon: MessageSquare, label: "Chat" },
   { key: "tasks", icon: CheckSquare, label: "Tasks" },
   { key: "files", icon: FolderOpen, label: "Files" },
+  { key: "docs", icon: BookOpen, label: "Docs" },
 ];
 
 export function ProjectMobileTabs({

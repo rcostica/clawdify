@@ -90,7 +90,21 @@ export const vault = sqliteTable('vault', {
   updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull(),
 });
 
+// Session summaries (progressive conversation compression)
+export const sessionSummaries = sqliteTable('session_summaries', {
+  id: text('id').primaryKey(),
+  threadId: text('thread_id').references(() => threads.id).notNull(),
+  content: text('content').notNull(),
+  messageCount: integer('message_count').notNull(),
+  firstMessageAt: integer('first_message_at', { mode: 'timestamp' }).notNull(),
+  lastMessageAt: integer('last_message_at', { mode: 'timestamp' }).notNull(),
+  lastMessageId: text('last_message_id'),
+  createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
+});
+
 // Type exports
+export type SessionSummary = typeof sessionSummaries.$inferSelect;
+export type NewSessionSummary = typeof sessionSummaries.$inferInsert;
 export type Project = typeof projects.$inferSelect;
 export type NewProject = typeof projects.$inferInsert;
 export type Thread = typeof threads.$inferSelect;

@@ -1,8 +1,8 @@
 # 🐒 Clawdify
 
-Mission Control for [OpenClaw](https://github.com/openclaw/openclaw) — a project-based web interface for managing your AI agent.
+**Mission Control for [OpenClaw](https://github.com/openclaw/openclaw)** — a project-based web interface that replaces chat apps as your primary AI agent frontend.
 
-Clawdify replaces chat apps (Telegram, Slack, Discord) as your primary OpenClaw frontend, giving you a proper workspace with project organization, kanban boards, file browsing, and conversation threads.
+<!-- screenshot: hero -->
 
 ## Features
 
@@ -14,15 +14,44 @@ Clawdify replaces chat apps (Telegram, Slack, Discord) as your primary OpenClaw 
 - **PIN authentication** — simple security for personal use
 - **Multi-device access** — works from any device on your network
 
-## Prerequisites
-
-- [Node.js](https://nodejs.org/) 18+ (22+ recommended)
-- [OpenClaw](https://github.com/openclaw/openclaw) running on the same machine
-- [Tailscale](https://tailscale.com/) (optional, for secure remote access + HTTPS)
-
 ## Quick Start
 
-### 1. Clone and install
+### Option A: Automated Setup (recommended)
+
+```bash
+git clone https://github.com/rcostica/clawdify.git
+cd clawdify
+npm install
+npm run setup
+```
+
+The setup wizard will auto-detect your gateway token, generate secrets, and write your `.env` file.
+
+Then build and start:
+
+```bash
+npm run build
+npm start
+```
+
+### Option B: Docker
+
+```bash
+git clone https://github.com/rcostica/clawdify.git
+cd clawdify
+cp .env.example .env
+# Edit .env with your gateway token and settings
+docker compose up -d
+```
+
+> **Connecting to the host's OpenClaw gateway from Docker:** Set `OPENCLAW_GATEWAY_URL=http://host.docker.internal:18789` in your `.env` file.
+
+### Option C: Manual Setup
+
+<details>
+<summary>Click to expand manual instructions</summary>
+
+#### 1. Clone and install
 
 ```bash
 git clone https://github.com/rcostica/clawdify.git
@@ -30,7 +59,7 @@ cd clawdify
 npm install
 ```
 
-### 2. Configure environment
+#### 2. Configure environment
 
 Create a `.env` file in the project root:
 
@@ -60,7 +89,7 @@ CLAWDIFY_SESSION_MAX_AGE=604800
 cat ~/.openclaw/config.yaml | grep token
 ```
 
-### 3. Run in development
+#### 3. Run in development
 
 ```bash
 npm run dev
@@ -68,16 +97,33 @@ npm run dev
 
 Open `http://localhost:3000` in your browser.
 
-### 4. Build for production
+#### 4. Build for production
 
 ```bash
 npm run build
 npm start
 ```
 
+</details>
+
+## Screenshots
+
+<!-- screenshot: chat -->
+<!-- screenshot: kanban -->
+<!-- screenshot: file-browser -->
+<!-- screenshot: mobile-pwa -->
+
+## Prerequisites
+
+- [Node.js](https://nodejs.org/) 18+ (22+ recommended)
+- [OpenClaw](https://github.com/openclaw/openclaw) running on the same machine
+- [Tailscale](https://tailscale.com/) (optional, for secure remote access + HTTPS)
+
 ## Deployment (Recommended Setup)
 
 The recommended setup runs Clawdify as a systemd service on the same machine as OpenClaw, with Tailscale providing secure HTTPS access from any device.
+
+> **Tip:** `npm run setup` can generate and install the systemd service for you automatically.
 
 ### Systemd Service
 
@@ -184,7 +230,7 @@ The app will launch fullscreen with no browser chrome — just like a native app
 
 ## Tech Stack
 
-- [Next.js 15](https://nextjs.org/) — React framework
+- [Next.js 16](https://nextjs.org/) — React framework
 - [Tailwind CSS v4](https://tailwindcss.com/) — Styling
 - [shadcn/ui](https://ui.shadcn.com/) — Component library
 - [Zustand](https://zustand-demo.pmnd.rs/) — State management

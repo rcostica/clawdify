@@ -790,7 +790,7 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const { message, projectId, sessionKey, attachedFiles, tabId } = await request.json();
+    const { message, projectId, sessionKey, attachedFiles, tabId, replyTo } = await request.json();
 
     if (!message || typeof message !== 'string') {
       return NextResponse.json({ error: 'Message is required' }, { status: 400 });
@@ -839,8 +839,15 @@ export async function POST(request: NextRequest) {
     if (summariesContext) systemParts.push(summariesContext);
     const systemContent = systemParts.join('\n\n');
 
-    // Build user message (with attached files if any)
+    // Build user message (with reply context and attached files if any)
     let userContent = message;
+
+    // Prepend reply/reference context if replying to a specific message
+    if (replyTo && typeof replyTo === 'object' && replyTo.content) {
+      const quotedContent = replyTo.content.slice(0, 300);
+      userContent = `[Replying to: "${quotedContent}"${replyTo.content.length > 300 ? '...' : ''}]\n\n${userContent}`;
+    }
+
     if (Array.isArray(attachedFiles) && attachedFiles.length > 0) {
       const fileContext = await readAttachedFiles(attachedFiles);
       if (fileContext) {

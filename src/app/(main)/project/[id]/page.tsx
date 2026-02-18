@@ -28,6 +28,26 @@ function isAudioFile(name: string): boolean {
   return AUDIO_EXTENSIONS.includes(ext);
 }
 
+function ThinkingIndicator() {
+  const [dots, setDots] = useState(1);
+  const [showText, setShowText] = useState(false);
+  useEffect(() => {
+    const dotTimer = setInterval(() => setDots(d => (d % 3) + 1), 500);
+    const textTimer = setTimeout(() => setShowText(true), 4000);
+    return () => { clearInterval(dotTimer); clearTimeout(textTimer); };
+  }, []);
+  return (
+    <div className="flex justify-start">
+      <div className="bg-muted rounded-lg px-4 py-2.5 flex items-center gap-2">
+        <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+        {showText && (
+          <span className="text-xs text-muted-foreground">Thinking{'.'.repeat(dots)}</span>
+        )}
+      </div>
+    </div>
+  );
+}
+
 interface AttachedFile {
   path: string;    // relative to workspace
   name: string;
@@ -111,6 +131,7 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
   const sendingRef = useRef(false);
+  const lastStreamDataRef = useRef<number>(0); // timestamp of last received SSE data
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [showBookmarksOnly, setShowBookmarksOnly] = useState(false);
   const [emojiPickerMessageId, setEmojiPickerMessageId] = useState<string | null>(null);
@@ -200,13 +221,24 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
   }, [id, tabId]);
 
   // Recover from background suspension (mobile PWA)
-  // When user switches apps mid-stream, the fetch connection dies.
-  // On return, refetch history from DB to get the completed response.
+  // When user switches apps mid-stream, the fetch connection may die.
+  // On return, check if the stream is actually stale before recovering.
   useEffect(() => {
     const handleVisibility = async () => {
       if (document.visibilityState === 'visible' && sendingRef.current) {
-        // Give the server a moment to finish writing the response
-        await new Promise(r => setTimeout(r, 1500));
+        // Check if the stream is still alive — only recover if no data received recently
+        const timeSinceLastData = Date.now() - lastStreamDataRef.current;
+        if (timeSinceLastData < 15000) {
+          // Stream received data recently — it's still working, don't kill it
+          return;
+        }
+
+        // Stream appears stale (>15s no data after tab return) — attempt recovery
+        await new Promise(r => setTimeout(r, 2000));
+        
+        // Double-check we're still sending (stream might have completed while we waited)
+        if (!sendingRef.current) return;
+
         try {
           const res = await fetch(`/api/chat?projectId=${id}`);
           if (res.ok) {
@@ -795,10 +827,12 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
       const decoder = new TextDecoder();
       let accumulated = '';
       let lineBuf = ''; // buffer for partial lines across chunks
+      lastStreamDataRef.current = Date.now(); // mark stream start
 
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
+        lastStreamDataRef.current = Date.now(); // track last data received
 
         lineBuf += decoder.decode(value, { stream: true });
         const parts = lineBuf.split('\n');
@@ -1273,11 +1307,7 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
             
             {/* Loading indicator (before stream starts) */}
             {sending && !streamingContent && (
-              <div className="flex justify-start">
-                <div className="bg-muted rounded-lg px-4 py-2.5">
-                  <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-                </div>
-              </div>
+              <ThinkingIndicator />
             )}
             
             <div ref={messagesEndRef} />

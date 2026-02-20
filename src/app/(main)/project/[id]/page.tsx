@@ -932,7 +932,7 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
       inputRef.current?.focus();
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [input, sending, id]);
+  }, [input, sending, id, attachedFiles, replyTo]);
 
   const handleStop = () => {
     abortControllerRef.current?.abort();

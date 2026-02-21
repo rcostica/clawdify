@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { chatStream } from '@/lib/gateway/client';
+import { chatStream, type ChatMessage } from '@/lib/gateway/client';
 import { db, messages, threads, projects, settings, vault, messageReactions } from '@/lib/db';
 import { eq, desc } from 'drizzle-orm';
 import { v4 as uuidv4 } from 'uuid';
@@ -9,6 +9,7 @@ import { eventBus } from '@/lib/event-bus';
 import { getTopAccessedFiles, readFirstLines, getOrGenerateFileTags } from '@/lib/file-intelligence';
 import fs from 'fs/promises';
 import path from 'path';
+import sharp from 'sharp';
 
 import { execFile } from 'child_process';
 import { promisify } from 'util';
@@ -627,75 +628,106 @@ async function buildProjectContext(projectId: string): Promise<string> {
   }
 }
 
-async function readAttachedFiles(filePaths: string[]): Promise<string> {
-  if (!filePaths.length || !WORKSPACE_PATH) return '';
+// Image extensions that should use the vision API
+const IMAGE_EXTS = ['png', 'jpg', 'jpeg', 'gif', 'webp'];
+const AUDIO_EXTS_SERVER = ['webm', 'ogg', 'mp3', 'wav', 'm4a'];
+const BINARY_EXTS = ['pdf', 'zip', 'tar', 'gz', 'exe', 'bin', 'db', 'sqlite'];
 
-  const blocks: string[] = [];
-  const MAX_FILE_SIZE = 100 * 1024;
+/** Resize an image to max 1536px on longest side, output as JPEG ~80% quality */
+async function resizeImageForVision(absPath: string): Promise<{ base64: string; mimeType: string }> {
+  const buffer = await sharp(absPath)
+    .resize(1536, 1536, { fit: 'inside', withoutEnlargement: true })
+    .jpeg({ quality: 80 })
+    .toBuffer();
+  return { base64: buffer.toString('base64'), mimeType: 'image/jpeg' };
+}
+
+type AttachmentResult = {
+  textBlocks: string[];         // text/audio/binary file descriptions
+  images: Array<{ url: string; relPath: string }>;  // vision API image data URIs
+};
+
+async function readAttachedFiles(filePaths: string[]): Promise<AttachmentResult> {
+  const result: AttachmentResult = { textBlocks: [], images: [] };
+  if (!filePaths.length || !WORKSPACE_PATH) return result;
+
+  const MAX_FILE_SIZE = 200 * 1024; // 200KB for text files
   const MAX_TOTAL_SIZE = 500 * 1024;
+  const MAX_IMAGES = 5;
   let totalSize = 0;
 
   for (const relPath of filePaths.slice(0, 10)) {
     try {
       const absPath = path.resolve(WORKSPACE_PATH, relPath);
       if (!absPath.startsWith(path.resolve(WORKSPACE_PATH))) {
-        blocks.push(`<file path="${relPath}">[ACCESS DENIED: outside workspace]</file>`);
+        result.textBlocks.push(`<file path="${relPath}">[ACCESS DENIED: outside workspace]</file>`);
         continue;
       }
 
       const ext = path.extname(relPath).slice(1).toLowerCase();
-      const audioExts = ['webm', 'ogg', 'mp3', 'wav', 'm4a'];
-      const binaryExts = ['pdf', 'zip', 'tar', 'gz', 'exe', 'bin', 'db', 'sqlite'];
 
-      // Handle audio: transcribe with Whisper, then include transcript
-      if (audioExts.includes(ext)) {
+      // Handle audio: transcribe with Whisper
+      if (AUDIO_EXTS_SERVER.includes(ext)) {
         try {
           const transcript = await transcribeAudio(absPath);
           if (transcript) {
-            blocks.push(`<file path="${relPath}">[Voice message transcription: "${transcript}"]\nThe user spoke this aloud — respond naturally as if in conversation.</file>`);
+            result.textBlocks.push(`<file path="${relPath}">[Voice message transcription: "${transcript}"]\nThe user spoke this aloud — respond naturally as if in conversation.</file>`);
           } else {
-            blocks.push(`<file path="${relPath}">[Voice message attached but could not be transcribed. Acknowledge that you received a voice message.]</file>`);
+            result.textBlocks.push(`<file path="${relPath}">[Voice message attached but could not be transcribed. Acknowledge that you received a voice message.]</file>`);
           }
         } catch (err) {
           console.error('[transcribe] Error:', err);
-          blocks.push(`<file path="${relPath}">[Voice message attached. Transcription failed — respond naturally as if they spoke to you.]</file>`);
+          result.textBlocks.push(`<file path="${relPath}">[Voice message attached. Transcription failed — respond naturally as if they spoke to you.]</file>`);
         }
         continue;
       }
-      if (binaryExts.includes(ext)) {
+
+      // Handle binary files
+      if (BINARY_EXTS.includes(ext)) {
         const stat = await fs.stat(absPath);
-        blocks.push(`<file path="${relPath}">[Binary file: ${(stat.size / 1024).toFixed(1)}KB .${ext}]</file>`);
+        result.textBlocks.push(`<file path="${relPath}">[Binary file: ${(stat.size / 1024).toFixed(1)}KB .${ext}]</file>`);
         continue;
       }
 
+      // Handle images: resize and prepare for vision API
+      if (IMAGE_EXTS.includes(ext)) {
+        if (result.images.length >= MAX_IMAGES) {
+          result.textBlocks.push(`<file path="${relPath}">[Image skipped: max ${MAX_IMAGES} images per message]</file>`);
+          continue;
+        }
+        try {
+          const { base64, mimeType } = await resizeImageForVision(absPath);
+          result.images.push({
+            url: `data:${mimeType};base64,${base64}`,
+            relPath,
+          });
+        } catch (imgErr) {
+          console.error('[image resize] Error:', imgErr);
+          result.textBlocks.push(`<file path="${relPath}">[Image could not be processed]</file>`);
+        }
+        continue;
+      }
+
+      // Handle text files
       const stat = await fs.stat(absPath);
       if (stat.size > MAX_FILE_SIZE) {
-        blocks.push(`<file path="${relPath}">[FILE TOO LARGE: ${(stat.size / 1024).toFixed(1)}KB, max 100KB]</file>`);
+        result.textBlocks.push(`<file path="${relPath}">[FILE TOO LARGE: ${(stat.size / 1024).toFixed(1)}KB, max ${MAX_FILE_SIZE / 1024}KB]</file>`);
         continue;
       }
-
       if (totalSize + stat.size > MAX_TOTAL_SIZE) {
-        blocks.push(`<file path="${relPath}">[SKIPPED: total attachment size limit reached]</file>`);
+        result.textBlocks.push(`<file path="${relPath}">[SKIPPED: total attachment size limit reached]</file>`);
         continue;
       }
 
-      const imageExts = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'bmp', 'ico'];
-      if (imageExts.includes(ext)) {
-        const buffer = await fs.readFile(absPath);
-        const base64 = buffer.toString('base64');
-        totalSize += stat.size;
-        blocks.push(`<file path="${relPath}" type="image/${ext === 'jpg' ? 'jpeg' : ext}">[Image: ${(stat.size / 1024).toFixed(1)}KB, base64-encoded]\ndata:image/${ext === 'jpg' ? 'jpeg' : ext};base64,${base64}\n</file>`);
-      } else {
-        const content = await fs.readFile(absPath, 'utf-8');
-        totalSize += stat.size;
-        blocks.push(`<file path="${relPath}">\n${content}\n</file>`);
-      }
+      const content = await fs.readFile(absPath, 'utf-8');
+      totalSize += stat.size;
+      result.textBlocks.push(`<file path="${relPath}">\n${content}\n</file>`);
     } catch {
-      blocks.push(`<file path="${relPath}">[FILE NOT FOUND]</file>`);
+      result.textBlocks.push(`<file path="${relPath}">[FILE NOT FOUND]</file>`);
     }
   }
 
-  return blocks.join('\n\n');
+  return result;
 }
 
 function getOrCreateThread(projectId: string): string {
@@ -840,23 +872,26 @@ export async function POST(request: NextRequest) {
     const systemContent = systemParts.join('\n\n');
 
     // Build user message (with reply context and attached files if any)
-    let userContent = message;
+    let userTextContent = message;
 
     // Prepend reply/reference context if replying to a specific message
     if (replyTo && typeof replyTo === 'object' && replyTo.content) {
       const quotedContent = replyTo.content.slice(0, 300);
-      userContent = `[Replying to: "${quotedContent}"${replyTo.content.length > 300 ? '...' : ''}]\n\n${userContent}`;
+      userTextContent = `[Replying to: "${quotedContent}"${replyTo.content.length > 300 ? '...' : ''}]\n\n${userTextContent}`;
     }
 
+    // Process attached files (images become vision content blocks, text stays inline)
+    let imageAttachments: Array<{ url: string; relPath: string }> = [];
     if (Array.isArray(attachedFiles) && attachedFiles.length > 0) {
-      const fileContext = await readAttachedFiles(attachedFiles);
-      if (fileContext) {
-        userContent = `${message}\n\n[Attached Files]\n${fileContext}`;
+      const { textBlocks, images } = await readAttachedFiles(attachedFiles);
+      imageAttachments = images;
+      if (textBlocks.length > 0) {
+        userTextContent = `${userTextContent}\n\n[Attached Files]\n${textBlocks.join('\n\n')}`;
       }
     }
 
     // Build messages array: system + history + current message
-    const chatMessages: Array<{ role: string; content: string }> = [
+    const chatMessages: ChatMessage[] = [
       { role: 'system', content: systemContent },
     ];
 
@@ -870,8 +905,18 @@ export async function POST(request: NextRequest) {
       chatMessages.push(...history);
     }
 
-    // Add current user message (with attachments, unredacted)
-    chatMessages.push({ role: 'user', content: userContent });
+    // Add current user message — use multimodal content blocks if images are attached
+    if (imageAttachments.length > 0) {
+      const contentParts: Array<{ type: 'text'; text: string } | { type: 'image_url'; image_url: { url: string } }> = [
+        { type: 'text', text: userTextContent },
+      ];
+      for (const img of imageAttachments) {
+        contentParts.push({ type: 'image_url', image_url: { url: img.url } });
+      }
+      chatMessages.push({ role: 'user', content: contentParts });
+    } else {
+      chatMessages.push({ role: 'user', content: userTextContent });
+    }
 
     const effectiveSessionKey = sessionKey || (
       projectId

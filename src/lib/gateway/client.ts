@@ -18,8 +18,17 @@ function headers(extra?: Record<string, string>): Record<string, string> {
  * Send a chat message and get a streaming response.
  * Returns a ReadableStream of SSE events.
  */
+type ContentPart =
+  | { type: 'text'; text: string }
+  | { type: 'image_url'; image_url: { url: string } };
+
+export type ChatMessage = {
+  role: string;
+  content: string | ContentPart[];
+};
+
 export async function chatStream(opts: {
-  messages: Array<{ role: string; content: string }>;
+  messages: ChatMessage[];
   sessionKey?: string;
   model?: string;
   user?: string;
@@ -61,7 +70,7 @@ export async function chatStream(opts: {
  * Send a chat message and get a non-streaming response.
  */
 export async function chat(opts: {
-  messages: Array<{ role: string; content: string }>;
+  messages: ChatMessage[];
   sessionKey?: string;
   model?: string;
   user?: string;

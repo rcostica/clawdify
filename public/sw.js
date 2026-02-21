@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'clawdify-v4';
+const CACHE_VERSION = 'clawdify-v5';
 const STATIC_CACHE = `static-${CACHE_VERSION}`;
 const DYNAMIC_CACHE = `dynamic-${CACHE_VERSION}`;
 
@@ -37,19 +37,8 @@ self.addEventListener('fetch', (e) => {
   // Skip non-GET requests
   if (request.method !== 'GET') return;
 
-  // Network-first for API calls
-  if (url.pathname.startsWith('/api/')) {
-    e.respondWith(
-      fetch(request)
-        .then((res) => {
-          const clone = res.clone();
-          caches.open(DYNAMIC_CACHE).then((cache) => cache.put(request, clone));
-          return res;
-        })
-        .catch(() => caches.match(request))
-    );
-    return;
-  }
+  // Never cache API calls — real-time data must always be fresh
+  if (url.pathname.startsWith('/api/')) return;
 
   // Stale-while-revalidate for static assets
   // Next.js hashes filenames so new deploys get new URLs automatically

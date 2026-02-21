@@ -1,0 +1,71 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="gash" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#fca5a5"/>
+      <stop offset="35%" stop-color="#ef4444"/>
+      <stop offset="75%" stop-color="#b91c1c"/>
+      <stop offset="100%" stop-color="#7f1d1d"/>
+    </linearGradient>
+    <filter id="glow">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="18"/>
+    </filter>
+    <filter id="shadow">
+      <feDropShadow dx="3" dy="3" stdDeviation="5" flood-color="#000" flood-opacity="0.9"/>
+    </filter>
+  </defs>
+  
+  <!-- Background -->
+  <rect x="8" y="8" width="496" height="496" rx="90" ry="90" fill="#111118"/>
+  
+  <!-- Ambient glow behind -->
+  <g filter="url(#glow)" opacity="0.3">
+    <rect x="80" y="60" width="350" height="400" rx="40" fill="#dc2626"/>
+  </g>
+  
+  <!-- 
+    3 BOLD claw gashes - wide tear shapes
+    Each is fat in the middle, tapered to sharp points at both ends
+    Slightly curved, slightly fanned apart
+  -->
+  
+  <!-- GASH 1 (left) -->
+  <path d="
+    M 160 60
+    C 148 80, 108 180, 98 260
+    C 88 340, 108 400, 145 455
+    L 155 448
+    C 125 395, 112 340, 120 262
+    C 128 185, 158 95, 168 68
+    Z
+  " fill="url(#gash)" filter="url(#shadow)"/>
+  
+  <!-- GASH 2 (center) - fattest -->
+  <path d="
+    M 272 45
+    C 256 75, 210 185, 200 275
+    C 190 365, 215 425, 260 470
+    L 274 462
+    C 235 418, 218 360, 226 278
+    C 234 195, 270 90, 284 55
+    Z
+  " fill="url(#gash)" filter="url(#shadow)"/>
+  
+  <!-- GASH 3 (right) -->
+  <path d="
+    M 380 72
+    C 370 95, 340 190, 330 270
+    C 320 350, 325 405, 356 452
+    L 366 445
+    C 342 400, 340 348, 348 272
+    C 356 196, 380 108, 390 80
+    Z
+  " fill="url(#gash)" filter="url(#shadow)"/>
+  
+  <!-- Bright highlights on left edges (light catch) -->
+  <path d="M 158 65 C 146 85, 110 182, 100 262 C 92 340, 110 398, 147 452"
+        stroke="#fca5a5" stroke-width="4" fill="none" opacity="0.5" stroke-linecap="round"/>
+  <path d="M 270 50 C 254 80, 212 188, 202 276 C 194 362, 216 422, 261 467"
+        stroke="#fca5a5" stroke-width="5" fill="none" opacity="0.5" stroke-linecap="round"/>
+  <path d="M 378 76 C 368 98, 342 192, 332 272 C 322 350, 326 404, 357 450"
+        stroke="#fca5a5" stroke-width="4" fill="none" opacity="0.5" stroke-linecap="round"/>
+</svg>

@@ -811,6 +811,7 @@ export async function GET(request: NextRequest) {
       content: m.content,
       bookmarked: m.bookmarked === 1,
       reactions: reactionsByMessage.get(m.id) || [],
+      attachedFiles: m.attachedFiles ? JSON.parse(m.attachedFiles) : undefined,
       createdAt: m.createdAt,
     })),
   });
@@ -833,12 +834,18 @@ export async function POST(request: NextRequest) {
     // Save user message
     const userMsgId = uuidv4();
     const userCreatedAt = new Date();
+    // Serialize attachment info for DB storage
+    const attachedFilesJson = Array.isArray(attachedFiles) && attachedFiles.length > 0
+      ? JSON.stringify(attachedFiles.map((fp: string) => ({ path: fp, name: fp.split('/').pop() || fp })))
+      : null;
+
     if (threadId) {
       db.insert(messages).values({
         id: userMsgId,
         threadId,
         role: 'user',
         content: redactSecrets(message),
+        attachedFiles: attachedFilesJson,
         createdAt: userCreatedAt,
       }).run();
 
@@ -848,7 +855,13 @@ export async function POST(request: NextRequest) {
           type: 'message',
           projectId,
           tabId,
-          message: { id: userMsgId, role: 'user', content: redactSecrets(message), createdAt: userCreatedAt.toISOString() },
+          message: {
+            id: userMsgId,
+            role: 'user',
+            content: redactSecrets(message),
+            attachedFiles: attachedFilesJson ? JSON.parse(attachedFilesJson) : undefined,
+            createdAt: userCreatedAt.toISOString(),
+          },
         });
       }
     }
@@ -883,11 +896,17 @@ export async function POST(request: NextRequest) {
     // Process attached files (images become vision content blocks, text stays inline)
     let imageAttachments: Array<{ url: string; relPath: string }> = [];
     if (Array.isArray(attachedFiles) && attachedFiles.length > 0) {
+      console.log('[chat] attachedFiles received:', JSON.stringify(attachedFiles));
       const { textBlocks, images } = await readAttachedFiles(attachedFiles);
+      console.log('[chat] readAttachedFiles result: textBlocks=%d, images=%d', textBlocks.length, images.length);
+      if (textBlocks.length > 0) console.log('[chat] textBlocks:', textBlocks.map(b => b.slice(0, 100)));
+      if (images.length > 0) console.log('[chat] images:', images.map(i => ({ relPath: i.relPath, urlLen: i.url.length })));
       imageAttachments = images;
       if (textBlocks.length > 0) {
         userTextContent = `${userTextContent}\n\n[Attached Files]\n${textBlocks.join('\n\n')}`;
       }
+    } else {
+      console.log('[chat] No attachedFiles in payload. Raw attachedFiles value:', attachedFiles);
     }
 
     // Build messages array: system + history + current message
@@ -925,6 +944,12 @@ export async function POST(request: NextRequest) {
     );
 
     // Call Gateway — the agent loop handles tools natively
+    console.log('[chat] Sending to gateway: %d messages, last msg content type=%s',
+      chatMessages.length,
+      Array.isArray(chatMessages[chatMessages.length - 1]?.content) 
+        ? `multimodal[${(chatMessages[chatMessages.length - 1].content as Array<{type:string}>).map(p => p.type).join(',')}]`
+        : 'text'
+    );
     const gatewayResponse = await chatStream({
       messages: chatMessages,
       sessionKey: effectiveSessionKey,

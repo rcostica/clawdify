@@ -36,6 +36,7 @@ export const messages = sqliteTable('messages', {
   model: text('model'),
   tokensUsed: integer('tokens_used'),
   bookmarked: integer('bookmarked').default(0).notNull(),
+  attachedFiles: text('attached_files'),  // JSON array of {path, name} objects
   createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
 });
 

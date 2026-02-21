@@ -6,9 +6,10 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { ChevronDown, ChevronRight, CheckCircle, XCircle, Loader2, RefreshCw, Plus, Trash2, Save, Eye, EyeOff, Download, Upload, AlertTriangle } from 'lucide-react';
+import { ChevronDown, ChevronRight, CheckCircle, XCircle, Loader2, RefreshCw, Plus, Trash2, Save, Eye, EyeOff, Download, Upload, AlertTriangle, Smartphone, Share } from 'lucide-react';
 import { toast } from 'sonner';
 import Link from 'next/link';
+import { usePWA } from '@/components/pwa-register';
 
 interface AuditLog {
   id: string;
@@ -47,6 +48,9 @@ export default function SettingsPage() {
   const [restoreLoading, setRestoreLoading] = useState(false);
   const [restoreFile, setRestoreFile] = useState<File | null>(null);
   const [restoreDialogOpen, setRestoreDialogOpen] = useState(false);
+
+  // PWA Install
+  const { canInstall, isInstalled, isIOS, promptInstall } = usePWA();
 
   // Vault
   const [vaultEntries, setVaultEntries] = useState<VaultEntry[]>([]);
@@ -271,6 +275,48 @@ export default function SettingsPage() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Install App */}
+      {!isInstalled && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Smartphone className="h-5 w-5" />
+              Install App
+            </CardTitle>
+            <CardDescription>
+              Install Clawdify as a standalone app for a native experience — no browser chrome, faster loading, home screen icon.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {canInstall ? (
+              <Button
+                onClick={async () => {
+                  const accepted = await promptInstall();
+                  if (accepted) {
+                    toast.success('Clawdify installed!');
+                  }
+                }}
+                className="gap-2"
+              >
+                <Download className="h-4 w-4" />
+                Install Clawdify
+              </Button>
+            ) : isIOS ? (
+              <div className="space-y-2 text-sm text-muted-foreground">
+                <p className="flex items-center gap-2">
+                  <Share className="h-4 w-4 flex-shrink-0" />
+                  Tap the <strong>Share</strong> button in Safari, then select <strong>&quot;Add to Home Screen&quot;</strong>.
+                </p>
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground">
+                Your browser will offer the install option after a couple of visits. You can also look for the install icon in your browser&apos;s address bar.
+              </p>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       {/* Workspace */}
       <Card>

@@ -1147,21 +1147,28 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
                                 src={`/api/files?path=${encodeURIComponent(f.path)}`}
                               />
                             </div>
+                          ) : isImageFile(f.name) ? (
+                            <a
+                              key={f.path}
+                              href={`/api/files?path=${encodeURIComponent(f.path)}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="block"
+                            >
+                              <img
+                                src={`/api/files?path=${encodeURIComponent(f.path)}`}
+                                alt={f.name}
+                                className="max-w-[280px] max-h-[200px] rounded-md object-cover cursor-pointer hover:opacity-90 transition-opacity"
+                                loading="lazy"
+                              />
+                            </a>
                           ) : (
                             <span
                               key={f.path}
                               className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded bg-black/10 dark:bg-white/10"
                               title={f.path}
                             >
-                              {isImageFile(f.name) ? (
-                                <img
-                                  src={`/api/files?path=${encodeURIComponent(f.path)}`}
-                                  alt={f.name}
-                                  className="h-8 w-8 rounded object-cover"
-                                />
-                              ) : (
-                                <FileText className="h-3 w-3" />
-                              )}
+                              <FileText className="h-3 w-3" />
                               {f.name}
                             </span>
                           )

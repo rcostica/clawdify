@@ -924,18 +924,15 @@ export async function POST(request: NextRequest) {
       chatMessages.push(...history);
     }
 
-    // Add current user message — use multimodal content blocks if images are attached
+    // Add current user message
+    // Note: The OpenClaw gateway's /v1/chat/completions endpoint extracts only text
+    // from content arrays (image_url blocks are silently dropped). So we include
+    // image file paths in the text so the AI can use its `image` tool to view them.
     if (imageAttachments.length > 0) {
-      const contentParts: Array<{ type: 'text'; text: string } | { type: 'image_url'; image_url: { url: string } }> = [
-        { type: 'text', text: userTextContent },
-      ];
-      for (const img of imageAttachments) {
-        contentParts.push({ type: 'image_url', image_url: { url: img.url } });
-      }
-      chatMessages.push({ role: 'user', content: contentParts });
-    } else {
-      chatMessages.push({ role: 'user', content: userTextContent });
+      const imageRefs = imageAttachments.map(img => img.relPath).join(', ');
+      userTextContent = `${userTextContent}\n\n[Attached Images: ${imageRefs}]\nThe user attached ${imageAttachments.length} image(s) to this message. The images are saved in the workspace. Use the image analysis tool to view them if needed. Workspace path: ${WORKSPACE_PATH}`;
     }
+    chatMessages.push({ role: 'user', content: userTextContent });
 
     const effectiveSessionKey = sessionKey || (
       projectId

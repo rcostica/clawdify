@@ -173,6 +173,7 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
               content: m.content,
               bookmarked: m.bookmarked || false,
               reactions: m.reactions || [],
+              attachedFiles: m.attachedFiles || undefined,
               createdAt: new Date(m.createdAt),
             })));
           }
@@ -206,6 +207,7 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
               content: msg.content,
               bookmarked: msg.bookmarked || false,
               reactions: msg.reactions || [],
+              attachedFiles: msg.attachedFiles || undefined,
               createdAt: new Date(msg.createdAt),
             }];
           });
@@ -250,6 +252,7 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
                 content: m.content,
                 bookmarked: m.bookmarked || false,
                 reactions: m.reactions || [],
+                attachedFiles: m.attachedFiles || undefined,
                 createdAt: new Date(m.createdAt),
               })));
             }
@@ -911,6 +914,7 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
                   content: m.content,
                   bookmarked: m.bookmarked || false,
                   reactions: m.reactions || [],
+                  attachedFiles: m.attachedFiles || undefined,
                   createdAt: new Date(m.createdAt),
                 })));
                 return; // Recovered successfully, no error shown

@@ -133,6 +133,7 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
   const sendingRef = useRef(false);
   const lastStreamDataRef = useRef<number>(0); // timestamp of last received SSE data
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [lightboxSrc, setLightboxSrc] = useState<string | null>(null);
   const [showBookmarksOnly, setShowBookmarksOnly] = useState(false);
   const [emojiPickerMessageId, setEmojiPickerMessageId] = useState<string | null>(null);
   const [isRecording, setIsRecording] = useState(false);
@@ -223,47 +224,54 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
   }, [id, tabId]);
 
   // Recover from background suspension (mobile PWA)
-  // When user switches apps mid-stream, the fetch connection may die.
-  // On return, check if the stream is actually stale before recovering.
+  // When user switches apps mid-stream, the fetch/SSE connections die.
+  // On return: always refresh messages to catch anything missed while backgrounded.
+  const lastVisibleRef = useRef<number>(Date.now());
   useEffect(() => {
+    const refreshMessages = async () => {
+      try {
+        const res = await fetch(`/api/chat?projectId=${id}`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data.messages?.length) {
+            setMessages(data.messages.map((m: any) => ({
+              id: m.id,
+              role: m.role,
+              content: m.content,
+              bookmarked: m.bookmarked || false,
+              reactions: m.reactions || [],
+              attachedFiles: m.attachedFiles || undefined,
+              createdAt: new Date(m.createdAt),
+            })));
+          }
+        }
+      } catch { /* ignore */ }
+    };
+
     const handleVisibility = async () => {
-      if (document.visibilityState === 'visible' && sendingRef.current) {
-        // Check if the stream is still alive — only recover if no data received recently
+      if (document.visibilityState !== 'visible') {
+        lastVisibleRef.current = Date.now();
+        return;
+      }
+
+      const awayMs = Date.now() - lastVisibleRef.current;
+
+      // If away for more than 5 seconds, refresh messages to catch missed SSE events
+      if (awayMs > 5000) {
+        await refreshMessages();
+      }
+
+      // Handle stale streaming state
+      if (sendingRef.current) {
         const timeSinceLastData = Date.now() - lastStreamDataRef.current;
         if (timeSinceLastData < 15000) {
-          // Stream received data recently — it's still working, don't kill it
-          return;
+          return; // Stream still alive
         }
 
-        // Stream appears stale (>15s no data after tab return) — attempt recovery
         await new Promise(r => setTimeout(r, 2000));
-        
-        // Double-check we're still sending (stream might have completed while we waited)
         if (!sendingRef.current) return;
 
-        try {
-          const res = await fetch(`/api/chat?projectId=${id}`);
-          if (res.ok) {
-            const data = await res.json();
-            if (data.messages?.length) {
-              setMessages(data.messages.map((m: any) => ({
-                id: m.id,
-                role: m.role,
-                content: m.content,
-                bookmarked: m.bookmarked || false,
-                reactions: m.reactions || [],
-                attachedFiles: m.attachedFiles || undefined,
-                createdAt: new Date(m.createdAt),
-              })));
-            }
-          }
-        } catch { /* ignore fetch errors during recovery */ }
-        // Clean up sending state
-        setSending(false);
-        sendingRef.current = false;
-        setStreamingContent('');
-        abortControllerRef.current?.abort();
-        abortControllerRef.current = null;
+        await refreshMessages();
       }
     };
     document.addEventListener('visibilitychange', handleVisibility);
@@ -1152,12 +1160,10 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
                               />
                             </div>
                           ) : isImageFile(f.name) ? (
-                            <a
+                            <button
                               key={f.path}
-                              href={`/api/files?path=${encodeURIComponent(f.path)}`}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="block"
+                              onClick={() => setLightboxSrc(`/api/files?path=${encodeURIComponent(f.path)}`)}
+                              className="block text-left"
                             >
                               <img
                                 src={`/api/files?path=${encodeURIComponent(f.path)}`}
@@ -1165,7 +1171,7 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
                                 className="max-w-[280px] max-h-[200px] rounded-md object-cover cursor-pointer hover:opacity-90 transition-opacity"
                                 loading="lazy"
                               />
-                            </a>
+                            </button>
                           ) : (
                             <span
                               key={f.path}
@@ -1604,6 +1610,26 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
           {mobileTab === 'docs' && <DocsPanel projectId={id} />}
         </div>
       </div>
+      {/* Image lightbox overlay */}
+      {lightboxSrc && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm"
+          onClick={() => setLightboxSrc(null)}
+        >
+          <button
+            onClick={() => setLightboxSrc(null)}
+            className="absolute top-4 right-4 p-2 rounded-full bg-black/50 hover:bg-black/70 text-white transition-colors"
+          >
+            <X className="h-6 w-6" />
+          </button>
+          <img
+            src={lightboxSrc}
+            alt="Full size preview"
+            className="max-w-[90vw] max-h-[90vh] object-contain rounded-lg shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          />
+        </div>
+      )}
     </>
   );
 }

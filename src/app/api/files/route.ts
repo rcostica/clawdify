@@ -22,6 +22,7 @@ export async function GET(request: NextRequest) {
 
   const searchParams = request.nextUrl.searchParams;
   const relativePath = searchParams.get('path') || '';
+  const showHidden = searchParams.get('showHidden') === 'true';
   
   // Prevent directory traversal
   const normalizedPath = path.normalize(relativePath).replace(/^(\.\.[/\\])+/, '');
@@ -38,7 +39,7 @@ export async function GET(request: NextRequest) {
       const entries = await fs.readdir(fullPath, { withFileTypes: true });
       const files: FileEntry[] = await Promise.all(
         entries
-          .filter(e => !e.name.startsWith('.')) // hide dotfiles
+          .filter(e => showHidden || !e.name.startsWith('.')) // hide dotfiles unless showHidden
           .sort((a, b) => {
             // Directories first, then alphabetical
             if (a.isDirectory() && !b.isDirectory()) return -1;
@@ -164,7 +165,8 @@ export async function POST(request: NextRequest) {
 
   try {
     switch (action) {
-      case 'create-file': {
+      case 'create-file':
+      case 'write-file': {
         await fs.mkdir(path.dirname(fullPath), { recursive: true });
         // Backup CONTEXT.md before overwriting
         if (path.basename(fullPath) === 'CONTEXT.md') {
@@ -177,7 +179,7 @@ export async function POST(request: NextRequest) {
             );
           } catch { /* no existing file to backup */ }
         }
-        await fs.writeFile(fullPath, content || '', 'utf-8');
+        await fs.writeFile(fullPath, content ?? '', 'utf-8');
         return NextResponse.json({ success: true, path: normalizedPath });
       }
       case 'create-directory': {

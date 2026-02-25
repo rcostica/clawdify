@@ -9,7 +9,7 @@ import { Input } from '@/components/ui/input';
 import {
   Folder, FileText, FileCode, FileImage, File as FileIcon,
   ChevronRight, ArrowLeft, Download, FolderPlus,
-  Loader2, Plus, MessageSquare, Upload, Pencil
+  Loader2, Plus, MessageSquare, Upload, Pencil, Eye, EyeOff, Save
 } from 'lucide-react';
 import { useChatAttachmentsStore } from '@/lib/stores/chat-attachments';
 import { toast } from 'sonner';
@@ -68,6 +68,10 @@ export function FilesPanel({ projectId }: { projectId: string }) {
   const [uploading, setUploading] = useState(false);
   const [renamingPath, setRenamingPath] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState('');
+  const [showHidden, setShowHidden] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [editContent, setEditContent] = useState('');
+  const [saving, setSaving] = useState(false);
 
   const toggleFileSelection = useCallback((entry: FileEntry) => {
     if (entry.type === 'directory') return;
@@ -113,23 +117,24 @@ export function FilesPanel({ projectId }: { projectId: string }) {
     setLoading(true);
     try {
       const fullPath = subPath ? `${basePath}/${subPath}` : basePath;
-      const res = await fetch(`/api/files?path=${encodeURIComponent(fullPath)}`);
+      const res = await fetch(`/api/files?path=${encodeURIComponent(fullPath)}${showHidden ? '&showHidden=true' : ''}`);
       if (!res.ok) throw new Error('Failed to load directory');
       const data = await res.json();
       setEntries(data.entries || []);
       setCurrentSubPath(subPath);
       setSelectedFile(null);
       setSelectedFiles(new Set());
+      setEditing(false);
     } catch {
       setEntries([]);
     } finally {
       setLoading(false);
     }
-  }, [basePath]);
+  }, [basePath, showHidden]);
 
   useEffect(() => {
-    if (basePath) fetchDirectory('');
-  }, [basePath, fetchDirectory]);
+    if (basePath) fetchDirectory(currentSubPath);
+  }, [basePath, fetchDirectory, showHidden]);
 
   const uploadFile = useCallback(async (file: File) => {
     if (!basePath) return;
@@ -269,6 +274,31 @@ export function FilesPanel({ projectId }: { projectId: string }) {
     setRenameValue('');
   };
 
+  const saveFile = useCallback(async () => {
+    if (!selectedFile) return;
+    setSaving(true);
+    try {
+      const res = await fetch('/api/files', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'write-file',
+          filePath: selectedFile.path,
+          content: editContent,
+        }),
+      });
+      if (!res.ok) throw new Error('Save failed');
+      toast.success('File saved');
+      // Update the selectedFile content in-place
+      setSelectedFile(prev => prev ? { ...prev, content: editContent, size: new Blob([editContent]).size } : null);
+      setEditing(false);
+    } catch {
+      toast.error('Failed to save file');
+    } finally {
+      setSaving(false);
+    }
+  }, [selectedFile, editContent]);
+
   const breadcrumbs = currentSubPath ? currentSubPath.split('/').filter(Boolean) : [];
 
   if (!project) {
@@ -297,6 +327,26 @@ export function FilesPanel({ projectId }: { projectId: string }) {
               </div>
             </div>
             <div className="flex gap-1">
+              {!selectedFile.binary && !editing && (
+                <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => {
+                  setEditContent(selectedFile.content || '');
+                  setEditing(true);
+                }}>
+                  <Pencil className="h-3 w-3 mr-1" />
+                  Edit
+                </Button>
+              )}
+              {editing && (
+                <Button variant="default" size="sm" className="h-7 text-xs" onClick={saveFile} disabled={saving}>
+                  {saving ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <Save className="h-3 w-3 mr-1" />}
+                  Save
+                </Button>
+              )}
+              {editing && (
+                <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => setEditing(false)}>
+                  Cancel
+                </Button>
+              )}
               <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => {
                 addAttachment({
                   path: selectedFile.path,
@@ -320,8 +370,40 @@ export function FilesPanel({ projectId }: { projectId: string }) {
                   <p className="text-xs text-muted-foreground">Binary file ({formatSize(selectedFile.size)})</p>
                 </div>
               </div>
+            ) : editing ? (
+              <textarea
+                value={editContent}
+                onChange={(e) => setEditContent(e.target.value)}
+                className="w-full h-full p-3 text-xs font-mono bg-background resize-none focus:outline-none leading-relaxed"
+                spellCheck={false}
+                autoFocus
+                onKeyDown={(e) => {
+                  // Ctrl/Cmd+S to save
+                  if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+                    e.preventDefault();
+                    saveFile();
+                  }
+                  // Tab inserts spaces
+                  if (e.key === 'Tab') {
+                    e.preventDefault();
+                    const start = e.currentTarget.selectionStart;
+                    const end = e.currentTarget.selectionEnd;
+                    const val = e.currentTarget.value;
+                    setEditContent(val.substring(0, start) + '  ' + val.substring(end));
+                    setTimeout(() => {
+                      e.currentTarget.selectionStart = e.currentTarget.selectionEnd = start + 2;
+                    }, 0);
+                  }
+                }}
+              />
             ) : (
-              <pre className="p-3 text-xs font-mono whitespace-pre-wrap break-words leading-relaxed">
+              <pre
+                className="p-3 text-xs font-mono whitespace-pre-wrap break-words leading-relaxed cursor-text"
+                onClick={() => {
+                  setEditContent(selectedFile.content || '');
+                  setEditing(true);
+                }}
+              >
                 {selectedFile.content}
               </pre>
             )}
@@ -338,6 +420,15 @@ export function FilesPanel({ projectId }: { projectId: string }) {
             <div className="flex-1 text-xs text-muted-foreground truncate ml-1">
               {project.icon} {project.name}{currentSubPath ? `/${currentSubPath}` : ''}
             </div>
+            <Button
+              variant="ghost"
+              size="icon"
+              className={`h-6 w-6 ${showHidden ? 'text-amber-500' : ''}`}
+              onClick={() => setShowHidden(v => !v)}
+              title={showHidden ? 'Hide dotfiles' : 'Show dotfiles (.env, etc.)'}
+            >
+              {showHidden ? <EyeOff className="h-3 w-3" /> : <Eye className="h-3 w-3" />}
+            </Button>
             <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setCreating('file')}>
               <Plus className="h-3 w-3" />
             </Button>

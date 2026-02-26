@@ -212,7 +212,7 @@ export function DocsPanel({ projectId }: { projectId: string }) {
               <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
             </div>
           ) : (
-            <ScrollArea className="flex-1">
+            <ScrollArea className="flex-1 min-h-0">
               <article className="prose prose-sm dark:prose-invert max-w-none p-4">
                 <ReactMarkdown>{fileContent}</ReactMarkdown>
               </article>
@@ -225,7 +225,7 @@ export function DocsPanel({ projectId }: { projectId: string }) {
             <BookOpen className="h-3.5 w-3.5 text-muted-foreground" />
             <span className="text-xs text-muted-foreground truncate flex-1">Documentation</span>
           </div>
-          <ScrollArea className="flex-1">
+          <ScrollArea className="flex-1 min-h-0">
             {treeLoading ? (
               <div className="py-1 space-y-1">
                 {[1, 2, 3, 4, 5].map((i) => (

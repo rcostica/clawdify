@@ -360,43 +360,43 @@ export function FilesPanel({ projectId }: { projectId: string }) {
               </Button>
             </div>
           </div>
-          <ScrollArea className="flex-1 min-h-0">
-            {fileLoading ? (
-              <div className="flex items-center justify-center py-8"><Loader2 className="h-5 w-5 animate-spin" /></div>
-            ) : selectedFile.binary ? (
-              <div className="flex items-center justify-center p-8 text-center">
-                <div>
-                  <FileIcon className="h-10 w-10 text-muted-foreground mx-auto mb-2" />
-                  <p className="text-xs text-muted-foreground">Binary file ({formatSize(selectedFile.size)})</p>
-                </div>
+          {fileLoading ? (
+            <div className="flex-1 flex items-center justify-center"><Loader2 className="h-5 w-5 animate-spin" /></div>
+          ) : selectedFile.binary ? (
+            <div className="flex-1 flex items-center justify-center p-8 text-center">
+              <div>
+                <FileIcon className="h-10 w-10 text-muted-foreground mx-auto mb-2" />
+                <p className="text-xs text-muted-foreground">Binary file ({formatSize(selectedFile.size)})</p>
               </div>
-            ) : editing ? (
-              <textarea
-                value={editContent}
-                onChange={(e) => setEditContent(e.target.value)}
-                className="w-full h-full p-3 text-xs font-mono bg-background resize-none focus:outline-none leading-relaxed"
-                spellCheck={false}
-                autoFocus
-                onKeyDown={(e) => {
-                  // Ctrl/Cmd+S to save
-                  if ((e.ctrlKey || e.metaKey) && e.key === 's') {
-                    e.preventDefault();
-                    saveFile();
-                  }
-                  // Tab inserts spaces
-                  if (e.key === 'Tab') {
-                    e.preventDefault();
-                    const start = e.currentTarget.selectionStart;
-                    const end = e.currentTarget.selectionEnd;
-                    const val = e.currentTarget.value;
-                    setEditContent(val.substring(0, start) + '  ' + val.substring(end));
-                    setTimeout(() => {
-                      e.currentTarget.selectionStart = e.currentTarget.selectionEnd = start + 2;
-                    }, 0);
-                  }
-                }}
-              />
-            ) : (
+            </div>
+          ) : editing ? (
+            <textarea
+              value={editContent}
+              onChange={(e) => setEditContent(e.target.value)}
+              className="flex-1 min-h-0 w-full p-3 text-xs font-mono bg-background resize-none focus:outline-none leading-relaxed"
+              spellCheck={false}
+              autoFocus
+              onKeyDown={(e) => {
+                // Ctrl/Cmd+S to save
+                if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+                  e.preventDefault();
+                  saveFile();
+                }
+                // Tab inserts spaces
+                if (e.key === 'Tab') {
+                  e.preventDefault();
+                  const start = e.currentTarget.selectionStart;
+                  const end = e.currentTarget.selectionEnd;
+                  const val = e.currentTarget.value;
+                  setEditContent(val.substring(0, start) + '  ' + val.substring(end));
+                  setTimeout(() => {
+                    e.currentTarget.selectionStart = e.currentTarget.selectionEnd = start + 2;
+                  }, 0);
+                }
+              }}
+            />
+          ) : (
+            <ScrollArea className="flex-1 min-h-0">
               <pre
                 className="p-3 text-xs font-mono whitespace-pre-wrap break-words leading-relaxed cursor-text"
                 onClick={() => {
@@ -406,8 +406,8 @@ export function FilesPanel({ projectId }: { projectId: string }) {
               >
                 {selectedFile.content}
               </pre>
-            )}
-          </ScrollArea>
+            </ScrollArea>
+          )}
         </div>
       ) : (
         <>

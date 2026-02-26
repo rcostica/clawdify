@@ -360,7 +360,7 @@ export function FilesPanel({ projectId }: { projectId: string }) {
               </Button>
             </div>
           </div>
-          <ScrollArea className="flex-1">
+          <ScrollArea className="flex-1 min-h-0">
             {fileLoading ? (
               <div className="flex items-center justify-center py-8"><Loader2 className="h-5 w-5 animate-spin" /></div>
             ) : selectedFile.binary ? (
@@ -476,7 +476,7 @@ export function FilesPanel({ projectId }: { projectId: string }) {
           )}
 
           <ScrollArea 
-            className={`flex-1 transition-colors ${isDragOver ? 'bg-primary/5 ring-2 ring-primary ring-inset' : ''}`}
+            className={`flex-1 min-h-0 transition-colors ${isDragOver ? 'bg-primary/5 ring-2 ring-primary ring-inset' : ''}`}
             onDragOver={handleDragOver}
             onDragLeave={handleDragLeave}
             onDrop={handleFileDrop}

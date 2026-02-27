@@ -104,21 +104,27 @@ Create `.env`:
 
 ```bash
 OPENCLAW_GATEWAY_URL=http://localhost:18789
-OPENCLAW_GATEWAY_TOKEN=your-token-here          # find in ~/.openclaw/config.yaml
+OPENCLAW_GATEWAY_TOKEN=your-token-here          # find in ~/.openclaw/openclaw.json → gateway.auth.token
 OPENCLAW_WORKSPACE_PATH=/home/you/.openclaw/workspace
 CLAWDIFY_SESSION_SECRET=$(openssl rand -hex 32)
 CLAWDIFY_PIN=1234                               # optional
 PORT=3000
 ```
 
-Enable the chat endpoint in `~/.openclaw/config.yaml`:
+Enable the chat endpoint in `~/.openclaw/openclaw.json` (add to the `gateway` object):
 
-```yaml
-gateway:
-  http:
-    endpoints:
-      chatCompletions:
-        enabled: true
+```json
+{
+  "gateway": {
+    "http": {
+      "endpoints": {
+        "chatCompletions": {
+          "enabled": true
+        }
+      }
+    }
+  }
+}
 ```
 
 ```bash
@@ -236,15 +242,7 @@ systemctl --user enable --now clawdify.service
 
 The gateway's `chatCompletions` endpoint is disabled (this is the default in OpenClaw).
 
-**Fix:** Run `npm run setup` again (it auto-enables it), then `openclaw gateway restart`. Or manually add to `~/.openclaw/config.yaml`:
-
-```yaml
-gateway:
-  http:
-    endpoints:
-      chatCompletions:
-        enabled: true
-```
+**Fix:** Run `npm run setup` again (it auto-enables it), then `openclaw gateway restart`. Or manually edit `~/.openclaw/openclaw.json` — set `gateway.http.endpoints.chatCompletions.enabled` to `true`.
 
 Check **Settings** in Clawdify — it shows the endpoint status with a green/red indicator.
 

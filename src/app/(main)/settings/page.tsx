@@ -89,6 +89,9 @@ export default function SettingsPage() {
   const [vaultMessage, setVaultMessage] = useState('');
   const [showValues, setShowValues] = useState(false);
 
+  // Chat endpoint status
+  const [chatEndpoint, setChatEndpoint] = useState<string>('unknown');
+
   // Check gateway status
   useEffect(() => {
     async function checkGateway() {
@@ -96,8 +99,14 @@ export default function SettingsPage() {
         const res = await fetch('/api/gateway/status');
         if (res.ok) {
           const data = await res.json();
-          setGatewayStatus('connected');
-          setGatewayInfo(data.version || 'Connected');
+          if (data.connected) {
+            setGatewayStatus('connected');
+            setGatewayInfo('Connected');
+          } else {
+            setGatewayStatus('error');
+            setGatewayInfo(data.error || 'Cannot connect');
+          }
+          setChatEndpoint(data.chatEndpoint || 'unknown');
         } else {
           setGatewayStatus('error');
           setGatewayInfo('Gateway returned error');
@@ -551,6 +560,35 @@ export default function SettingsPage() {
             <label className="text-sm font-medium">Gateway Token</label>
             <Input type="password" value="••••••••" disabled className="bg-muted" />
           </div>
+          {chatEndpoint === 'disabled' && (
+            <div className="rounded-md bg-destructive/10 border border-destructive/20 p-3 space-y-2">
+              <p className="text-sm font-medium text-destructive flex items-center gap-2">
+                <AlertTriangle className="h-4 w-4" />
+                Chat endpoint disabled
+              </p>
+              <p className="text-xs text-muted-foreground">
+                The gateway&apos;s <code className="bg-muted px-1 rounded">chatCompletions</code> endpoint is disabled. Clawdify can&apos;t send messages without it.
+              </p>
+              <p className="text-xs text-muted-foreground">
+                Add to <code className="bg-muted px-1 rounded">~/.openclaw/config.yaml</code>:
+              </p>
+              <pre className="text-xs bg-muted p-2 rounded font-mono">
+{`gateway:
+  http:
+    endpoints:
+      chatCompletions:
+        enabled: true`}
+              </pre>
+              <p className="text-xs text-muted-foreground">
+                Then restart: <code className="bg-muted px-1 rounded">openclaw gateway restart</code>
+              </p>
+            </div>
+          )}
+          {chatEndpoint === 'enabled' && (
+            <p className="text-xs text-green-500 flex items-center gap-1">
+              <CheckCircle className="h-3 w-3" /> Chat endpoint enabled
+            </p>
+          )}
         </CardContent>
       </Card>
 

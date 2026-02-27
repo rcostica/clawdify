@@ -212,7 +212,111 @@ async function main() {
   fs.writeFileSync(envPath, envContent, "utf-8");
   print(`  ${GREEN}✔${RESET}  Wrote ${BOLD}.env${RESET}`);
 
-  // Step 8: Systemd service
+  // Step 8: Enable gateway chatCompletions endpoint
+  print();
+  print(`  ${DIM}Checking gateway chat endpoint...${RESET}`);
+  
+  const chatEndpointEnabled = await (async () => {
+    if (!gatewayRunning) return false;
+    try {
+      return await new Promise((resolve) => {
+        const postData = JSON.stringify({
+          model: "openclaw:main",
+          messages: [{ role: "user", content: "ping" }],
+        });
+        const req = http.request(
+          `${gatewayUrl}/v1/chat/completions`,
+          {
+            method: "POST",
+            headers: {
+              "Authorization": `Bearer ${gatewayToken}`,
+              "Content-Type": "application/json",
+              "Content-Length": Buffer.byteLength(postData),
+            },
+            timeout: 5000,
+          },
+          (res) => {
+            res.resume();
+            // 405 = endpoint disabled, anything else = endpoint is responding
+            resolve(res.statusCode !== 405);
+          }
+        );
+        req.on("error", () => resolve(false));
+        req.on("timeout", () => { req.destroy(); resolve(false); });
+        req.write(postData);
+        req.end();
+      });
+    } catch { return false; }
+  })();
+
+  if (chatEndpointEnabled) {
+    print(`  ${GREEN}✔${RESET}  Chat completions endpoint is enabled`);
+  } else if (gatewayRunning) {
+    print(`  ${YELLOW}⚠${RESET}  Chat completions endpoint is ${BOLD}disabled${RESET} on the gateway.`);
+    print(`  ${DIM}  Clawdify needs this to send messages. Attempting to enable it...${RESET}`);
+    
+    // Try to enable it by patching the config
+    const configPath = path.join(os.homedir(), ".openclaw", "config.yaml");
+    let configFixed = false;
+    
+    try {
+      if (fs.existsSync(configPath)) {
+        let config = fs.readFileSync(configPath, "utf-8");
+        
+        // Check if chatCompletions is already mentioned
+        if (config.includes("chatCompletions")) {
+          // It's mentioned but probably set to false — replace
+          config = config.replace(
+            /enabled:\s*false\s*#?\s*chatCompletions/,
+            "enabled: true  # chatCompletions"
+          );
+          fs.writeFileSync(configPath, config, "utf-8");
+          configFixed = true;
+        } else {
+          // Need to add the http.endpoints.chatCompletions section
+          // Find or create gateway.http section
+          if (config.includes("gateway:")) {
+            // Add under gateway section
+            if (config.includes("http:")) {
+              // http section exists, add endpoints
+              config = config.replace(
+                /(\s*http:)/,
+                "$1\n    endpoints:\n      chatCompletions:\n        enabled: true"
+              );
+            } else {
+              // Add http section under gateway
+              config = config.replace(
+                /(gateway:)/,
+                "$1\n  http:\n    endpoints:\n      chatCompletions:\n        enabled: true"
+              );
+            }
+            fs.writeFileSync(configPath, config, "utf-8");
+            configFixed = true;
+          }
+        }
+      }
+    } catch (err) {
+      // Config patching failed
+    }
+
+    if (configFixed) {
+      print(`  ${GREEN}✔${RESET}  Updated ${DIM}~/.openclaw/config.yaml${RESET} — chatCompletions enabled`);
+      print(`  ${YELLOW}⚠${RESET}  Restart the gateway for this to take effect:`);
+      print(`    ${CYAN}openclaw gateway restart${RESET}`);
+    } else {
+      print(`  ${YELLOW}⚠${RESET}  Could not auto-patch config. Add this to ~/.openclaw/config.yaml manually:`);
+      print();
+      print(`    ${DIM}gateway:${RESET}`);
+      print(`    ${DIM}  http:${RESET}`);
+      print(`    ${DIM}    endpoints:${RESET}`);
+      print(`    ${DIM}      chatCompletions:${RESET}`);
+      print(`    ${DIM}        enabled: true${RESET}`);
+      print();
+      print(`    Then restart: ${CYAN}openclaw gateway restart${RESET}`);
+    }
+  }
+
+  // Step 9: Systemd service
   print();
   const wantSystemd = await ask(rl, "Create a systemd user service? (y/N)", "N");
 
@@ -265,7 +369,7 @@ async function main() {
 
   rl.close();
 
-  // Step 9: Done!
+  // Step 10: Done!
   print();
   print(`  ${GREEN}${BOLD}✔  Setup complete!${RESET}`);
   print();

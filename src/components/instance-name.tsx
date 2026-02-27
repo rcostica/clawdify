@@ -2,14 +2,18 @@
 
 import { useEffect, useState, createContext, useContext } from 'react';
 
-interface InstanceNameContextType {
+interface InstanceContextType {
   instanceName: string;
   setInstanceName: (name: string) => void;
+  instanceIconVersion: number;
+  bumpInstanceIcon: () => void;
 }
 
-const InstanceNameContext = createContext<InstanceNameContextType>({
+const InstanceNameContext = createContext<InstanceContextType>({
   instanceName: 'Clawdify',
   setInstanceName: () => {},
+  instanceIconVersion: 0,
+  bumpInstanceIcon: () => {},
 });
 
 export function useInstanceName() {
@@ -18,6 +22,9 @@ export function useInstanceName() {
 
 export function InstanceNameProvider({ children }: { children: React.ReactNode }) {
   const [instanceName, setInstanceName] = useState('Clawdify');
+  const [instanceIconVersion, setInstanceIconVersion] = useState(0);
+
+  const bumpInstanceIcon = () => setInstanceIconVersion(v => v + 1);
 
   useEffect(() => {
     async function load() {
@@ -39,7 +46,7 @@ export function InstanceNameProvider({ children }: { children: React.ReactNode }
   }, [instanceName]);
 
   return (
-    <InstanceNameContext.Provider value={{ instanceName, setInstanceName }}>
+    <InstanceNameContext.Provider value={{ instanceName, setInstanceName, instanceIconVersion, bumpInstanceIcon }}>
       {children}
     </InstanceNameContext.Provider>
   );

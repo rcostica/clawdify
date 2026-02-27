@@ -11,7 +11,7 @@ import { ChevronRight } from 'lucide-react';
 import Link from 'next/link';
 import type { Project } from '@/lib/db/schema';
 
-const EMOJI_OPTIONS = ['📁', '🚀', '💡', '📊', '🎯', '🔧', '📝', '🎨', '💰', '🔬', '📱', '🌐'];
+import { EmojiPicker } from '@/components/emoji-picker';
 
 export default function NewProjectPage() {
   return (
@@ -120,22 +120,7 @@ function NewProjectForm() {
             {/* Icon Selection */}
             <div className="space-y-2">
               <label className="text-sm font-medium">Icon</label>
-              <div className="flex flex-wrap gap-2">
-                {EMOJI_OPTIONS.map((emoji) => (
-                  <button
-                    key={emoji}
-                    type="button"
-                    onClick={() => setIcon(emoji)}
-                    className={`w-10 h-10 text-xl rounded-md border-2 transition-colors ${
-                      icon === emoji
-                        ? 'border-primary bg-primary/10'
-                        : 'border-transparent hover:bg-muted'
-                    }`}
-                  >
-                    {emoji}
-                  </button>
-                ))}
-              </div>
+              <EmojiPicker selected={icon} onSelect={setIcon} />
             </div>
 
             {/* Name */}

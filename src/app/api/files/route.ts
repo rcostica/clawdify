@@ -23,6 +23,7 @@ export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams;
   const relativePath = searchParams.get('path') || '';
   const showHidden = searchParams.get('showHidden') === 'true';
+  const download = searchParams.get('download') === 'true';
   
   // Prevent directory traversal
   const normalizedPath = path.normalize(relativePath).replace(/^(\.\.[/\\])+/, '');
@@ -34,6 +35,42 @@ export async function GET(request: NextRequest) {
 
   try {
     const stat = await fs.stat(fullPath);
+
+    // Download mode: serve any file as a downloadable attachment
+    if (download && !stat.isDirectory()) {
+      const buffer = await fs.readFile(fullPath);
+      const fileName = path.basename(fullPath);
+      const ext = path.extname(fullPath).slice(1).toLowerCase();
+      
+      // Common MIME types
+      const mimeMap: Record<string, string> = {
+        pdf: 'application/pdf', doc: 'application/msword',
+        docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        xls: 'application/vnd.ms-excel',
+        xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        ppt: 'application/vnd.ms-powerpoint',
+        pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+        csv: 'text/csv',
+        jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png',
+        gif: 'image/gif', webp: 'image/webp', svg: 'image/svg+xml',
+        mp3: 'audio/mpeg', wav: 'audio/wav', ogg: 'audio/ogg',
+        webm: 'audio/webm', m4a: 'audio/mp4', mp4: 'video/mp4',
+        zip: 'application/zip', tar: 'application/x-tar', gz: 'application/gzip',
+        json: 'application/json', xml: 'application/xml',
+        html: 'text/html', css: 'text/css', js: 'text/javascript',
+        ts: 'text/typescript', md: 'text/markdown', txt: 'text/plain',
+        py: 'text/x-python', sh: 'text/x-shellscript',
+      };
+      const contentType = mimeMap[ext] || 'application/octet-stream';
+      
+      return new Response(buffer, {
+        headers: {
+          'Content-Type': contentType,
+          'Content-Disposition': `attachment; filename="${encodeURIComponent(fileName)}"`,
+          'Content-Length': buffer.length.toString(),
+        },
+      });
+    }
 
     if (stat.isDirectory()) {
       const entries = await fs.readdir(fullPath, { withFileTypes: true });

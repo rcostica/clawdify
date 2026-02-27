@@ -36,6 +36,8 @@ import { useProjectsStore, buildProjectTree } from '@/lib/stores/projects';
 import { useNotificationsStore } from '@/lib/stores/notifications';
 import { toast } from 'sonner';
 import type { Project } from '@/lib/db/schema';
+import { useInstanceName } from '@/components/instance-name';
+import { ProjectIcon } from '@/components/project-icon';
 import { ThemeToggle } from '@/components/theme-toggle';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
@@ -100,7 +102,7 @@ function SortableProjectItem({ project }: { project: ProjectNode }) {
                   >
                     <GripVertical className="h-3 w-3" />
                   </span>
-                  <span>{project.icon || '📁'}</span>
+                  <ProjectIcon icon={project.icon} size="sm" />
                   <span className="flex-1 truncate">{project.name}</span>
                   {hasUnread && (
                     <span className="h-2 w-2 rounded-full bg-blue-500 shrink-0" />
@@ -152,7 +154,7 @@ function SortableProjectItem({ project }: { project: ProjectNode }) {
             >
               <GripVertical className="h-3 w-3" />
             </span>
-            <span>{project.icon || '📁'}</span>
+            <ProjectIcon icon={project.icon} size="sm" />
             <span className="flex-1">{project.name}</span>
             {hasUnread && (
               <span className="h-2 w-2 rounded-full bg-blue-500 shrink-0" />
@@ -189,7 +191,7 @@ function ProjectTreeItem({ project, level = 0 }: { project: ProjectNode; level?:
             className="flex-1 min-w-0"
           >
             <Link href={`/project/${project.id}`}>
-              <span>{project.icon || '📁'}</span>
+              <ProjectIcon icon={project.icon} size="sm" />
               <span className="flex-1 truncate">{project.name}</span>
               {hasUnread && (
                 <span className="h-2 w-2 rounded-full bg-blue-500 shrink-0" />
@@ -231,7 +233,7 @@ function ProjectTreeItem({ project, level = 0 }: { project: ProjectNode; level?:
         asChild
       >
         <Link href={`/project/${project.id}`}>
-          <span>{project.icon || '📁'}</span>
+          <ProjectIcon icon={project.icon} size="sm" />
           <span className="flex-1">{project.name}</span>
           {hasUnread && (
             <span className="h-2 w-2 rounded-full bg-blue-500 shrink-0" />
@@ -251,6 +253,7 @@ function ProjectTreeItem({ project, level = 0 }: { project: ProjectNode; level?:
 
 export function AppSidebar() {
   const { projects, loading, setProjects, setError, updateProject } = useProjectsStore();
+  const { instanceName: sidebarInstanceName, instanceIconVersion } = useInstanceName();
   const pathname = usePathname();
   const router = useRouter();
   const [logoutLoading, setLogoutLoading] = useState(false);
@@ -326,8 +329,8 @@ export function AppSidebar() {
     <Sidebar>
       <SidebarHeader className="border-b p-4">
         <Link href="/" className="flex items-center gap-2 font-semibold">
-          <span className="text-2xl">🐒</span>
-          <span>Clawdify</span>
+          <img src={`/api/instance-icon?size=192&v=${instanceIconVersion}`} alt="" className="h-7 w-7 rounded-md object-cover" />
+          <span>{sidebarInstanceName}</span>
         </Link>
       </SidebarHeader>
       

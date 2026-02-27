@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { ChevronDown, ChevronRight, CheckCircle, XCircle, Loader2, RefreshCw, Plus, Trash2, Save, Eye, EyeOff, Download, Upload, AlertTriangle, Smartphone, Share, FolderSearch, FolderPlus, FileText, Link2 } from 'lucide-react';
+import { ChevronDown, ChevronRight, CheckCircle, XCircle, Loader2, RefreshCw, Plus, Trash2, Save, Eye, EyeOff, Download, Upload, AlertTriangle, Smartphone, Share, FolderSearch, FolderPlus, FileText, Link2, Archive, RotateCcw} from 'lucide-react';
 import { toast } from 'sonner';
 import Link from 'next/link';
 import { usePWA } from '@/components/pwa-register';
@@ -58,6 +58,8 @@ export default function SettingsPage() {
 
   // Backup & Restore
   const [backupLoading, setBackupLoading] = useState(false);
+  const [archivedProjects, setArchivedProjects] = useState<any[]>([]);
+  const [restoringId, setRestoringId] = useState<string | null>(null);
   const [restoreLoading, setRestoreLoading] = useState(false);
   const [restoreFile, setRestoreFile] = useState<File | null>(null);
   const [restoreDialogOpen, setRestoreDialogOpen] = useState(false);
@@ -66,10 +68,12 @@ export default function SettingsPage() {
   const { canInstall, isInstalled, isIOS, promptInstall } = usePWA();
 
   // Instance name
-  const { instanceName: currentInstanceName, setInstanceName: setGlobalInstanceName } = useInstanceName();
+  const { instanceName: currentInstanceName, setInstanceName: setGlobalInstanceName, bumpInstanceIcon } = useInstanceName();
   const [instanceName, setInstanceName] = useState('');
   const [instanceNameLoading, setInstanceNameLoading] = useState(false);
   const [instanceNameMsg, setInstanceNameMsg] = useState('');
+  const [instanceIcon, setInstanceIcon] = useState<string | null>(null);
+  const [instanceIconUploading, setInstanceIconUploading] = useState(false);
 
   // Workspace Discovery
   const [discoveryLoading, setDiscoveryLoading] = useState(false);
@@ -534,6 +538,25 @@ export default function SettingsPage() {
     );
   };
 
+  // Fetch instance icon
+  useEffect(() => {
+    fetch('/api/settings?key=instance_icon')
+      .then(res => res.json())
+      .then(data => { if (data.value) setInstanceIcon(data.value); })
+      .catch(() => {});
+  }, []);
+
+  // Fetch archived projects
+  useEffect(() => {
+    fetch('/api/projects')
+      .then(res => res.json())
+      .then(data => {
+        const archived = (data.projects || []).filter((p: any) => p.status === 'archived');
+        setArchivedProjects(archived);
+      })
+      .catch(() => {});
+  }, []);
+
   return (
     <div className="p-4 sm:p-6 max-w-2xl mx-auto space-y-6">
       <h1 className="text-2xl font-bold">Settings</h1>
@@ -603,7 +626,7 @@ export default function SettingsPage() {
               Install App
             </CardTitle>
             <CardDescription>
-              Install Clawdify as a standalone app for a native experience — no browser chrome, faster loading, home screen icon.
+              Install {currentInstanceName} as a standalone app for a native experience — no browser chrome, faster loading, home screen icon.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -612,13 +635,13 @@ export default function SettingsPage() {
                 onClick={async () => {
                   const accepted = await promptInstall();
                   if (accepted) {
-                    toast.success('Clawdify installed!');
+                    toast.success(`${currentInstanceName} installed!`);
                   }
                 }}
                 className="gap-2"
               >
                 <Download className="h-4 w-4" />
-                Install Clawdify
+                Install {currentInstanceName}
               </Button>
             ) : isIOS ? (
               <div className="space-y-2 text-sm text-muted-foreground">
@@ -659,6 +682,79 @@ export default function SettingsPage() {
             </div>
             {instanceNameMsg && <p className="text-sm">{instanceNameMsg}</p>}
           </div>
+          {/* Instance Icon */}
+          <div className="space-y-2">
+            <label className="text-sm font-medium">Instance Icon</label>
+            <p className="text-xs text-muted-foreground">Custom icon for the sidebar and PWA. Recommended: square PNG, at least 192x192px.</p>
+            <div className="flex items-center gap-3">
+              <img
+                src={'/api/instance-icon?size=192&t=' + Date.now()}
+                alt="Instance icon"
+                className="h-12 w-12 rounded-lg object-cover border"
+                key={instanceIcon || 'default'}
+              />
+              <div className="flex flex-col gap-1.5">
+                <label className="cursor-pointer">
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={async (e) => {
+                      const file = e.target.files?.[0];
+                      if (!file) return;
+                      if (file.size > 2 * 1024 * 1024) { toast.error('Image must be under 2MB'); return; }
+                      setInstanceIconUploading(true);
+                      try {
+                        const formData = new FormData();
+                        formData.append('file', file);
+                        formData.append('directory', '_uploads/icons');
+                        const uploadRes = await fetch('/api/files/upload', { method: 'POST', body: formData });
+                        if (!uploadRes.ok) throw new Error('Upload failed');
+                        const uploadData = await uploadRes.json();
+                        // Save to settings
+                        await fetch('/api/settings', {
+                          method: 'PUT',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ key: 'instance_icon', value: uploadData.path }),
+                        });
+                        setInstanceIcon(uploadData.path);
+                        bumpInstanceIcon();
+                        toast.success('Instance icon updated — reinstall PWA to update the app icon');
+                      } catch { toast.error('Failed to upload icon'); }
+                      finally { setInstanceIconUploading(false); }
+                      e.target.value = '';
+                    }}
+                  />
+                  <Button variant="outline" size="sm" className="gap-1.5" asChild disabled={instanceIconUploading}>
+                    <span>
+                      {instanceIconUploading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}
+                      Upload Icon
+                    </span>
+                  </Button>
+                </label>
+                {instanceIcon && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="text-xs h-7"
+                    onClick={async () => {
+                      await fetch('/api/settings', {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ key: 'instance_icon', value: '' }),
+                      });
+                      setInstanceIcon(null);
+                      bumpInstanceIcon();
+                      toast.success('Reset to default icon');
+                    }}
+                  >
+                    Reset to default
+                  </Button>
+                )}
+              </div>
+            </div>
+          </div>
+
           <div className="space-y-2">
             <label className="text-sm font-medium">Workspace Path</label>
             <Input value={process.env.OPENCLAW_WORKSPACE_PATH || '~/.openclaw/workspace'} disabled className="bg-muted font-mono text-xs" />
@@ -704,6 +800,60 @@ export default function SettingsPage() {
                 <p className="text-sm text-muted-foreground">All folders are already linked to projects.</p>
               )}
             </>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Archived Projects */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Archive className="h-5 w-5" />
+            Archived Projects
+          </CardTitle>
+          <CardDescription>Projects you&apos;ve archived. Restore them to bring them back to the sidebar.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          {archivedProjects.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No archived projects.</p>
+          ) : (
+            <div className="space-y-2">
+              {archivedProjects.map((proj) => (
+                <div key={proj.id} className="flex items-center gap-3 p-3 rounded-md border bg-muted/30">
+                  <span className="text-lg">{proj.icon || '📁'}</span>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium truncate">{proj.name}</p>
+                    {proj.description && <p className="text-xs text-muted-foreground truncate">{proj.description}</p>}
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="gap-1.5 shrink-0"
+                    disabled={restoringId === proj.id}
+                    onClick={async () => {
+                      setRestoringId(proj.id);
+                      try {
+                        const res = await fetch('/api/projects/' + proj.id, {
+                          method: 'PATCH',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ status: 'active' }),
+                        });
+                        if (!res.ok) throw new Error('Failed to restore');
+                        setArchivedProjects(prev => prev.filter(p => p.id !== proj.id));
+                        toast.success(proj.name + ' restored');
+                      } catch {
+                        toast.error('Failed to restore project');
+                      } finally {
+                        setRestoringId(null);
+                      }
+                    }}
+                  >
+                    {restoringId === proj.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RotateCcw className="h-3.5 w-3.5" />}
+                    Restore
+                  </Button>
+                </div>
+              ))}
+            </div>
           )}
         </CardContent>
       </Card>

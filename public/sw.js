@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'clawdify-v5';
+const CACHE_VERSION = 'clawdify-v6';
 const STATIC_CACHE = `static-${CACHE_VERSION}`;
 const DYNAMIC_CACHE = `dynamic-${CACHE_VERSION}`;
 
@@ -6,8 +6,12 @@ const DYNAMIC_CACHE = `dynamic-${CACHE_VERSION}`;
 const APP_SHELL = [
   '/',
   '/manifest.json',
-  '/icon-192.png',
-  '/icon-512.png',
+];
+
+// URLs that should never be cached (dynamic content)
+const NO_CACHE_PATHS = [
+  '/api/',
+  '/manifest.json',
 ];
 
 self.addEventListener('install', (e) => {
@@ -37,14 +41,14 @@ self.addEventListener('fetch', (e) => {
   // Skip non-GET requests
   if (request.method !== 'GET') return;
 
-  // Never cache API calls — real-time data must always be fresh
-  if (url.pathname.startsWith('/api/')) return;
+  // Never cache API calls or manifest — must always be fresh
+  if (NO_CACHE_PATHS.some(p => url.pathname.startsWith(p))) return;
 
   // Stale-while-revalidate for static assets
-  // Next.js hashes filenames so new deploys get new URLs automatically
+  // But skip instance icons (they're dynamic)
   if (
     url.pathname.startsWith('/_next/static/') ||
-    url.pathname.match(/\.(png|jpg|jpeg|svg|gif|webp|ico|woff2?|ttf|eot)$/)
+    url.pathname.match(/\.(woff2?|ttf|eot)$/)
   ) {
     e.respondWith(
       caches.open(STATIC_CACHE).then(async (cache) => {
@@ -59,7 +63,7 @@ self.addEventListener('fetch', (e) => {
     return;
   }
 
-  // Network-first for HTML/navigation
+  // Network-first for everything else (HTML, images, etc.)
   e.respondWith(
     fetch(request)
       .then((res) => {

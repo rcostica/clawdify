@@ -41,6 +41,16 @@ function formatSize(bytes?: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+function downloadFile(filePath: string) {
+  const url = `/api/files?path=${encodeURIComponent(filePath)}&download=true`;
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filePath.split('/').pop() || 'file';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+}
+
 function getFileIcon(entry: FileEntry) {
   if (entry.type === 'directory') return <Folder className="h-4 w-4 text-blue-500" />;
   const ext = entry.extension?.toLowerCase();
@@ -391,6 +401,10 @@ export function FilesPanel({ projectId }: { projectId: string }) {
               </div>
             </div>
             <div className="flex gap-1">
+              <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => downloadFile(selectedFile.path)}>
+                <Download className="h-3 w-3 mr-1" />
+                Download
+              </Button>
               {!selectedFile.binary && !editing && (
                 <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => {
                   setEditContent(selectedFile.content || '');
@@ -430,7 +444,11 @@ export function FilesPanel({ projectId }: { projectId: string }) {
             <div className="flex-1 flex items-center justify-center p-8 text-center">
               <div>
                 <FileIcon className="h-10 w-10 text-muted-foreground mx-auto mb-2" />
-                <p className="text-xs text-muted-foreground">Binary file ({formatSize(selectedFile.size)})</p>
+                <p className="text-xs text-muted-foreground mb-3">Binary file ({formatSize(selectedFile.size)})</p>
+                <Button variant="default" size="sm" className="text-xs" onClick={() => downloadFile(selectedFile.path)}>
+                  <Download className="h-3.5 w-3.5 mr-1.5" />
+                  Download
+                </Button>
               </div>
             </div>
           ) : editing ? (
@@ -644,6 +662,15 @@ export function FilesPanel({ projectId }: { projectId: string }) {
                             <span className="text-[10px] text-muted-foreground">{formatSize(entry.size)}</span>
                           )}
                         </button>
+                        {entry.type === 'file' && (
+                          <button
+                            onClick={(e) => { e.stopPropagation(); downloadFile(entry.path); }}
+                            className="opacity-0 group-hover/entry:opacity-100 transition-opacity shrink-0 p-0.5 hover:bg-muted-foreground/10 rounded"
+                            title="Download"
+                          >
+                            <Download className="h-3 w-3 text-muted-foreground" />
+                          </button>
+                        )}
                         <button
                           onClick={(e) => { e.stopPropagation(); startRename(entry); }}
                           className="opacity-0 group-hover/entry:opacity-100 transition-opacity shrink-0 p-0.5 hover:bg-muted-foreground/10 rounded"

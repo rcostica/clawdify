@@ -161,7 +161,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { folders } = body as { folders: Array<{ relativePath: string; name?: string; icon?: string }> };
+    const { folders } = body as { folders: Array<{ relativePath: string; name?: string; icon?: string; parentWorkspacePath?: string }> };
 
     if (!Array.isArray(folders) || folders.length === 0) {
       return NextResponse.json({ error: 'No folders selected' }, { status: 400 });
@@ -204,6 +204,15 @@ export async function POST(request: NextRequest) {
         } catch { /* ignore */ }
       }
 
+      // Resolve parentId from parentWorkspacePath
+      let parentId: string | null = null;
+      if (folder.parentWorkspacePath) {
+        const parent = db.select().from(projects)
+          .where(eq(projects.workspacePath, folder.parentWorkspacePath))
+          .get();
+        if (parent) parentId = parent.id;
+      }
+
       const id = uuidv4();
       const now = new Date();
 
@@ -211,7 +220,7 @@ export async function POST(request: NextRequest) {
         id,
         name: projectName,
         description,
-        parentId: null,
+        parentId,
         icon: folder.icon || guessIcon(path.basename(folder.relativePath)),
         color: null,
         status: 'active',

@@ -345,11 +345,12 @@ export default function SettingsPage() {
     setImportLoading(true);
     try {
       // Build folder list with parent relationships
-      // Import parents first, then children
-      const allPaths = Array.from(selectedFolders);
+      // Ensure all parent targets are included even if not explicitly selected
+      const allPaths = new Set(selectedFolders);
+      parentMap.forEach((parentPath) => allPaths.add(parentPath));
       const childPaths = new Set(parentMap.keys());
-      const parentPaths = allPaths.filter(p => !childPaths.has(p));
-      const childPathsArr = allPaths.filter(p => childPaths.has(p));
+      const parentPaths = Array.from(allPaths).filter(p => !childPaths.has(p));
+      const childPathsArr = Array.from(allPaths).filter(p => childPaths.has(p));
       
       // Import parents first
       if (parentPaths.length > 0) {
@@ -386,7 +387,7 @@ export default function SettingsPage() {
         }
       }
 
-      const total = allPaths.length;
+      const total = allPaths.size;
       toast.success(`Created ${total} project${total > 1 ? 's' : ''}`);
       setParentMap(new Map());
       // Re-scan to update state
@@ -459,6 +460,12 @@ export default function SettingsPage() {
               setParentMap(prev => {
                 const next = new Map(prev);
                 next.set(childPath, folder.relativePath);
+                return next;
+              });
+              // Auto-select the parent folder for import
+              setSelectedFolders(prev => {
+                const next = new Set(prev);
+                next.add(folder.relativePath);
                 return next;
               });
             }

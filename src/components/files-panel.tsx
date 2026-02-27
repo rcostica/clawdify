@@ -120,7 +120,43 @@ export function FilesPanel({ projectId }: { projectId: string }) {
       const res = await fetch(`/api/files?path=${encodeURIComponent(fullPath)}${showHidden ? '&showHidden=true' : ''}`);
       if (!res.ok) throw new Error('Failed to load directory');
       const data = await res.json();
-      setEntries(data.entries || []);
+      let fileEntries = data.entries || [];
+
+      // At root level, inject sub-project directories that live outside this workspace
+      if (!subPath && project?.id) {
+        try {
+          const projRes = await fetch('/api/projects');
+          if (projRes.ok) {
+            const projData = await projRes.json();
+            const children = (projData.projects || []).filter(
+              (p: { parentId: string | null; status: string; workspacePath: string }) =>
+                p.parentId === project.id && p.status === 'active'
+            );
+            // Add virtual entries for sub-projects whose workspace is NOT inside this project's workspace
+            for (const child of children) {
+              const isNested = child.workspacePath.startsWith(basePath + '/');
+              if (!isNested) {
+                // This sub-project lives elsewhere — add a virtual directory entry
+                const alreadyExists = fileEntries.some(
+                  (e: FileEntry) => e.name === child.name && e.type === 'directory'
+                );
+                if (!alreadyExists) {
+                  fileEntries.push({
+                    name: `📎 ${child.name}`,
+                    path: child.workspacePath,
+                    type: 'directory' as const,
+                    extension: undefined,
+                    size: undefined,
+                    modifiedAt: undefined,
+                  });
+                }
+              }
+            }
+          }
+        } catch { /* ignore — sub-project injection is best-effort */ }
+      }
+
+      setEntries(fileEntries);
       setCurrentSubPath(subPath);
       setSelectedFile(null);
       setSelectedFiles(new Set());
@@ -130,7 +166,7 @@ export function FilesPanel({ projectId }: { projectId: string }) {
     } finally {
       setLoading(false);
     }
-  }, [basePath, showHidden]);
+  }, [basePath, showHidden, project?.id]);
 
   useEffect(() => {
     if (basePath) fetchDirectory(currentSubPath);
@@ -199,6 +235,25 @@ export function FilesPanel({ projectId }: { projectId: string }) {
 
   const handleEntryClick = (entry: FileEntry) => {
     if (entry.type === 'directory') {
+      // Check if this is a virtual sub-project link (path doesn't start with basePath)
+      if (!entry.path.startsWith(basePath)) {
+        // Navigate directly using the absolute workspace path as a "virtual" subpath
+        // We encode this by temporarily overriding basePath behavior
+        setLoading(true);
+        fetch(`/api/files?path=${encodeURIComponent(entry.path)}${showHidden ? '&showHidden=true' : ''}`)
+          .then(res => res.json())
+          .then(data => {
+            setEntries(data.entries || []);
+            // Store the virtual path so "go up" returns to root
+            setCurrentSubPath(`__virtual__:${entry.path}`);
+            setSelectedFile(null);
+            setSelectedFiles(new Set());
+            setEditing(false);
+          })
+          .catch(() => setEntries([]))
+          .finally(() => setLoading(false));
+        return;
+      }
       const relPath = entry.path.startsWith(basePath + '/')
         ? entry.path.slice(basePath.length + 1)
         : entry.path.replace(basePath, '').replace(/^\//, '');
@@ -209,6 +264,11 @@ export function FilesPanel({ projectId }: { projectId: string }) {
   };
 
   const goUp = () => {
+    // If we're in a virtual sub-project directory, go back to project root
+    if (currentSubPath.startsWith('__virtual__:')) {
+      fetchDirectory('');
+      return;
+    }
     const parts = currentSubPath.split('/').filter(Boolean);
     parts.pop();
     fetchDirectory(parts.join('/'));
@@ -299,7 +359,11 @@ export function FilesPanel({ projectId }: { projectId: string }) {
     }
   }, [selectedFile, editContent]);
 
-  const breadcrumbs = currentSubPath ? currentSubPath.split('/').filter(Boolean) : [];
+  const isVirtualPath = currentSubPath.startsWith('__virtual__:');
+  const virtualTarget = isVirtualPath ? currentSubPath.slice('__virtual__:'.length) : '';
+  const breadcrumbs = isVirtualPath
+    ? [virtualTarget.split('/').pop() || virtualTarget]
+    : currentSubPath ? currentSubPath.split('/').filter(Boolean) : [];
 
   if (!project) {
     return (
@@ -412,13 +476,13 @@ export function FilesPanel({ projectId }: { projectId: string }) {
       ) : (
         <>
           <div className="border-b px-3 py-2 flex items-center gap-1">
-            {currentSubPath && (
+            {(currentSubPath && currentSubPath !== '') && (
               <Button variant="ghost" size="icon" className="h-7 w-7" onClick={goUp}>
                 <ArrowLeft className="h-3.5 w-3.5" />
               </Button>
             )}
             <div className="flex-1 text-xs text-muted-foreground truncate ml-1">
-              {project.icon} {project.name}{currentSubPath ? `/${currentSubPath}` : ''}
+              {project.icon} {project.name}{isVirtualPath ? ` → ${virtualTarget.split('/').pop()}` : currentSubPath ? `/${currentSubPath}` : ''}
             </div>
             <Button
               variant="ghost"

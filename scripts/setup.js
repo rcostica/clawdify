@@ -78,6 +78,94 @@ function generateSecret() {
   return crypto.randomBytes(32).toString("hex");
 }
 
+function detectWorkspacePath() {
+  // Try reading from openclaw config
+  const configPath = path.join(os.homedir(), ".openclaw", "config.yaml");
+  try {
+    const content = fs.readFileSync(configPath, "utf-8");
+    for (const line of content.split("\n")) {
+      const match = line.match(/^\s*workspace:\s*['"]?(.+?)['"]?\s*$/);
+      if (match) {
+        let ws = match[1].trim();
+        ws = ws.replace(/^~/, os.homedir());
+        if (fs.existsSync(ws)) return ws;
+      }
+    }
+  } catch {}
+  // Fallback: check default location
+  const defaultPath = path.join(os.homedir(), ".openclaw", "workspace");
+  if (fs.existsSync(defaultPath)) return defaultPath;
+  return null;
+}
+
+function detectSessionsPath() {
+  const defaultPath = path.join(os.homedir(), ".openclaw", "agents", "main", "sessions");
+  if (fs.existsSync(defaultPath)) return defaultPath;
+  // Try just the agents dir
+  const agentsDir = path.join(os.homedir(), ".openclaw", "agents");
+  if (fs.existsSync(agentsDir)) {
+    // Find the first agent with a sessions dir
+    try {
+      const agents = fs.readdirSync(agentsDir);
+      for (const agent of agents) {
+        const sessDir = path.join(agentsDir, agent, "sessions");
+        if (fs.existsSync(sessDir)) return sessDir;
+      }
+    } catch {}
+  }
+  return null;
+}
+
+function enableChatCompletions() {
+  const configPath = path.join(os.homedir(), ".openclaw", "config.yaml");
+  try {
+    if (!fs.existsSync(configPath)) return false;
+    let config = fs.readFileSync(configPath, "utf-8");
+    
+    // Already enabled?
+    if (config.match(/chatCompletions[\s\S]*?enabled:\s*true/)) return true;
+    
+    // Has chatCompletions but disabled?
+    if (config.includes("chatCompletions")) {
+      config = config.replace(
+        /(chatCompletions:[\s\S]*?)enabled:\s*false/,
+        "$1enabled: true"
+      );
+      fs.writeFileSync(configPath, config, "utf-8");
+      return true;
+    }
+    
+    // Need to add it
+    if (config.includes("gateway:")) {
+      if (config.includes("http:")) {
+        if (config.includes("endpoints:")) {
+          config = config.replace(
+            /(endpoints:)/,
+            "$1\n      chatCompletions:\n        enabled: true"
+          );
+        } else {
+          config = config.replace(
+            /(http:)/,
+            "$1\n    endpoints:\n      chatCompletions:\n        enabled: true"
+          );
+        }
+      } else {
+        config = config.replace(
+          /(gateway:)/,
+          "$1\n  http:\n    endpoints:\n      chatCompletions:\n        enabled: true"
+        );
+      }
+    } else {
+      config += "\ngateway:\n  http:\n    endpoints:\n      chatCompletions:\n        enabled: true\n";
+    }
+    
+    fs.writeFileSync(configPath, config, "utf-8");
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 // ─── Help ─────────────────────────────────────────────────────────────────────
 
 if (process.argv.includes("--help") || process.argv.includes("-h")) {
@@ -125,198 +213,101 @@ async function main() {
 
   const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
 
-  // Step 1: Check gateway
-  print(`  ${DIM}Checking OpenClaw gateway...${RESET}`);
+  // Step 1: Detect everything
+  print(`  ${DIM}Detecting OpenClaw installation...${RESET}\n`);
+  
+  // Gateway
   const gatewayRunning = await checkPort("localhost", 18789);
   if (gatewayRunning) {
-    print(`  ${GREEN}✔${RESET}  Gateway is running on port 18789\n`);
+    print(`  ${GREEN}✔${RESET}  Gateway running on port 18789`);
   } else {
     print(`  ${YELLOW}⚠${RESET}  Gateway not detected on port 18789`);
-    print(`  ${DIM}  Make sure OpenClaw is running before using Clawdify.${RESET}\n`);
+    print(`  ${DIM}    Make sure OpenClaw is running before using Clawdify.${RESET}`);
   }
 
-  // Step 2: Detect gateway token
+  // Token
   let gatewayToken = detectGatewayToken();
   if (gatewayToken) {
     const masked = gatewayToken.slice(0, 6) + "..." + gatewayToken.slice(-4);
-    print(`  ${GREEN}✔${RESET}  Gateway token auto-detected: ${DIM}${masked}${RESET}`);
-    const useDetected = await ask(rl, "Use this token? (Y/n)", "Y");
-    if (useDetected.toLowerCase() === "n") {
-      gatewayToken = await ask(rl, "Enter gateway token");
+    print(`  ${GREEN}✔${RESET}  Gateway token: ${DIM}${masked}${RESET}`);
+  } else {
+    print(`  ${YELLOW}!${RESET}  Could not auto-detect gateway token`);
+    gatewayToken = await ask(rl, "Enter your OpenClaw gateway token");
+    if (!gatewayToken) {
+      print(`\n  ${RED}✗${RESET}  Gateway token is required. Aborting.\n`);
+      rl.close();
+      process.exit(1);
+    }
+  }
+
+  // Workspace
+  let workspacePath = detectWorkspacePath();
+  if (workspacePath) {
+    print(`  ${GREEN}✔${RESET}  Workspace: ${DIM}${workspacePath}${RESET}`);
+  } else {
+    print(`  ${YELLOW}!${RESET}  Could not detect workspace path`);
+    workspacePath = await ask(rl, "Workspace path", path.join(os.homedir(), ".openclaw", "workspace"));
+  }
+
+  // Sessions
+  let sessionsPath = detectSessionsPath();
+  if (sessionsPath) {
+    print(`  ${GREEN}✔${RESET}  Sessions: ${DIM}${sessionsPath}${RESET}`);
+  } else {
+    print(`  ${DIM}·${RESET}  Sessions path not found (optional — session history won't be available)`);
+    sessionsPath = "";
+  }
+
+  // Enable chatCompletions
+  const chatEnabled = enableChatCompletions();
+  if (chatEnabled) {
+    print(`  ${GREEN}✔${RESET}  Chat completions endpoint enabled in gateway config`);
+    if (gatewayRunning) {
+      print(`  ${YELLOW}⚠${RESET}  ${BOLD}Restart the gateway${RESET} after setup: ${CYAN}openclaw gateway restart${RESET}`);
     }
   } else {
-    print(`  ${YELLOW}⚠${RESET}  Could not auto-detect gateway token from ~/.openclaw/config.yaml`);
-    gatewayToken = await ask(rl, "Enter your OpenClaw gateway token");
+    print(`  ${YELLOW}⚠${RESET}  Could not auto-enable chatCompletions — see README for manual config`);
   }
 
-  if (!gatewayToken) {
-    print(`\n  ${RED}✗${RESET}  Gateway token is required. Aborting.\n`);
-    rl.close();
-    process.exit(1);
-  }
-
-  // Step 3: Gateway URL
+  // Step 2: Ask only what we need
   print();
   const gatewayUrl = await ask(rl, "Gateway URL", "http://localhost:18789");
-
-  // Step 4: Session secret
-  const sessionSecret = generateSecret();
-  print(`\n  ${GREEN}✔${RESET}  Generated session secret ${DIM}(64 hex chars)${RESET}`);
-
-  // Step 5: Optional PIN
-  print();
   const pin = await ask(rl, "Set a PIN for web access (Enter to skip)");
+  const port = await ask(rl, "Port", "3000");
+
   if (pin) {
     print(`  ${GREEN}✔${RESET}  PIN set`);
   } else {
     print(`  ${DIM}  No PIN — Clawdify will be open to anyone who can reach it.${RESET}`);
   }
 
-  // Step 6: Port
-  print();
-  const port = await ask(rl, "Port", "3000");
+  // Step 3: Write .env
+  const sessionSecret = generateSecret();
+  print(`\n  ${GREEN}✔${RESET}  Generated session secret`);
 
-  // Step 7: Write .env
-  print();
   const envContent = [
-    "# Clawdify environment — generated by setup wizard",
+    "# Clawdify — generated by setup wizard",
     `# ${new Date().toISOString()}`,
     "",
-    "# OpenClaw Gateway connection",
+    "# OpenClaw Gateway",
     `OPENCLAW_GATEWAY_URL=${gatewayUrl}`,
     `OPENCLAW_GATEWAY_TOKEN=${gatewayToken}`,
+    `OPENCLAW_WORKSPACE_PATH=${workspacePath}`,
+    sessionsPath ? `OPENCLAW_SESSIONS_PATH=${sessionsPath}` : "# OPENCLAW_SESSIONS_PATH=",
     "",
-    "# Session encryption",
+    "# Security",
     `CLAWDIFY_SESSION_SECRET=${sessionSecret}`,
-    "",
-    "# PIN authentication (empty = no auth)",
     `CLAWDIFY_PIN=${pin}`,
     "",
-    "# Server port",
+    "# Server",
     `PORT=${port}`,
-    "",
-    "# Database location (default: ~/.clawdify/clawdify.db)",
-    "# CLAWDIFY_DB_PATH=~/.clawdify/clawdify.db",
-    "",
-    "# OpenClaw workspace path (for file browser)",
-    "# OPENCLAW_WORKSPACE_PATH=~/.openclaw/workspace",
-    "",
-    "# OpenClaw sessions path (for activity/history)",
-    "# OPENCLAW_SESSIONS_PATH=~/.openclaw/agents/main/sessions",
-    "",
-    "# Session cookie expiry in seconds (default: 7 days)",
-    "# CLAWDIFY_SESSION_MAX_AGE=604800",
     "",
   ].join("\n");
 
   fs.writeFileSync(envPath, envContent, "utf-8");
   print(`  ${GREEN}✔${RESET}  Wrote ${BOLD}.env${RESET}`);
 
-  // Step 8: Enable gateway chatCompletions endpoint
-  print();
-  print(`  ${DIM}Checking gateway chat endpoint...${RESET}`);
-  
-  const chatEndpointEnabled = await (async () => {
-    if (!gatewayRunning) return false;
-    try {
-      return await new Promise((resolve) => {
-        const postData = JSON.stringify({
-          model: "openclaw:main",
-          messages: [{ role: "user", content: "ping" }],
-        });
-        const req = http.request(
-          `${gatewayUrl}/v1/chat/completions`,
-          {
-            method: "POST",
-            headers: {
-              "Authorization": `Bearer ${gatewayToken}`,
-              "Content-Type": "application/json",
-              "Content-Length": Buffer.byteLength(postData),
-            },
-            timeout: 5000,
-          },
-          (res) => {
-            res.resume();
-            // 405 = endpoint disabled, anything else = endpoint is responding
-            resolve(res.statusCode !== 405);
-          }
-        );
-        req.on("error", () => resolve(false));
-        req.on("timeout", () => { req.destroy(); resolve(false); });
-        req.write(postData);
-        req.end();
-      });
-    } catch { return false; }
-  })();
-
-  if (chatEndpointEnabled) {
-    print(`  ${GREEN}✔${RESET}  Chat completions endpoint is enabled`);
-  } else if (gatewayRunning) {
-    print(`  ${YELLOW}⚠${RESET}  Chat completions endpoint is ${BOLD}disabled${RESET} on the gateway.`);
-    print(`  ${DIM}  Clawdify needs this to send messages. Attempting to enable it...${RESET}`);
-    
-    // Try to enable it by patching the config
-    const configPath = path.join(os.homedir(), ".openclaw", "config.yaml");
-    let configFixed = false;
-    
-    try {
-      if (fs.existsSync(configPath)) {
-        let config = fs.readFileSync(configPath, "utf-8");
-        
-        // Check if chatCompletions is already mentioned
-        if (config.includes("chatCompletions")) {
-          // It's mentioned but probably set to false — replace
-          config = config.replace(
-            /enabled:\s*false\s*#?\s*chatCompletions/,
-            "enabled: true  # chatCompletions"
-          );
-          fs.writeFileSync(configPath, config, "utf-8");
-          configFixed = true;
-        } else {
-          // Need to add the http.endpoints.chatCompletions section
-          // Find or create gateway.http section
-          if (config.includes("gateway:")) {
-            // Add under gateway section
-            if (config.includes("http:")) {
-              // http section exists, add endpoints
-              config = config.replace(
-                /(\s*http:)/,
-                "$1\n    endpoints:\n      chatCompletions:\n        enabled: true"
-              );
-            } else {
-              // Add http section under gateway
-              config = config.replace(
-                /(gateway:)/,
-                "$1\n  http:\n    endpoints:\n      chatCompletions:\n        enabled: true"
-              );
-            }
-            fs.writeFileSync(configPath, config, "utf-8");
-            configFixed = true;
-          }
-        }
-      }
-    } catch (err) {
-      // Config patching failed
-    }
-
-    if (configFixed) {
-      print(`  ${GREEN}✔${RESET}  Updated ${DIM}~/.openclaw/config.yaml${RESET} — chatCompletions enabled`);
-      print(`  ${YELLOW}⚠${RESET}  Restart the gateway for this to take effect:`);
-      print(`    ${CYAN}openclaw gateway restart${RESET}`);
-    } else {
-      print(`  ${YELLOW}⚠${RESET}  Could not auto-patch config. Add this to ~/.openclaw/config.yaml manually:`);
-      print();
-      print(`    ${DIM}gateway:${RESET}`);
-      print(`    ${DIM}  http:${RESET}`);
-      print(`    ${DIM}    endpoints:${RESET}`);
-      print(`    ${DIM}      chatCompletions:${RESET}`);
-      print(`    ${DIM}        enabled: true${RESET}`);
-      print();
-      print(`    Then restart: ${CYAN}openclaw gateway restart${RESET}`);
-    }
-  }
-
-  // Step 9: Systemd service
+  // Step 4: Systemd service
   print();
   const wantSystemd = await ask(rl, "Create a systemd user service? (y/N)", "N");
 
@@ -369,16 +360,22 @@ async function main() {
 
   rl.close();
 
-  // Step 10: Done!
+  // Step 5: Done!
   print();
   print(`  ${GREEN}${BOLD}✔  Setup complete!${RESET}`);
   print();
-  print(`  ${DIM}Next steps:${RESET}`);
-  print(`    1. Build:    ${CYAN}npm run build${RESET}`);
-  print(`    2. Start:    ${CYAN}npm start${RESET}`);
-  print(`    3. Open:     ${CYAN}http://localhost:${port}${RESET}`);
-  print();
-  print(`  ${DIM}For development:  ${CYAN}npm run dev${RESET}`);
+  if (chatEnabled && gatewayRunning) {
+    print(`  ${DIM}Next steps:${RESET}`);
+    print(`    1. ${CYAN}openclaw gateway restart${RESET}  ${DIM}(apply chat endpoint config)${RESET}`);
+    print(`    2. ${CYAN}npm run build${RESET}`);
+    print(`    3. ${CYAN}npm start${RESET}`);
+    print(`    4. Open ${CYAN}http://localhost:${port}${RESET}`);
+  } else {
+    print(`  ${DIM}Next steps:${RESET}`);
+    print(`    1. ${CYAN}npm run build${RESET}`);
+    print(`    2. ${CYAN}npm start${RESET}`);
+    print(`    3. Open ${CYAN}http://localhost:${port}${RESET}`);
+  }
   print();
 }
 

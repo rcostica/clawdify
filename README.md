@@ -1,140 +1,193 @@
 # 🐒 Clawdify
 
-**Mission Control for [OpenClaw](https://github.com/openclaw/openclaw)** — a project-based web interface that replaces chat apps as your primary AI agent frontend.
+**Mission Control for [OpenClaw](https://github.com/openclaw/openclaw)** — a project-based web interface for managing your AI agent.
 
 <!-- screenshot: hero -->
 
-## Features
+## What is this?
 
-- **Project-based organization** — separate workspaces with their own conversations, files, and tasks
-- **Chat interface** — talk to your OpenClaw agent with full context awareness
-- **Kanban board** — drag-and-drop task management
-- **File browser** — browse and download files from the OpenClaw workspace
-- **PWA support** — installs as a native-feeling app on mobile and desktop
-- **PIN authentication** — simple security for personal use
-- **Multi-device access** — works from any device on your network
+Clawdify gives your OpenClaw agent a proper workspace: project-based chats with persistent memory, kanban boards, a file browser, and multi-device access. Think of it as the UI layer your agent deserves.
 
-## Quick Start
+### Features
 
-### Option A: Automated Setup (recommended)
+- **Project organization** — separate workspaces with their own conversations, files, tasks, and context memory
+- **Chat** — talk to your agent with full project awareness (CONTEXT.md, file manifest, sub-project inheritance)
+- **Kanban** — drag-and-drop task management, sub-tasks, sort ordering
+- **File browser** — browse, edit, create files in the OpenClaw workspace. Hidden files toggle, inline rename
+- **Docs tab** — rendered markdown viewer for project documentation
+- **Voice messages** — record and send audio, transcribed via local Whisper STT
+- **PWA** — installs as a native app on mobile and desktop
+- **Multi-device sync** — SSE-based real-time sync across all connected devices
+- **Instance naming** — custom name per install (useful when running multiple Clawdify instances)
+
+---
+
+## Prerequisites
+
+| Requirement | Why |
+|---|---|
+| **[OpenClaw](https://github.com/openclaw/openclaw)** | The AI agent runtime. Clawdify is its frontend. Must be running on the same machine. |
+| **[Node.js](https://nodejs.org/) 18+** | Build and run Clawdify. v22+ recommended. |
+| **[Tailscale](https://tailscale.com/)** *(recommended)* | Secure remote access from phone/laptop without exposing ports. Required for PWA install (needs HTTPS). |
+
+---
+
+## Setup
+
+### Fresh OpenClaw — No Existing Projects
+
+You just installed OpenClaw and want a project workspace.
 
 ```bash
-git clone https://github.com/rcostica/clawdify.git
-cd clawdify
-npm install
-npm run setup        # auto-detects gateway, token, workspace — asks 3 questions
-openclaw gateway restart   # apply config change (enables chat endpoint)
+# 1. Clone and install
+git clone https://github.com/rcostica/clawdify.git ~/clawdify
+cd ~/clawdify && npm install
+
+# 2. Run setup wizard (auto-detects gateway token, workspace path, enables chat endpoint)
+npm run setup
+
+# 3. Restart gateway to apply the config change
+openclaw gateway restart
+
+# 4. Build and start
 npm run build
 npm start
 ```
 
-The setup wizard auto-detects your OpenClaw installation (gateway token, workspace path, sessions path) and enables the required `chatCompletions` endpoint on the gateway. You'll only be asked for a PIN and port.
+Open `http://localhost:3000`. A **General** project is created automatically — click it and start chatting.
 
-On first launch, Clawdify auto-creates the database and a "General" project. Go to **Settings → Discover Projects** to import existing workspace folders.
+### Existing OpenClaw — Already Has Projects & Files
 
-### Option B: Docker
+Your agent has been running via Telegram, Slack, or CLI. There are workspace files and project folders.
+
+```bash
+# 1–4: Same as above
+git clone https://github.com/rcostica/clawdify.git ~/clawdify
+cd ~/clawdify && npm install
+npm run setup
+openclaw gateway restart
+npm run build
+npm start
+```
+
+Then in the browser:
+
+5. Go to **Settings → Discover Projects** → **Scan Workspace**
+6. Clawdify finds all folders in your OpenClaw workspace
+7. Check which folders should become projects
+8. **Drag folders onto other folders** to set up parent/child hierarchy
+9. Click **Create Projects** — done
+
+> **💡 Sub-project tip:** If your agent created `project1/seo/`, `project1/content/`, and `project1/ads/` as separate folders, drag seo/content/ads onto project1 to import them as sub-projects.
+
+### Docker
 
 ```bash
 git clone https://github.com/rcostica/clawdify.git
 cd clawdify
 cp .env.example .env
-# Edit .env with your gateway token and settings
+# Edit .env with your gateway token
 docker compose up -d
 ```
 
-> **Connecting to the host's OpenClaw gateway from Docker:** Set `OPENCLAW_GATEWAY_URL=http://host.docker.internal:18789` in your `.env` file.
-
-### Option C: Manual Setup
+> Set `OPENCLAW_GATEWAY_URL=http://host.docker.internal:18789` to reach the host's gateway.
 
 <details>
-<summary>Click to expand manual instructions</summary>
-
-#### 1. Clone and install
+<summary><strong>Manual Setup</strong> (if you want full control)</summary>
 
 ```bash
-git clone https://github.com/rcostica/clawdify.git
-cd clawdify
-npm install
+git clone https://github.com/rcostica/clawdify.git ~/clawdify
+cd ~/clawdify && npm install
 ```
 
-#### 2. Configure environment
-
-Create a `.env` file in the project root:
+Create `.env`:
 
 ```bash
-# Required: OpenClaw Gateway connection
 OPENCLAW_GATEWAY_URL=http://localhost:18789
-OPENCLAW_GATEWAY_TOKEN=your-gateway-token-here
-
-# Required: Session encryption (must be 32+ characters)
-CLAWDIFY_SESSION_SECRET=generate-a-random-string-at-least-32-chars
-
-# Optional: PIN authentication (leave empty to disable)
-CLAWDIFY_PIN=1234
-
-# Optional: Custom paths
-CLAWDIFY_DB_PATH=~/.clawdify/clawdify.db
-OPENCLAW_WORKSPACE_PATH=/path/to/openclaw/workspace
-OPENCLAW_SESSIONS_PATH=/path/to/openclaw/agents/main/sessions
-
-# Optional: Session expiry in seconds (default: 7 days)
-CLAWDIFY_SESSION_MAX_AGE=604800
+OPENCLAW_GATEWAY_TOKEN=your-token-here          # find in ~/.openclaw/config.yaml
+OPENCLAW_WORKSPACE_PATH=/home/you/.openclaw/workspace
+CLAWDIFY_SESSION_SECRET=$(openssl rand -hex 32)
+CLAWDIFY_PIN=1234                               # optional
+PORT=3000
 ```
 
-**Finding your Gateway token:**
-```bash
-# The token is in your OpenClaw config
-cat ~/.openclaw/config.yaml | grep token
+Enable the chat endpoint in `~/.openclaw/config.yaml`:
+
+```yaml
+gateway:
+  http:
+    endpoints:
+      chatCompletions:
+        enabled: true
 ```
 
-#### 3. Run in development
-
 ```bash
-npm run dev
-```
-
-Open `http://localhost:3000` in your browser.
-
-#### 4. Build for production
-
-```bash
-npm run build
-npm start
+openclaw gateway restart
+npm run build && npm start
 ```
 
 </details>
 
-## Screenshots
+---
 
-<!-- screenshot: chat -->
-<!-- screenshot: kanban -->
-<!-- screenshot: file-browser -->
-<!-- screenshot: mobile-pwa -->
+## What the Setup Wizard Does
 
-## Prerequisites
+`npm run setup` is a zero-dependency Node.js script that:
 
-- [Node.js](https://nodejs.org/) 18+ (22+ recommended)
-- [OpenClaw](https://github.com/openclaw/openclaw) running on the same machine
-- [Tailscale](https://tailscale.com/) (optional, for secure remote access + HTTPS)
+1. **Detects** your gateway token from `~/.openclaw/config.yaml`
+2. **Detects** your workspace path and sessions path
+3. **Enables** the `chatCompletions` endpoint in the gateway config (disabled by default in OpenClaw)
+4. **Generates** a session secret
+5. **Asks** for PIN and port (only 3 prompts)
+6. **Writes** a complete `.env` file
+7. **Optionally** creates a systemd user service
 
-## Deployment (Recommended Setup)
+After setup, you must run `openclaw gateway restart` to apply the config change.
 
-The recommended setup runs Clawdify as a systemd service on the same machine as OpenClaw, with Tailscale providing secure HTTPS access from any device.
+---
 
-> **Tip:** `npm run setup` can generate and install the systemd service for you automatically.
+## Remote Access with Tailscale
 
-### Systemd Service
+Clawdify binds to `localhost:3000` by default. Tailscale extends access to your other devices securely:
 
-Create `~/.config/systemd/user/clawdify.service`:
+1. Install [Tailscale](https://tailscale.com/download) on the server and your phone/laptop
+2. Both devices join the same Tailscale network
+3. Access Clawdify at `http://your-server:3000` from any device
+
+### HTTPS (required for PWA install)
+
+PWA installation requires HTTPS. [Tailscale Serve](https://tailscale.com/kb/1242/tailscale-serve) provides free auto-renewing certificates:
+
+```bash
+sudo tailscale serve --bg --https 8443 http://localhost:3000
+```
+
+Clawdify is now at: `https://your-machine.tailnet-name.ts.net:8443`
+
+### Installing as a Mobile App
+
+With HTTPS set up:
+
+- **Android:** Chrome → Menu (⋮) → **"Install app"** (not "Add to Home Screen")
+- **iOS:** Safari → Share → **"Add to Home Screen"**
+
+> ⚠️ On Android, "Add to Home Screen" creates a browser bookmark. "Install app" creates a real PWA (fullscreen, no address bar). You need HTTPS for the PWA option.
+
+---
+
+## Running as a Service
+
+The setup wizard can create this for you, or do it manually:
 
 ```ini
+# ~/.config/systemd/user/clawdify.service
 [Unit]
 Description=Clawdify
 After=network.target
 
 [Service]
 Type=simple
-WorkingDirectory=/path/to/clawdify
+WorkingDirectory=/home/you/clawdify
 ExecStart=/usr/bin/npm start
 Restart=always
 RestartSec=3
@@ -149,44 +202,7 @@ systemctl --user daemon-reload
 systemctl --user enable --now clawdify.service
 ```
 
-> **Note:** For development, use `ExecStart=/usr/bin/npm run dev` instead.
-
-### HTTPS via Tailscale (Required for PWA)
-
-PWA installation (native app feel on mobile) **requires HTTPS**. Without it, "Add to Home Screen" creates a browser bookmark instead of a proper app install.
-
-[Tailscale Serve](https://tailscale.com/kb/1242/tailscale-serve) provides free, auto-renewing HTTPS certificates for devices on your tailnet:
-
-```bash
-# Expose Clawdify over HTTPS on port 8443
-sudo tailscale serve --bg --https 8443 http://localhost:3000
-```
-
-This makes Clawdify available at:
-```
-https://your-machine-name.tailnet-name.ts.net:8443
-```
-
-The `--bg` flag makes it persistent across reboots.
-
-> **Why port 8443?** Port 443 may already be in use (e.g., by OpenClaw gateway). Use any available port.
-
-**Check your Tailscale hostname:**
-```bash
-tailscale status --self
-```
-
-### Installing as a Mobile App (PWA)
-
-Once you have HTTPS set up:
-
-1. Open the Tailscale HTTPS URL on your phone (Chrome on Android, Safari on iOS)
-2. **Android:** Menu (⋮) → **"Install app"** (not "Add to Home Screen")
-3. **iOS:** Share button → **"Add to Home Screen"**
-
-The app will launch fullscreen with no browser chrome — just like a native app.
-
-> ⚠️ **"Add to Home Screen" ≠ "Install app" on Android.** The former creates a browser shortcut (with address bar). The latter installs a proper PWA (fullscreen, standalone). You need HTTPS for the "Install app" option to appear.
+---
 
 ## Architecture
 
@@ -207,33 +223,84 @@ The app will launch fullscreen with no browser chrome — just like a native app
                                           └─────────────────┘
 ```
 
-- **Clawdify** runs on the same machine as OpenClaw
-- **Gateway token** stays server-side (in `.env`) — never sent to the browser
-- **Tailscale** handles encryption and access control — only your devices can connect
-- **PIN auth** adds a lightweight defense-in-depth layer
-- **SQLite** stores projects, tasks, and settings locally
+- **Clawdify** = Next.js app on the same machine as OpenClaw
+- **Gateway token** stays server-side (`.env`) — never sent to the browser
+- **Tailscale** handles encryption and access control
+- **SQLite** stores projects, tasks, messages, and settings locally
 
-## Environment Variables Reference
+---
+
+## Troubleshooting
+
+### Chat returns "405 Method Not Allowed"
+
+The gateway's `chatCompletions` endpoint is disabled (this is the default in OpenClaw).
+
+**Fix:** Run `npm run setup` again (it auto-enables it), then `openclaw gateway restart`. Or manually add to `~/.openclaw/config.yaml`:
+
+```yaml
+gateway:
+  http:
+    endpoints:
+      chatCompletions:
+        enabled: true
+```
+
+Check **Settings** in Clawdify — it shows the endpoint status with a green/red indicator.
+
+### API errors (500) on first load
+
+Database tables auto-create on startup. Restart Clawdify. If it persists, delete the DB and restart:
+
+```bash
+rm ~/.clawdify/clawdify.db
+# restart clawdify
+```
+
+### Gateway shows "Connected" but chat fails
+
+Test the gateway directly:
+
+```bash
+curl -X POST http://localhost:18789/v1/chat/completions \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"model":"openclaw:main","messages":[{"role":"user","content":"hi"}]}'
+```
+
+If this returns 405 → endpoint disabled (see above). If it hangs → gateway may not have an active agent session yet.
+
+### Can't access from phone
+
+- Both devices must be on the same network (or Tailscale)
+- Check the PIN is correct
+- Clear browser cache if you recently updated
+
+---
+
+## Environment Variables
 
 | Variable | Required | Default | Description |
 |---|---|---|---|
-| `OPENCLAW_GATEWAY_URL` | Yes | `http://localhost:18789` | OpenClaw Gateway HTTP URL |
-| `OPENCLAW_GATEWAY_TOKEN` | Yes | — | Gateway authentication token |
-| `CLAWDIFY_SESSION_SECRET` | Yes | (insecure default) | Session encryption key (32+ chars) |
-| `CLAWDIFY_PIN` | No | — | PIN for login (empty = no auth) |
-| `CLAWDIFY_DB_PATH` | No | `~/.clawdify/clawdify.db` | SQLite database location |
-| `OPENCLAW_WORKSPACE_PATH` | No | — | OpenClaw workspace directory |
-| `OPENCLAW_SESSIONS_PATH` | No | `~/.openclaw/agents/main/sessions` | Session transcripts path |
-| `CLAWDIFY_SESSION_MAX_AGE` | No | `604800` (7 days) | Session cookie expiry (seconds) |
+| `OPENCLAW_GATEWAY_URL` | Yes | `http://localhost:18789` | Gateway URL |
+| `OPENCLAW_GATEWAY_TOKEN` | Yes | — | Gateway auth token |
+| `OPENCLAW_WORKSPACE_PATH` | Yes* | — | OpenClaw workspace directory |
+| `CLAWDIFY_SESSION_SECRET` | Yes | — | Session encryption key (32+ chars) |
+| `CLAWDIFY_PIN` | No | — | Login PIN (empty = no auth) |
+| `CLAWDIFY_DB_PATH` | No | `~/.clawdify/clawdify.db` | SQLite database path |
+| `OPENCLAW_SESSIONS_PATH` | No | — | Session transcripts (for activity feed) |
+| `PORT` | No | `3000` | Server port |
+
+\* Auto-detected by setup wizard. Required for file browser and project discovery.
+
+---
 
 ## Tech Stack
 
-- [Next.js 16](https://nextjs.org/) — React framework
-- [Tailwind CSS v4](https://tailwindcss.com/) — Styling
-- [shadcn/ui](https://ui.shadcn.com/) — Component library
-- [Zustand](https://zustand-demo.pmnd.rs/) — State management
-- [better-sqlite3](https://github.com/WiseLibs/better-sqlite3) — Local database
-- [iron-session](https://github.com/vvo/iron-session) — Encrypted session cookies
+- [Next.js 16](https://nextjs.org/) + TypeScript
+- [Tailwind CSS v4](https://tailwindcss.com/) + [shadcn/ui](https://ui.shadcn.com/)
+- [better-sqlite3](https://github.com/WiseLibs/better-sqlite3) + [Drizzle ORM](https://orm.drizzle.team/)
+- [iron-session](https://github.com/vvo/iron-session) for encrypted cookies
 
 ## License
 

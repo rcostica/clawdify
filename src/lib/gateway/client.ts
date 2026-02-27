@@ -52,14 +52,24 @@ export async function chatStream(opts: {
     body.user = sessionKey;
   }
 
-  const response = await fetch(`${GATEWAY_URL}/v1/chat/completions`, {
-    method: 'POST',
-    headers: headers(extraHeaders),
-    body: JSON.stringify(body),
-  });
+  const url = `${GATEWAY_URL}/v1/chat/completions`;
+
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      method: 'POST',
+      headers: headers(extraHeaders),
+      body: JSON.stringify(body),
+    });
+  } catch (err) {
+    throw new Error(`Gateway unreachable at ${GATEWAY_URL}: ${err}`);
+  }
 
   if (!response.ok) {
     const error = await response.text();
+    if (response.status === 405) {
+      throw new Error(`Gateway returned 405 Method Not Allowed — check that the OpenClaw gateway is running and accepts POST to /v1/chat/completions. URL: ${url}`);
+    }
     throw new Error(`Gateway error (${response.status}): ${error}`);
   }
 

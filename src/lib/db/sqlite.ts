@@ -104,6 +104,44 @@ sqlite.exec(`
   );
 `);
 
+// ─── Auto-create General project on first run ────────────────────────────
+
+const generalExists = sqlite.prepare(
+  `SELECT id FROM projects WHERE name = 'General' AND parent_id IS NULL LIMIT 1`
+).get();
+
+if (!generalExists) {
+  const { v4: uuidv4 } = require('uuid');
+  const WORKSPACE_PATH = process.env.OPENCLAW_WORKSPACE_PATH || '';
+  const generalId = uuidv4();
+  const now = Date.now();
+  const workspacePath = 'projects/general';
+
+  sqlite.prepare(`
+    INSERT INTO projects (id, name, description, parent_id, icon, color, status, sort_order, workspace_path, session_key, created_at, updated_at)
+    VALUES (?, ?, ?, NULL, '🌐', NULL, 'active', 0, ?, NULL, ?, ?)
+  `).run(generalId, 'General', 'Cross-project context — aware of all projects and their status.', workspacePath, now, now);
+
+  // Create the workspace folder and CONTEXT.md
+  if (WORKSPACE_PATH) {
+    const generalDir = path.join(WORKSPACE_PATH, workspacePath);
+    if (!fs.existsSync(generalDir)) {
+      fs.mkdirSync(generalDir, { recursive: true });
+    }
+    const contextPath = path.join(generalDir, 'CONTEXT.md');
+    if (!fs.existsSync(contextPath)) {
+      fs.writeFileSync(contextPath, `# General Context\n\nThis is the overarching project. Use it for cross-project discussions, planning, and notes that span multiple projects.\n\nCreated: ${new Date().toISOString()}\n`, 'utf-8');
+    }
+  }
+
+  // Create a default thread for General
+  const threadId = uuidv4();
+  sqlite.prepare(`
+    INSERT INTO threads (id, project_id, title, session_key, is_pinned, created_at, updated_at)
+    VALUES (?, ?, 'Main', ?, 0, ?, ?)
+  `).run(threadId, generalId, `clawdify-general-${generalId}`, now, now);
+}
+
 // ─── Migration tables (added after initial release) ──────────────────────
 
 sqlite.exec(`

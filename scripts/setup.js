@@ -61,16 +61,25 @@ function checkPort(host, port, timeoutMs = 2000) {
 }
 
 function detectGatewayToken() {
-  const configPath = path.join(os.homedir(), ".openclaw", "config.yaml");
+  // Try openclaw.json first (current format), then config.yaml (legacy)
+  const jsonPath = path.join(os.homedir(), ".openclaw", "openclaw.json");
   try {
-    const content = fs.readFileSync(configPath, "utf-8");
+    const content = fs.readFileSync(jsonPath, "utf-8");
+    const config = JSON.parse(content);
+    const token = config?.gateway?.auth?.token;
+    if (token) return token;
+  } catch {}
+
+  // Legacy YAML format
+  const yamlPath = path.join(os.homedir(), ".openclaw", "config.yaml");
+  try {
+    const content = fs.readFileSync(yamlPath, "utf-8");
     for (const line of content.split("\n")) {
       const match = line.match(/^\s*token:\s*['"]?(.+?)['"]?\s*$/);
       if (match) return match[1];
     }
-  } catch {
-    // file not found or unreadable
-  }
+  } catch {}
+
   return null;
 }
 
@@ -79,10 +88,22 @@ function generateSecret() {
 }
 
 function detectWorkspacePath() {
-  // Try reading from openclaw config
-  const configPath = path.join(os.homedir(), ".openclaw", "config.yaml");
+  // Try openclaw.json first
+  const jsonPath = path.join(os.homedir(), ".openclaw", "openclaw.json");
   try {
-    const content = fs.readFileSync(configPath, "utf-8");
+    const content = fs.readFileSync(jsonPath, "utf-8");
+    const config = JSON.parse(content);
+    let ws = config?.workspace;
+    if (ws) {
+      ws = ws.replace(/^~/, os.homedir());
+      if (fs.existsSync(ws)) return ws;
+    }
+  } catch {}
+
+  // Legacy YAML format
+  const yamlPath = path.join(os.homedir(), ".openclaw", "config.yaml");
+  try {
+    const content = fs.readFileSync(yamlPath, "utf-8");
     for (const line of content.split("\n")) {
       const match = line.match(/^\s*workspace:\s*['"]?(.+?)['"]?\s*$/);
       if (match) {
@@ -92,6 +113,7 @@ function detectWorkspacePath() {
       }
     }
   } catch {}
+
   // Fallback: check default location
   const defaultPath = path.join(os.homedir(), ".openclaw", "workspace");
   if (fs.existsSync(defaultPath)) return defaultPath;
@@ -117,49 +139,53 @@ function detectSessionsPath() {
 }
 
 function enableChatCompletions() {
-  const configPath = path.join(os.homedir(), ".openclaw", "config.yaml");
+  // Try openclaw.json first (current format)
+  const jsonPath = path.join(os.homedir(), ".openclaw", "openclaw.json");
   try {
-    if (!fs.existsSync(configPath)) return false;
-    let config = fs.readFileSync(configPath, "utf-8");
+    if (fs.existsSync(jsonPath)) {
+      const content = fs.readFileSync(jsonPath, "utf-8");
+      const config = JSON.parse(content);
+      
+      // Check if already enabled
+      if (config?.gateway?.http?.endpoints?.chatCompletions?.enabled === true) return true;
+      
+      // Enable it
+      if (!config.gateway) config.gateway = {};
+      if (!config.gateway.http) config.gateway.http = {};
+      if (!config.gateway.http.endpoints) config.gateway.http.endpoints = {};
+      if (!config.gateway.http.endpoints.chatCompletions) config.gateway.http.endpoints.chatCompletions = {};
+      config.gateway.http.endpoints.chatCompletions.enabled = true;
+      
+      fs.writeFileSync(jsonPath, JSON.stringify(config, null, 2) + "\n", "utf-8");
+      return true;
+    }
+  } catch {}
+
+  // Legacy YAML format
+  const yamlPath = path.join(os.homedir(), ".openclaw", "config.yaml");
+  try {
+    if (!fs.existsSync(yamlPath)) return false;
+    let config = fs.readFileSync(yamlPath, "utf-8");
     
-    // Already enabled?
     if (config.match(/chatCompletions[\s\S]*?enabled:\s*true/)) return true;
     
-    // Has chatCompletions but disabled?
     if (config.includes("chatCompletions")) {
-      config = config.replace(
-        /(chatCompletions:[\s\S]*?)enabled:\s*false/,
-        "$1enabled: true"
-      );
-      fs.writeFileSync(configPath, config, "utf-8");
+      config = config.replace(/(chatCompletions:[\s\S]*?)enabled:\s*false/, "$1enabled: true");
+      fs.writeFileSync(yamlPath, config, "utf-8");
       return true;
     }
     
-    // Need to add it
     if (config.includes("gateway:")) {
       if (config.includes("http:")) {
-        if (config.includes("endpoints:")) {
-          config = config.replace(
-            /(endpoints:)/,
-            "$1\n      chatCompletions:\n        enabled: true"
-          );
-        } else {
-          config = config.replace(
-            /(http:)/,
-            "$1\n    endpoints:\n      chatCompletions:\n        enabled: true"
-          );
-        }
+        config = config.replace(/(http:)/, "$1\n    endpoints:\n      chatCompletions:\n        enabled: true");
       } else {
-        config = config.replace(
-          /(gateway:)/,
-          "$1\n  http:\n    endpoints:\n      chatCompletions:\n        enabled: true"
-        );
+        config = config.replace(/(gateway:)/, "$1\n  http:\n    endpoints:\n      chatCompletions:\n        enabled: true");
       }
     } else {
       config += "\ngateway:\n  http:\n    endpoints:\n      chatCompletions:\n        enabled: true\n";
     }
     
-    fs.writeFileSync(configPath, config, "utf-8");
+    fs.writeFileSync(yamlPath, config, "utf-8");
     return true;
   } catch {
     return false;
@@ -180,7 +206,7 @@ if (process.argv.includes("--help") || process.argv.includes("-h")) {
   print();
   print("This interactive wizard will:");
   print("  1. Check if the OpenClaw gateway is running");
-  print("  2. Auto-detect your gateway token from ~/.openclaw/config.yaml");
+  print("  2. Auto-detect your gateway token from ~/.openclaw/openclaw.json");
   print("  3. Generate a secure session secret");
   print("  4. Ask for optional PIN and port configuration");
   print("  5. Write a .env file");

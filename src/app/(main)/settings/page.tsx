@@ -570,14 +570,16 @@ export default function SettingsPage() {
                 The gateway&apos;s <code className="bg-muted px-1 rounded">chatCompletions</code> endpoint is disabled. Clawdify can&apos;t send messages without it.
               </p>
               <p className="text-xs text-muted-foreground">
-                Add to <code className="bg-muted px-1 rounded">~/.openclaw/config.yaml</code>:
+                In <code className="bg-muted px-1 rounded">~/.openclaw/openclaw.json</code>, set:
               </p>
               <pre className="text-xs bg-muted p-2 rounded font-mono">
-{`gateway:
-  http:
-    endpoints:
-      chatCompletions:
-        enabled: true`}
+{`"gateway": {
+  "http": {
+    "endpoints": {
+      "chatCompletions": { "enabled": true }
+    }
+  }
+}`}
               </pre>
               <p className="text-xs text-muted-foreground">
                 Then restart: <code className="bg-muted px-1 rounded">openclaw gateway restart</code>

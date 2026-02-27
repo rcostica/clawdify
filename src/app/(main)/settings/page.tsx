@@ -10,6 +10,7 @@ import { ChevronDown, ChevronRight, CheckCircle, XCircle, Loader2, RefreshCw, Pl
 import { toast } from 'sonner';
 import Link from 'next/link';
 import { usePWA } from '@/components/pwa-register';
+import { useInstanceName } from '@/components/instance-name';
 
 interface DiscoveredFolder {
   name: string;
@@ -64,12 +65,21 @@ export default function SettingsPage() {
   // PWA Install
   const { canInstall, isInstalled, isIOS, promptInstall } = usePWA();
 
+  // Instance name
+  const { instanceName: currentInstanceName, setInstanceName: setGlobalInstanceName } = useInstanceName();
+  const [instanceName, setInstanceName] = useState('');
+  const [instanceNameLoading, setInstanceNameLoading] = useState(false);
+  const [instanceNameMsg, setInstanceNameMsg] = useState('');
+
   // Workspace Discovery
   const [discoveryLoading, setDiscoveryLoading] = useState(false);
   const [discoveredFolders, setDiscoveredFolders] = useState<DiscoveredFolder[]>([]);
   const [selectedFolders, setSelectedFolders] = useState<Set<string>>(new Set());
   const [discoveryDone, setDiscoveryDone] = useState(false);
   const [importLoading, setImportLoading] = useState(false);
+  // parentMap: childPath → parentPath (for nesting before import)
+  const [parentMap, setParentMap] = useState<Map<string, string>>(new Map());
+  const [dragOverPath, setDragOverPath] = useState<string | null>(null);
 
   // Vault
   const [vaultEntries, setVaultEntries] = useState<VaultEntry[]>([]);
@@ -128,6 +138,29 @@ export default function SettingsPage() {
       setPromptMessage('❌ Failed to save');
     }
     setPromptSaving(false);
+  };
+
+  // Load instance name
+  useEffect(() => {
+    setInstanceName(currentInstanceName);
+  }, [currentInstanceName]);
+
+  const saveInstanceName = async () => {
+    setInstanceNameLoading(true);
+    setInstanceNameMsg('');
+    try {
+      await fetch('/api/settings', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ key: 'instance_name', value: instanceName.trim() || 'Clawdify' }),
+      });
+      setGlobalInstanceName(instanceName.trim() || 'Clawdify');
+      setInstanceNameMsg('✅ Saved — reinstall PWA to update the app name');
+      setTimeout(() => setInstanceNameMsg(''), 5000);
+    } catch {
+      setInstanceNameMsg('❌ Failed to save');
+    }
+    setInstanceNameLoading(false);
   };
 
   // Load vault entries
@@ -311,21 +344,51 @@ export default function SettingsPage() {
     if (selectedFolders.size === 0) return;
     setImportLoading(true);
     try {
-      const folders = Array.from(selectedFolders).map(p => ({ relativePath: p }));
-      const res = await fetch('/api/discover', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ folders }),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        toast.error(data.error || 'Import failed');
-        return;
+      // Build folder list with parent relationships
+      // Import parents first, then children
+      const allPaths = Array.from(selectedFolders);
+      const childPaths = new Set(parentMap.keys());
+      const parentPaths = allPaths.filter(p => !childPaths.has(p));
+      const childPathsArr = allPaths.filter(p => childPaths.has(p));
+      
+      // Import parents first
+      if (parentPaths.length > 0) {
+        const res = await fetch('/api/discover', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ folders: parentPaths.map(p => ({ relativePath: p })) }),
+        });
+        if (!res.ok) {
+          const data = await res.json();
+          toast.error(data.error || 'Import failed');
+          setImportLoading(false);
+          return;
+        }
       }
-      const created = data.created?.length || 0;
-      const errors = data.errors?.length || 0;
-      if (created > 0) toast.success(`Created ${created} project${created > 1 ? 's' : ''}`);
-      if (errors > 0) toast.error(`${errors} folder${errors > 1 ? 's' : ''} skipped (already linked)`);
+
+      // Import children with parentPath reference
+      if (childPathsArr.length > 0) {
+        const res = await fetch('/api/discover', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            folders: childPathsArr.map(p => ({
+              relativePath: p,
+              parentWorkspacePath: parentMap.get(p),
+            })),
+          }),
+        });
+        if (!res.ok) {
+          const data = await res.json();
+          toast.error(data.error || 'Import failed');
+          setImportLoading(false);
+          return;
+        }
+      }
+
+      const total = allPaths.length;
+      toast.success(`Created ${total} project${total > 1 ? 's' : ''}`);
+      setParentMap(new Map());
       // Re-scan to update state
       await scanWorkspace();
     } catch {
@@ -335,14 +398,76 @@ export default function SettingsPage() {
     }
   };
 
-  const renderDiscoveredFolder = (folder: DiscoveredFolder, depth: number = 0) => {
+  // Get children assigned to a parent via drag-and-drop
+  const getAssignedChildren = (parentPath: string): DiscoveredFolder[] => {
+    const childPaths: string[] = [];
+    parentMap.forEach((parent, child) => {
+      if (parent === parentPath) childPaths.push(child);
+    });
+    const allFolders = flattenFolders(discoveredFolders);
+    return childPaths.map(cp => allFolders.find(f => f.relativePath === cp)).filter(Boolean) as DiscoveredFolder[];
+  };
+
+  const flattenFolders = (folders: DiscoveredFolder[]): DiscoveredFolder[] => {
+    const result: DiscoveredFolder[] = [];
+    const walk = (list: DiscoveredFolder[]) => {
+      for (const f of list) {
+        result.push(f);
+        walk(f.children);
+      }
+    };
+    walk(folders);
+    return result;
+  };
+
+  const removeFromParent = (childPath: string) => {
+    setParentMap(prev => {
+      const next = new Map(prev);
+      next.delete(childPath);
+      return next;
+    });
+  };
+
+  const renderDiscoveredFolder = (folder: DiscoveredFolder, depth: number = 0, isNested: boolean = false) => {
     const isSelected = selectedFolders.has(folder.relativePath);
+    const isChild = parentMap.has(folder.relativePath);
+    const isDragOver = dragOverPath === folder.relativePath;
+    const assignedChildren = getAssignedChildren(folder.relativePath);
+
+    // Don't render at top level if it's been dragged into a parent
+    if (isChild && !isNested) return null;
+
     return (
       <div key={folder.relativePath}>
         <div
-          className={`flex items-start gap-3 py-2 px-3 rounded-md transition-colors ${
+          draggable={!folder.alreadyLinked}
+          onDragStart={(e) => {
+            e.dataTransfer.setData('text/plain', folder.relativePath);
+            e.dataTransfer.effectAllowed = 'move';
+          }}
+          onDragOver={(e) => {
+            e.preventDefault();
+            e.dataTransfer.dropEffect = 'move';
+            if (!folder.alreadyLinked) setDragOverPath(folder.relativePath);
+          }}
+          onDragLeave={() => setDragOverPath(null)}
+          onDrop={(e) => {
+            e.preventDefault();
+            setDragOverPath(null);
+            const childPath = e.dataTransfer.getData('text/plain');
+            if (childPath && childPath !== folder.relativePath && !folder.alreadyLinked) {
+              setParentMap(prev => {
+                const next = new Map(prev);
+                next.set(childPath, folder.relativePath);
+                return next;
+              });
+            }
+          }}
+          className={`flex items-start gap-3 py-2 px-3 rounded-md transition-colors cursor-grab active:cursor-grabbing ${
             folder.alreadyLinked ? 'opacity-60' : 'hover:bg-muted/50'
-          } ${depth > 0 ? 'ml-6' : ''}`}
+          } ${depth > 0 ? 'ml-6' : ''} ${isNested ? 'ml-8 border-l-2 border-primary/30' : ''} ${
+            isDragOver ? 'ring-2 ring-primary bg-primary/10' : ''
+          }`}
         >
           {!folder.alreadyLinked ? (
             <input
@@ -366,6 +491,15 @@ export default function SettingsPage() {
               {folder.hasContextMd && (
                 <span className="text-xs bg-purple-500/10 text-purple-500 px-1.5 py-0.5 rounded">CONTEXT</span>
               )}
+              {isNested && (
+                <button
+                  onClick={() => removeFromParent(folder.relativePath)}
+                  className="text-xs text-red-400 hover:text-red-300 ml-1"
+                  title="Remove from parent"
+                >
+                  ✕ ungroup
+                </button>
+              )}
             </div>
             <span className="text-xs text-muted-foreground font-mono">{folder.relativePath}</span>
             {folder.alreadyLinked && (
@@ -376,7 +510,10 @@ export default function SettingsPage() {
             )}
           </div>
         </div>
+        {/* Show filesystem children */}
         {folder.children.map(child => renderDiscoveredFolder(child, depth + 1))}
+        {/* Show drag-assigned children */}
+        {assignedChildren.map(child => renderDiscoveredFolder(child, 0, true))}
       </div>
     );
   };
@@ -452,12 +589,29 @@ export default function SettingsPage() {
         </Card>
       )}
 
-      {/* Workspace */}
+      {/* Workspace & Instance */}
       <Card>
         <CardHeader>
-          <CardTitle>Workspace</CardTitle>
+          <CardTitle>Instance</CardTitle>
+          <CardDescription>Name this Clawdify instance to distinguish it from others. The name appears in the browser tab and PWA app name.</CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-4">
+          <div className="space-y-2">
+            <label className="text-sm font-medium">Instance Name</label>
+            <div className="flex gap-2">
+              <Input
+                value={instanceName}
+                onChange={e => setInstanceName(e.target.value)}
+                placeholder="Clawdify"
+                className="flex-1"
+              />
+              <Button onClick={saveInstanceName} disabled={instanceNameLoading} size="sm" className="gap-1">
+                {instanceNameLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                Save
+              </Button>
+            </div>
+            {instanceNameMsg && <p className="text-sm">{instanceNameMsg}</p>}
+          </div>
           <div className="space-y-2">
             <label className="text-sm font-medium">Workspace Path</label>
             <Input value={process.env.OPENCLAW_WORKSPACE_PATH || '~/.openclaw/workspace'} disabled className="bg-muted font-mono text-xs" />
@@ -473,7 +627,7 @@ export default function SettingsPage() {
             Discover Projects
           </CardTitle>
           <CardDescription>
-            Scan your OpenClaw workspace for existing folders and create Clawdify projects from them. Already-linked folders are shown but can&apos;t be re-imported.
+            Scan your OpenClaw workspace for existing folders and create Clawdify projects from them. Drag a folder onto another to make it a sub-project. Already-linked folders are shown but can&apos;t be re-imported.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">

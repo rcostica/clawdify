@@ -4,6 +4,7 @@ import "./globals.css";
 import { Toaster } from "@/components/ui/sonner";
 import { PWAProvider } from "@/components/pwa-register";
 import { ThemeProvider } from "@/components/theme-provider";
+import { InstanceNameProvider } from "@/components/instance-name";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -38,10 +39,12 @@ export default function RootLayout({
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
         <ThemeProvider attribute="class" defaultTheme="dark" enableSystem disableTransitionOnChange>
-          <PWAProvider>
-            {children}
-            <Toaster />
-          </PWAProvider>
+          <InstanceNameProvider>
+            <PWAProvider>
+              {children}
+              <Toaster />
+            </PWAProvider>
+          </InstanceNameProvider>
         </ThemeProvider>
       </body>
     </html>

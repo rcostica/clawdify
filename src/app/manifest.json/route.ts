@@ -21,8 +21,8 @@ export async function GET() {
     background_color: '#0a0a0a',
     theme_color: '#0a0a0a',
     icons: [
-      { src: '/icon-192.png', sizes: '192x192', type: 'image/png' },
-      { src: '/icon-512.png', sizes: '512x512', type: 'image/png' },
+      { src: '/api/instance-icon?size=192', sizes: '192x192', type: 'image/png', purpose: 'any' },
+      { src: '/api/instance-icon?size=512', sizes: '512x512', type: 'image/png', purpose: 'any' },
     ],
     orientation: 'any',
     categories: ['productivity', 'utilities'],
@@ -33,7 +33,7 @@ export async function GET() {
   return NextResponse.json(manifest, {
     headers: {
       'Content-Type': 'application/manifest+json',
-      'Cache-Control': 'no-cache',
+      'Cache-Control': 'no-cache, no-store, must-revalidate',
     },
   });
 }

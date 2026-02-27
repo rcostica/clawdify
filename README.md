@@ -2,8 +2,6 @@
 
 **Mission Control for [OpenClaw](https://github.com/openclaw/openclaw)** — a project-based web interface for managing your AI agent.
 
-<!-- screenshot: hero -->
-
 ## What is this?
 
 Clawdify gives your OpenClaw agent a proper workspace: project-based chats with persistent memory, kanban boards, a file browser, and multi-device access. Think of it as the UI layer your agent deserves.
@@ -19,6 +17,7 @@ Clawdify gives your OpenClaw agent a proper workspace: project-based chats with 
 - **PWA** — installs as a native app on mobile and desktop
 - **Multi-device sync** — SSE-based real-time sync across all connected devices
 - **Instance naming** — custom name per install (useful when running multiple Clawdify instances)
+- **Any model** — works with any model provider supported by OpenClaw (Anthropic, OpenAI, Google, local models via Ollama, etc.)
 
 ---
 
@@ -140,7 +139,7 @@ npm run build && npm start
 
 `npm run setup` is a zero-dependency Node.js script that:
 
-1. **Detects** your gateway token from `~/.openclaw/config.yaml`
+1. **Detects** your gateway token from `~/.openclaw/openclaw.json`
 2. **Detects** your workspace path and sessions path
 3. **Enables** the `chatCompletions` endpoint in the gateway config (disabled by default in OpenClaw)
 4. **Generates** a session secret

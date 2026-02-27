@@ -6,10 +6,22 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { ChevronDown, ChevronRight, CheckCircle, XCircle, Loader2, RefreshCw, Plus, Trash2, Save, Eye, EyeOff, Download, Upload, AlertTriangle, Smartphone, Share } from 'lucide-react';
+import { ChevronDown, ChevronRight, CheckCircle, XCircle, Loader2, RefreshCw, Plus, Trash2, Save, Eye, EyeOff, Download, Upload, AlertTriangle, Smartphone, Share, FolderSearch, FolderPlus, FileText, Link2 } from 'lucide-react';
 import { toast } from 'sonner';
 import Link from 'next/link';
 import { usePWA } from '@/components/pwa-register';
+
+interface DiscoveredFolder {
+  name: string;
+  relativePath: string;
+  fileCount: number;
+  hasReadme: boolean;
+  readmePreview: string | null;
+  hasContextMd: boolean;
+  alreadyLinked: boolean;
+  linkedProjectName: string | null;
+  children: DiscoveredFolder[];
+}
 
 interface AuditLog {
   id: string;
@@ -51,6 +63,13 @@ export default function SettingsPage() {
 
   // PWA Install
   const { canInstall, isInstalled, isIOS, promptInstall } = usePWA();
+
+  // Workspace Discovery
+  const [discoveryLoading, setDiscoveryLoading] = useState(false);
+  const [discoveredFolders, setDiscoveredFolders] = useState<DiscoveredFolder[]>([]);
+  const [selectedFolders, setSelectedFolders] = useState<Set<string>>(new Set());
+  const [discoveryDone, setDiscoveryDone] = useState(false);
+  const [importLoading, setImportLoading] = useState(false);
 
   // Vault
   const [vaultEntries, setVaultEntries] = useState<VaultEntry[]>([]);
@@ -247,6 +266,121 @@ export default function SettingsPage() {
     }
   };
 
+  // Discover workspace
+  const scanWorkspace = async () => {
+    setDiscoveryLoading(true);
+    setDiscoveredFolders([]);
+    setSelectedFolders(new Set());
+    setDiscoveryDone(false);
+    try {
+      const res = await fetch('/api/discover');
+      const data = await res.json();
+      if (!res.ok) {
+        toast.error(data.error || 'Scan failed');
+        return;
+      }
+      setDiscoveredFolders(data.discovered || []);
+      setDiscoveryDone(true);
+      // Auto-select unlinked folders
+      const unlinked = new Set<string>();
+      const collect = (folders: DiscoveredFolder[]) => {
+        for (const f of folders) {
+          if (!f.alreadyLinked) unlinked.add(f.relativePath);
+          collect(f.children);
+        }
+      };
+      collect(data.discovered || []);
+      setSelectedFolders(unlinked);
+    } catch {
+      toast.error('Failed to scan workspace');
+    } finally {
+      setDiscoveryLoading(false);
+    }
+  };
+
+  const toggleFolder = (path: string) => {
+    setSelectedFolders(prev => {
+      const next = new Set(prev);
+      if (next.has(path)) next.delete(path);
+      else next.add(path);
+      return next;
+    });
+  };
+
+  const importDiscovered = async () => {
+    if (selectedFolders.size === 0) return;
+    setImportLoading(true);
+    try {
+      const folders = Array.from(selectedFolders).map(p => ({ relativePath: p }));
+      const res = await fetch('/api/discover', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ folders }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        toast.error(data.error || 'Import failed');
+        return;
+      }
+      const created = data.created?.length || 0;
+      const errors = data.errors?.length || 0;
+      if (created > 0) toast.success(`Created ${created} project${created > 1 ? 's' : ''}`);
+      if (errors > 0) toast.error(`${errors} folder${errors > 1 ? 's' : ''} skipped (already linked)`);
+      // Re-scan to update state
+      await scanWorkspace();
+    } catch {
+      toast.error('Failed to create projects');
+    } finally {
+      setImportLoading(false);
+    }
+  };
+
+  const renderDiscoveredFolder = (folder: DiscoveredFolder, depth: number = 0) => {
+    const isSelected = selectedFolders.has(folder.relativePath);
+    return (
+      <div key={folder.relativePath}>
+        <div
+          className={`flex items-start gap-3 py-2 px-3 rounded-md transition-colors ${
+            folder.alreadyLinked ? 'opacity-60' : 'hover:bg-muted/50'
+          } ${depth > 0 ? 'ml-6' : ''}`}
+        >
+          {!folder.alreadyLinked ? (
+            <input
+              type="checkbox"
+              checked={isSelected}
+              onChange={() => toggleFolder(folder.relativePath)}
+              className="mt-1 h-4 w-4 rounded border-input accent-primary"
+            />
+          ) : (
+            <Link2 className="mt-1 h-4 w-4 text-green-500 flex-shrink-0" />
+          )}
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2">
+              <span className="font-medium text-sm">{folder.name}</span>
+              <span className="text-xs text-muted-foreground">
+                {folder.fileCount} file{folder.fileCount !== 1 ? 's' : ''}
+              </span>
+              {folder.hasReadme && (
+                <span className="text-xs bg-blue-500/10 text-blue-500 px-1.5 py-0.5 rounded">README</span>
+              )}
+              {folder.hasContextMd && (
+                <span className="text-xs bg-purple-500/10 text-purple-500 px-1.5 py-0.5 rounded">CONTEXT</span>
+              )}
+            </div>
+            <span className="text-xs text-muted-foreground font-mono">{folder.relativePath}</span>
+            {folder.alreadyLinked && (
+              <span className="text-xs text-green-500 block">→ Linked to &quot;{folder.linkedProjectName}&quot;</span>
+            )}
+            {folder.readmePreview && !folder.alreadyLinked && (
+              <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{folder.readmePreview}</p>
+            )}
+          </div>
+        </div>
+        {folder.children.map(child => renderDiscoveredFolder(child, depth + 1))}
+      </div>
+    );
+  };
+
   return (
     <div className="p-4 sm:p-6 max-w-2xl mx-auto space-y-6">
       <h1 className="text-2xl font-bold">Settings</h1>
@@ -328,6 +462,48 @@ export default function SettingsPage() {
             <label className="text-sm font-medium">Workspace Path</label>
             <Input value={process.env.OPENCLAW_WORKSPACE_PATH || '~/.openclaw/workspace'} disabled className="bg-muted font-mono text-xs" />
           </div>
+        </CardContent>
+      </Card>
+
+      {/* Discover Projects from Workspace */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <FolderSearch className="h-5 w-5" />
+            Discover Projects
+          </CardTitle>
+          <CardDescription>
+            Scan your OpenClaw workspace for existing folders and create Clawdify projects from them. Already-linked folders are shown but can&apos;t be re-imported.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <Button onClick={scanWorkspace} disabled={discoveryLoading} className="gap-2">
+            {discoveryLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <FolderSearch className="h-4 w-4" />}
+            Scan Workspace
+          </Button>
+
+          {discoveryDone && discoveredFolders.length === 0 && (
+            <p className="text-sm text-muted-foreground">No folders found in workspace.</p>
+          )}
+
+          {discoveredFolders.length > 0 && (
+            <>
+              <div className="border rounded-md divide-y max-h-[400px] overflow-y-auto">
+                {discoveredFolders.map(folder => renderDiscoveredFolder(folder))}
+              </div>
+
+              {selectedFolders.size > 0 && (
+                <Button onClick={importDiscovered} disabled={importLoading} className="gap-2">
+                  {importLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <FolderPlus className="h-4 w-4" />}
+                  Create {selectedFolders.size} Project{selectedFolders.size > 1 ? 's' : ''}
+                </Button>
+              )}
+
+              {selectedFolders.size === 0 && discoveryDone && (
+                <p className="text-sm text-muted-foreground">All folders are already linked to projects.</p>
+              )}
+            </>
+          )}
         </CardContent>
       </Card>
 

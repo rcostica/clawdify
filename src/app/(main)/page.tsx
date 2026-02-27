@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ActivityFeed } from '@/components/activity-feed';
 import { 
   Wifi, WifiOff, CheckCircle2, Circle, Clock, 
-  ListTodo, FolderOpen, MessageSquare 
+  ListTodo, FolderOpen, MessageSquare, BookOpen, ChevronRight
 } from 'lucide-react';
 import Link from 'next/link';
 
@@ -112,6 +112,24 @@ export default function DashboardPage() {
         <h1 className="text-2xl font-semibold tracking-tight">Dashboard</h1>
         <p className="text-sm text-muted-foreground">Overview of your workspace</p>
       </div>
+
+      {/* Welcome banner for new installs */}
+      {!loading && projects.active <= 1 && (
+        <Card className="border-primary/30 bg-primary/5">
+          <CardContent className="flex items-center gap-4 py-4 px-5">
+            <BookOpen className="h-8 w-8 text-primary flex-shrink-0" />
+            <div className="flex-1 min-w-0">
+              <p className="font-medium">Welcome to Clawdify!</p>
+              <p className="text-sm text-muted-foreground">
+                New here? Check the setup guide to get the most out of your instance.
+              </p>
+            </div>
+            <Link href="/guide" className="flex items-center gap-1 text-sm text-primary hover:underline shrink-0">
+              Open Guide <ChevronRight className="h-4 w-4" />
+            </Link>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Top row: Gateway + Projects */}
       <div className="grid gap-4 md:grid-cols-3">

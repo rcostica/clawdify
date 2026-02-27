@@ -9,6 +9,7 @@ import {
   FolderKanban, 
   Files,
   Settings,
+  BookOpen,
   LogOut,
   GripVertical,
   Activity
@@ -422,6 +423,14 @@ export function AppSidebar() {
 
       <SidebarFooter className="border-t">
         <SidebarMenu>
+          <SidebarMenuItem>
+            <SidebarMenuButton isActive={pathname === '/guide'} asChild>
+              <Link href="/guide">
+                <BookOpen className="h-4 w-4" />
+                <span>Guide</span>
+              </Link>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
           <SidebarMenuItem>
             <SidebarMenuButton isActive={pathname === '/settings'} asChild>
               <Link href="/settings">

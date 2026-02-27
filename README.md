@@ -22,17 +22,15 @@
 git clone https://github.com/rcostica/clawdify.git
 cd clawdify
 npm install
-npm run setup
-```
-
-The setup wizard will auto-detect your gateway token, generate secrets, and write your `.env` file.
-
-Then build and start:
-
-```bash
+npm run setup        # auto-detects gateway, token, workspace — asks 3 questions
+openclaw gateway restart   # apply config change (enables chat endpoint)
 npm run build
 npm start
 ```
+
+The setup wizard auto-detects your OpenClaw installation (gateway token, workspace path, sessions path) and enables the required `chatCompletions` endpoint on the gateway. You'll only be asked for a PIN and port.
+
+On first launch, Clawdify auto-creates the database and a "General" project. Go to **Settings → Discover Projects** to import existing workspace folders.
 
 ### Option B: Docker
 

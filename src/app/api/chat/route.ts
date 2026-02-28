@@ -17,7 +17,9 @@ import { promisify } from 'util';
 const execFileAsync = promisify(execFile);
 
 const WORKSPACE_PATH = process.env.OPENCLAW_WORKSPACE_PATH || '';
-const HISTORY_LIMIT = 50;
+// History managed by OpenClaw sessions (stable `user` field).
+// Small window kept for session-reset edge cases; OpenClaw deduplicates.
+const HISTORY_LIMIT = 5;
 
 // Path to the whisper transcription environment
 const WHISPER_PYTHON = path.join(process.env.HOME || '/home/razvan', '.local/share/whisper-env/bin/python');
@@ -936,7 +938,7 @@ export async function POST(request: NextRequest) {
 
     const effectiveSessionKey = sessionKey || (
       projectId
-        ? `clawdify:project:${projectId}`
+        ? `clawdify:${projectId}:${threadId || 'main'}`
         : 'agent:main:main'
     );
 

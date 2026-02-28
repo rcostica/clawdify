@@ -617,8 +617,8 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
         setRecordingDuration(prev => prev + 1);
       }, 1000);
     } catch (err) {
-      console.error('Mic access denied:', err);
-      toast.error('Microphone access denied');
+      console.error('Mic error:', err);
+      toast.error(err instanceof Error ? `Mic: ${err.name} - ${err.message}` : 'Microphone access denied');
     }
   }, []);
 

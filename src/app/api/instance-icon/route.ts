@@ -3,7 +3,7 @@ import { db, settings } from '@/lib/db';
 import { eq } from 'drizzle-orm';
 import fs from 'fs/promises';
 import path from 'path';
-import { execSync } from 'child_process';
+import sharp from 'sharp';
 
 const WORKSPACE_PATH = process.env.OPENCLAW_WORKSPACE_PATH || '';
 
@@ -23,13 +23,12 @@ export async function GET(request: NextRequest) {
       if (fullPath.startsWith(WORKSPACE_PATH)) {
         try {
           await fs.access(fullPath);
-          // Resize to exact square dimensions using ImageMagick
-          // Output as PNG for consistent format
-          const resized = execSync(
-            `convert "${fullPath}" -resize ${validSize}x${validSize}^ -gravity center -extent ${validSize}x${validSize} PNG:-`,
-            { maxBuffer: 5 * 1024 * 1024 }
-          );
-          return new Response(resized, {
+          // Resize to exact square dimensions using sharp
+          const resized = await sharp(fullPath)
+            .resize(validSize, validSize, { fit: 'cover', position: 'center' })
+            .png()
+            .toBuffer();
+          return new Response(new Uint8Array(resized), {
             headers: {
               'Content-Type': 'image/png',
               'Cache-Control': 'no-cache, no-store, must-revalidate',
@@ -37,7 +36,7 @@ export async function GET(request: NextRequest) {
             },
           });
         } catch {
-          // File not found or convert failed, fall through to default
+          // File not found or sharp failed, fall through to default
         }
       }
     }
@@ -47,7 +46,7 @@ export async function GET(request: NextRequest) {
   const defaultPath = path.join(process.cwd(), 'public', `icon-${validSize}.png`);
   try {
     const buffer = await fs.readFile(defaultPath);
-    return new Response(buffer, {
+    return new Response(new Uint8Array(buffer), {
       headers: {
         'Content-Type': 'image/png',
         'Cache-Control': 'no-cache, no-store, must-revalidate',

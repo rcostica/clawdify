@@ -529,29 +529,100 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
     }
   }, []);
 
-  // Session reset: rotate thread for fresh OpenClaw session
+  // Session reset: flush context to memory, then rotate thread for fresh OpenClaw session
   const handleSessionReset = useCallback(async () => {
-    if (resetting || !confirm('Start a fresh session? The AI will lose context from this conversation, but your messages are preserved.')) return;
+    if (resetting || sending) return;
+    if (!confirm('Start a fresh session? The AI will save unsaved context to memory first.')) return;
     setResetting(true);
+
     try {
+      // Step 1: Send a memory flush message so the AI saves unsaved context
+      const flushMessage = '[System: Session reset requested. Before the session resets, save ALL unsaved context from this conversation to memory files (memory/YYYY-MM-DD.md). Include decisions, work done, things discussed, and any important context not yet logged. Be thorough but fast — this context will be lost after reset. Do NOT include this system message in the log.]';
+      const flushUserMsg: Message = {
+        id: `msg-${Date.now()}-flush`,
+        role: 'user',
+        content: '🔄 Saving context before session reset...',
+        createdAt: new Date(),
+      };
+      setMessages((prev) => [...prev, flushUserMsg]);
+      setSending(true);
+      sendingRef.current = true;
+      setStreamingContent('');
+
+      const flushRes = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          message: flushMessage,
+          projectId: id,
+          tabId,
+        }),
+      });
+
+      if (!flushRes.ok || !flushRes.body) {
+        throw new Error('Failed to send memory flush message');
+      }
+
+      // Stream the flush response so user sees what's being saved
+      const reader = flushRes.body.getReader();
+      const decoder = new TextDecoder();
+      let accumulated = '';
+      let lineBuf = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        lineBuf += decoder.decode(value, { stream: true });
+        const parts = lineBuf.split('\n');
+        lineBuf = parts.pop() || '';
+        for (const line of parts) {
+          const trimmed = line.trim();
+          if (!trimmed.startsWith('data: ')) continue;
+          const data = trimmed.slice(6);
+          if (data === '[DONE]') continue;
+          try {
+            const parsed = JSON.parse(data);
+            const delta = parsed.choices?.[0]?.delta?.content;
+            if (delta) { accumulated += delta; setStreamingContent(accumulated); }
+          } catch { /* skip */ }
+        }
+      }
+
+      // Add the flush response as a message
+      if (accumulated) {
+        setMessages((prev) => [...prev, {
+          id: `msg-${Date.now()}-flush-response`,
+          role: 'assistant',
+          content: accumulated,
+          createdAt: new Date(),
+        }]);
+      }
+      setStreamingContent('');
+      setSending(false);
+      sendingRef.current = false;
+
+      // Step 2: Now rotate the thread
       const res = await fetch('/api/session-reset', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ projectId: id }),
       });
       if (!res.ok) throw new Error('Reset failed');
-      const data = await res.json();
-      // Reload messages (will now show empty for new thread)
+
+      // Clear UI for new session
       setMessages([]);
       setSessionStats({ context: 0, max: sessionStats?.max || 200000, compactions: 0, model: sessionStats?.model || null });
-      toast.success('Session reset — fresh context');
+      toast.success('Session reset — context saved & fresh session started');
     } catch (err) {
       console.error('Session reset failed:', err);
       toast.error('Failed to reset session');
+      setSending(false);
+      sendingRef.current = false;
+      setStreamingContent('');
     } finally {
       setResetting(false);
     }
-  }, [id, resetting, sessionStats]);
+  }, [id, resetting, sending, sessionStats, tabId]);
 
   // File picker: browse workspace files
   const loadPickerDir = useCallback(async (dirPath: string) => {

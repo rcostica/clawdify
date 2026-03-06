@@ -2,23 +2,24 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db, threads, messages } from '@/lib/db';
 import { eq, desc } from 'drizzle-orm';
 import { v4 as uuidv4 } from 'uuid';
+import { chatStream } from '@/lib/gateway/client';
 
 /**
  * POST /api/session-reset
- * Body: { projectId: string }
+ * Body: { projectId: string, flush?: boolean }
  * 
- * Creates a new thread for the project (new UUID = new OpenClaw session).
- * The old thread and its messages stay untouched in the DB.
- * Chat route picks the newest thread via ORDER BY created_at DESC.
+ * Resets the OpenClaw session context (sends /reset to the gateway).
+ * Messages stay in the UI — only the LLM context resets.
+ * Optionally flushes memory first (flush=true, default).
  */
 export async function POST(request: NextRequest) {
   try {
-    const { projectId } = await request.json();
+    const { projectId, flush = true } = await request.json();
     if (!projectId) {
       return NextResponse.json({ error: 'projectId required' }, { status: 400 });
     }
 
-    // Find existing thread
+    // Find existing thread (for inserting divider)
     const existing = db.select().from(threads)
       .where(eq(threads.projectId, projectId))
       .orderBy(desc(threads.createdAt))
@@ -29,7 +30,53 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'No existing thread for this project' }, { status: 404 });
     }
 
-    // Insert a divider in the old thread (visual marker)
+    const sessionKey = `clawdify:${projectId}`;
+
+    // If flush requested, send a memory flush message first
+    if (flush) {
+      try {
+        const flushRes = await chatStream({
+          messages: [
+            { role: 'user', content: '[System: Session reset requested. Before the session resets, save ALL unsaved context from this conversation to memory files (memory/YYYY-MM-DD.md). Include decisions, work done, things discussed, and any important context not yet logged. Be thorough but fast — this context will be lost after reset. Do NOT include this system message in the log.]' },
+          ],
+          sessionKey,
+          user: sessionKey,
+        });
+        // Consume the response fully
+        if (flushRes.body) {
+          const reader = flushRes.body.getReader();
+          while (true) {
+            const { done } = await reader.read();
+            if (done) break;
+          }
+        }
+      } catch (flushErr) {
+        console.warn('[session-reset] Memory flush failed (continuing with reset):', flushErr);
+      }
+    }
+
+    // Send /reset to OpenClaw — resets session context, keeps the same key
+    try {
+      const resetRes = await chatStream({
+        messages: [
+          { role: 'user', content: '/reset' },
+        ],
+        sessionKey,
+        user: sessionKey,
+      });
+      // Consume the response
+      if (resetRes.body) {
+        const reader = resetRes.body.getReader();
+        while (true) {
+          const { done } = await reader.read();
+          if (done) break;
+        }
+      }
+    } catch (resetErr) {
+      console.warn('[session-reset] OpenClaw /reset failed:', resetErr);
+    }
+
+    // Insert a visual divider in the UI thread
     const now = new Date();
     db.insert(messages).values({
       id: uuidv4(),
@@ -39,26 +86,12 @@ export async function POST(request: NextRequest) {
       createdAt: now,
     }).run();
 
-    // Create new thread — chat route picks newest by createdAt
-    const newThreadId = uuidv4();
-    const newSessionKey = `clawdify:${projectId}:${newThreadId}`;
-
-    db.insert(threads).values({
-      id: newThreadId,
-      projectId,
-      title: 'Main Thread',
-      sessionKey: newSessionKey,
-      createdAt: now,
-      updatedAt: now,
-    }).run();
-
-    console.log(`[session-reset] Project ${projectId}: ${existing.id} → ${newThreadId}`);
+    console.log(`[session-reset] Project ${projectId}: context reset (session key: ${sessionKey})`);
 
     return NextResponse.json({
       ok: true,
-      oldThreadId: existing.id,
-      newThreadId,
-      newSessionKey,
+      sessionKey,
+      threadId: existing.id,
     });
   } catch (error) {
     console.error('[session-reset] Error:', error);

@@ -248,23 +248,30 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'projectId required' }, { status: 400 });
   }
 
-  const thread = db.select().from(threads)
+  // Stable session key per project — no thread ID.
+  // OpenClaw's daily reset applies naturally (same key, new sessionId).
+  const sessionKey = `clawdify:${projectId}`;
+
+  // Load ALL threads for this project (messages persist across resets)
+  const projectThreads = db.select().from(threads)
     .where(eq(threads.projectId, projectId))
-    .orderBy(desc(threads.createdAt))
-    .limit(1)
-    .get();
-  if (!thread) {
-    return NextResponse.json({ messages: [] });
+    .orderBy(threads.createdAt)
+    .all();
+  if (!projectThreads.length) {
+    return NextResponse.json({ messages: [], sessionKey });
   }
 
+  const threadIds = projectThreads.map(t => t.id);
+
+  // Load messages from all threads, ordered by time
   const history = db
     .select()
     .from(messages)
-    .where(eq(messages.threadId, thread.id))
-    .orderBy(messages.createdAt)
-    .all();
+    .all()
+    .filter(m => threadIds.includes(m.threadId))
+    .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
 
-  // Load all reactions for this thread's messages
+  // Load all reactions for these messages
   const messageIds = history.map(m => m.id);
   const allReactions = messageIds.length > 0
     ? db.select().from(messageReactions).all().filter(r => messageIds.includes(r.messageId))
@@ -280,8 +287,8 @@ export async function GET(request: NextRequest) {
   }
 
   return NextResponse.json({
-    threadId: thread.id,
-    sessionKey: `clawdify:${projectId}:${thread.id}`,
+    threadId: projectThreads[projectThreads.length - 1].id,
+    sessionKey,
     messages: history.map((m) => ({
       id: m.id,
       role: m.role,
@@ -395,11 +402,11 @@ export async function POST(request: NextRequest) {
     }
     chatMessages.push({ role: 'user', content: userTextContent });
 
-    const effectiveSessionKey = sessionKey || (
-      projectId
-        ? `clawdify:${projectId}:${threadId || 'main'}`
-        : 'agent:main:main'
-    );
+    // Stable session key per project — no thread ID.
+    // OpenClaw's daily reset and compaction apply naturally.
+    const effectiveSessionKey = projectId
+      ? `clawdify:${projectId}`
+      : 'agent:main:main';
 
     // Call Gateway — the agent loop handles tools natively
     console.log('[chat] Sending to gateway: %d messages, last msg content type=%s',

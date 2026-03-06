@@ -529,10 +529,11 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
     }
   }, []);
 
-  // Session reset: flush context to memory, then rotate thread for fresh OpenClaw session
+  // Session reset: flush context to memory, then reset OpenClaw context.
+  // Messages stay visible in the UI — only the LLM context resets (like Telegram daily reset).
   const handleSessionReset = useCallback(async () => {
     if (resetting || sending) return;
-    if (!confirm('Start a fresh session? The AI will save unsaved context to memory first.')) return;
+    if (!confirm('Reset AI context? Messages stay visible. The AI will save unsaved context first.')) return;
     setResetting(true);
 
     try {
@@ -601,18 +602,23 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
       setSending(false);
       sendingRef.current = false;
 
-      // Step 2: Now rotate the thread
+      // Step 2: Reset OpenClaw context (server-side /reset, no flush since we already did it)
       const res = await fetch('/api/session-reset', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ projectId: id }),
+        body: JSON.stringify({ projectId: id, flush: false }),
       });
       if (!res.ok) throw new Error('Reset failed');
 
-      // Clear UI for new session
-      setMessages([]);
+      // Add visual divider — messages stay visible
+      setMessages((prev) => [...prev, {
+        id: `msg-${Date.now()}-divider`,
+        role: 'assistant' as const,
+        content: '— *Session reset* — context cleared, messages preserved —',
+        createdAt: new Date(),
+      }]);
       setSessionStats({ context: 0, max: sessionStats?.max || 200000, compactions: 0, model: sessionStats?.model || null });
-      toast.success('Session reset — context saved & fresh session started');
+      toast.success('Context reset — messages preserved, fresh AI context');
     } catch (err) {
       console.error('Session reset failed:', err);
       toast.error('Failed to reset session');
@@ -1203,7 +1209,7 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
               className="h-7 text-xs gap-1"
               onClick={handleSessionReset}
               disabled={resetting || sending}
-              title="Start fresh session (AI loses context, messages preserved)"
+              title="Reset AI context (messages stay visible, like Telegram daily reset)"
             >
               <RotateCcw className={`h-3.5 w-3.5 ${resetting ? 'animate-spin' : ''}`} />
               Fresh

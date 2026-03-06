@@ -1,18 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db, threads, messages } from '@/lib/db';
-import { eq } from 'drizzle-orm';
+import { eq, desc } from 'drizzle-orm';
 import { v4 as uuidv4 } from 'uuid';
 
 /**
  * POST /api/session-reset
  * Body: { projectId: string }
  * 
- * Rotates the thread for a project — creates a new thread with a new UUID.
- * This causes a new OpenClaw session key (clawdify:<projectId>:<newThreadId>),
- * so OpenClaw starts a fresh session automatically.
- * 
- * Old messages stay in the old thread (preserved in DB for scrollback).
- * A divider message is inserted to mark the boundary.
+ * Creates a new thread for the project (new UUID = new OpenClaw session).
+ * The old thread and its messages stay untouched in the DB.
+ * Chat route picks the newest thread via ORDER BY created_at DESC.
  */
 export async function POST(request: NextRequest) {
   try {
@@ -22,12 +19,17 @@ export async function POST(request: NextRequest) {
     }
 
     // Find existing thread
-    const existing = db.select().from(threads).where(eq(threads.projectId, projectId)).get();
+    const existing = db.select().from(threads)
+      .where(eq(threads.projectId, projectId))
+      .orderBy(desc(threads.createdAt))
+      .limit(1)
+      .get();
+
     if (!existing) {
       return NextResponse.json({ error: 'No existing thread for this project' }, { status: 404 });
     }
 
-    // Insert a divider message in the old thread
+    // Insert a divider in the old thread (visual marker)
     const now = new Date();
     db.insert(messages).values({
       id: uuidv4(),
@@ -37,22 +39,20 @@ export async function POST(request: NextRequest) {
       createdAt: now,
     }).run();
 
-    // Create new thread (new UUID = new OpenClaw session key)
+    // Create new thread — chat route picks newest by createdAt
     const newThreadId = uuidv4();
     const newSessionKey = `clawdify:${projectId}:${newThreadId}`;
 
-    // Update the existing thread record to point to the new ID
-    // This way the project still maps to one thread, just a new one
-    db.update(threads)
-      .set({
-        id: newThreadId,
-        sessionKey: newSessionKey,
-        updatedAt: now,
-      })
-      .where(eq(threads.id, existing.id))
-      .run();
+    db.insert(threads).values({
+      id: newThreadId,
+      projectId,
+      title: 'Main Thread',
+      sessionKey: newSessionKey,
+      createdAt: now,
+      updatedAt: now,
+    }).run();
 
-    console.log(`[session-reset] Project ${projectId}: rotated thread ${existing.id} → ${newThreadId}`);
+    console.log(`[session-reset] Project ${projectId}: ${existing.id} → ${newThreadId}`);
 
     return NextResponse.json({
       ok: true,

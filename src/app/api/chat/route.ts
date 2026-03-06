@@ -217,7 +217,12 @@ async function readAttachedFiles(filePaths: string[]): Promise<AttachmentResult>
 }
 
 function getOrCreateThread(projectId: string): string {
-  const existing = db.select().from(threads).where(eq(threads.projectId, projectId)).get();
+  // Pick the most recently created thread for this project (supports session reset)
+  const existing = db.select().from(threads)
+    .where(eq(threads.projectId, projectId))
+    .orderBy(desc(threads.createdAt))
+    .limit(1)
+    .get();
   if (existing) return existing.id;
 
   const threadId = uuidv4();
@@ -243,7 +248,11 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'projectId required' }, { status: 400 });
   }
 
-  const thread = db.select().from(threads).where(eq(threads.projectId, projectId)).get();
+  const thread = db.select().from(threads)
+    .where(eq(threads.projectId, projectId))
+    .orderBy(desc(threads.createdAt))
+    .limit(1)
+    .get();
   if (!thread) {
     return NextResponse.json({ messages: [] });
   }

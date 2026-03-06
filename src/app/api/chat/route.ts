@@ -18,22 +18,33 @@ const WORKSPACE_PATH = process.env.OPENCLAW_WORKSPACE_PATH || '';
 // Session fully managed by OpenClaw (context, compaction, memory).
 // Clawdify is a thin pipe: send current message only, no history.
 
-// Path to the whisper transcription environment
-const WHISPER_PYTHON = path.join(process.env.HOME || '/home/razvan', '.local/share/whisper-env/bin/python');
-const TRANSCRIBE_SCRIPT = path.join(process.cwd(), 'scripts/transcribe.py');
+// Whisper transcription via whisper-wrapper.sh (whisper.cpp + ffmpeg)
+const WHISPER_WRAPPER = '/usr/local/bin/whisper-wrapper.sh';
+const WHISPER_MODEL = '/opt/whisper.cpp/models/ggml-base.bin';
 
 /**
- * Transcribe an audio file using faster-whisper (local, CPU).
+ * Transcribe an audio file using whisper.cpp (local, CPU).
  * Returns the transcription text, or empty string on failure.
  */
 async function transcribeAudio(audioPath: string): Promise<string> {
   try {
-    const { stdout, stderr } = await execFileAsync(WHISPER_PYTHON, [TRANSCRIBE_SCRIPT, audioPath], {
-      timeout: 60_000, // 60s max for transcription
-      env: { ...process.env, WHISPER_MODEL: 'small' },
+    const { stdout, stderr } = await execFileAsync(WHISPER_WRAPPER, [
+      '-m', WHISPER_MODEL,
+      '-l', 'en',
+      '-f', audioPath,
+    ], {
+      timeout: 60_000,
     });
     if (stderr) console.warn('[transcribe] stderr:', stderr);
-    return stdout.trim();
+    // whisper-cli output has timestamps like [00:00:00.000 --> 00:00:07.000]  text
+    // Extract just the text, stripping timestamp prefixes
+    const text = stdout
+      .split('\n')
+      .map(line => line.replace(/^\[[\d:.]+\s*-->\s*[\d:.]+\]\s*/, '').trim())
+      .filter(Boolean)
+      .join(' ')
+      .trim();
+    return text;
   } catch (error) {
     console.error('[transcribe] Failed:', error);
     return '';

@@ -113,7 +113,10 @@ function formatDateSeparator(date: Date): string {
 }
 
 function formatMessageTime(date: Date): string {
-  return date.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+  return date.toLocaleString(undefined, {
+    month: 'short', day: 'numeric',
+    hour: '2-digit', minute: '2-digit',
+  });
 }
 
 export default function ProjectPage({ params }: { params: Promise<{ id: string }> }) {
@@ -416,6 +419,36 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
     }
   }, [hasMore, messages, id]);
 
+  // Load ALL messages (used when search is activated)
+  const loadAllMessages = useCallback(async () => {
+    if (!hasMore) return; // already loaded everything
+    skipAutoScrollRef.current = true;
+    const container = document.querySelector('[data-messages-scroll]');
+    if (container && container.clientHeight > 0) {
+      scrollAdjustRef.current = { prevScrollHeight: container.scrollHeight };
+    }
+    try {
+      const res = await fetch(`/api/chat?projectId=${id}&limit=9999`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.messages?.length) {
+          setMessages(data.messages.map((m: any) => ({
+            id: m.id,
+            role: m.role,
+            content: m.content,
+            bookmarked: m.bookmarked || false,
+            reactions: m.reactions || [],
+            attachedFiles: m.attachedFiles || undefined,
+            createdAt: new Date(m.createdAt),
+          })));
+        }
+        setHasMore(false);
+      }
+    } catch (err) {
+      console.error('Failed to load all messages:', err);
+    }
+  }, [hasMore, id]);
+
   // Scroll handler for infinite scroll up
   const handleMessagesScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
     const el = e.currentTarget;
@@ -486,6 +519,7 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
             setTotalMatches(0);
           } else {
             setShowSearch(true);
+            loadAllMessages(); // load all messages so search covers everything
             setTimeout(() => document.getElementById('chat-search-input')?.focus(), 50);
           }
         }
@@ -499,7 +533,7 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
     };
     document.addEventListener('keydown', handler, true);
     return () => document.removeEventListener('keydown', handler, true);
-  }, [messages.length, showSearch]);
+  }, [messages.length, showSearch, loadAllMessages]);
 
   // Count matches and scroll to current match
   useEffect(() => {
@@ -1340,7 +1374,7 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
                 variant="ghost"
                 size="sm"
                 className="h-7 text-xs"
-                onClick={() => { setShowSearch(true); setTimeout(() => document.getElementById('chat-search-input')?.focus(), 50); }}
+                onClick={() => { setShowSearch(true); loadAllMessages(); setTimeout(() => document.getElementById('chat-search-input')?.focus(), 50); }}
               >
                 <Search className="h-3.5 w-3.5 mr-1" />
                 Search

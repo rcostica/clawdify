@@ -138,6 +138,8 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
   const [emojiPickerMessageId, setEmojiPickerMessageId] = useState<string | null>(null);
   const [isRecording, setIsRecording] = useState(false);
   const [recordingDuration, setRecordingDuration] = useState(0);
+  const [sessionStats, setSessionStats] = useState<{ context: number; max: number; compactions: number; model: string | null } | null>(null);
+  const [resetting, setResetting] = useState(false);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const recordingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
@@ -177,6 +179,10 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
               attachedFiles: m.attachedFiles || undefined,
               createdAt: new Date(m.createdAt),
             })));
+          }
+          // Fetch session stats if we have a session key
+          if (data.sessionKey) {
+            fetchSessionStats(data.sessionKey);
           }
         }
       } catch (err) {
@@ -504,6 +510,48 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
   }, []);
 
   const REACTION_EMOJIS = ['👍', '❤️', '😂', '🎉', '🤔', '👀', '🔥', '✅'];
+
+  // Session stats: fetch from OpenClaw sessions.json (read-only)
+  const fetchSessionStats = useCallback(async (sessionKey: string) => {
+    try {
+      const res = await fetch(`/api/session-stats?sessionKey=${encodeURIComponent(sessionKey)}`);
+      if (res.ok) {
+        const data = await res.json();
+        setSessionStats({
+          context: data.context || 0,
+          max: data.max || 200000,
+          compactions: data.compactions || 0,
+          model: data.model || null,
+        });
+      }
+    } catch {
+      // Non-critical — stats just won't show
+    }
+  }, []);
+
+  // Session reset: rotate thread for fresh OpenClaw session
+  const handleSessionReset = useCallback(async () => {
+    if (resetting || !confirm('Start a fresh session? The AI will lose context from this conversation, but your messages are preserved.')) return;
+    setResetting(true);
+    try {
+      const res = await fetch('/api/session-reset', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ projectId: id }),
+      });
+      if (!res.ok) throw new Error('Reset failed');
+      const data = await res.json();
+      // Reload messages (will now show empty for new thread)
+      setMessages([]);
+      setSessionStats({ context: 0, max: sessionStats?.max || 200000, compactions: 0, model: sessionStats?.model || null });
+      toast.success('Session reset — fresh context');
+    } catch (err) {
+      console.error('Session reset failed:', err);
+      toast.error('Failed to reset session');
+    } finally {
+      setResetting(false);
+    }
+  }, [id, resetting, sessionStats]);
 
   // File picker: browse workspace files
   const loadPickerDir = useCallback(async (dirPath: string) => {
@@ -889,6 +937,17 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
           } catch { /* ignore */ }
         }
 
+        // Refresh session stats after response
+        try {
+          const statsRes = await fetch(`/api/chat?projectId=${id}`);
+          if (statsRes.ok) {
+            const statsData = await statsRes.json();
+            if (statsData.sessionKey) {
+              fetchSessionStats(statsData.sessionKey);
+            }
+          }
+        } catch { /* non-critical */ }
+
         // Mark as unread for sidebar indicator (if navigated away)
         if (document.hidden) {
           markUnread(id);
@@ -1044,15 +1103,40 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
   const chatContent = (
     <div className="flex flex-col h-full overflow-hidden">
       {/* Header with search toggle and bookmarks filter */}
-      {messages.length > 0 && !showSearch && (
-        <div className="border-b px-4 py-2 flex items-center justify-between">
-          <span className="text-sm text-muted-foreground">
-            {showBookmarksOnly
-              ? `${messages.filter(m => m.bookmarked).length} bookmarked`
-              : `${messages.length} message${messages.length !== 1 ? 's' : ''}`
-            }
-          </span>
-          <div className="flex items-center gap-1">
+      {/* Stat bar + controls header */}
+      {!showSearch && (
+        <div className="border-b px-4 py-2 flex items-center justify-between gap-2">
+          {/* Left: session stats */}
+          <div className="flex items-center gap-3 text-xs text-muted-foreground min-w-0">
+            {sessionStats && sessionStats.context > 0 ? (
+              <>
+                <span title="Context window usage">
+                  📊 {sessionStats.context >= 1000 ? `${Math.round(sessionStats.context / 1000)}k` : sessionStats.context} / {Math.round(sessionStats.max / 1000)}k
+                  <span className="ml-1">({Math.round((sessionStats.context / sessionStats.max) * 100)}%)</span>
+                </span>
+                {sessionStats.compactions > 0 && (
+                  <span title="Number of context compactions" className="text-amber-500">
+                    🧹 {sessionStats.compactions}
+                  </span>
+                )}
+              </>
+            ) : messages.length > 0 ? (
+              <span>{messages.length} message{messages.length !== 1 ? 's' : ''}</span>
+            ) : null}
+          </div>
+          {/* Right: actions */}
+          <div className="flex items-center gap-1 shrink-0">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 text-xs gap-1"
+              onClick={handleSessionReset}
+              disabled={resetting || sending}
+              title="Start fresh session (AI loses context, messages preserved)"
+            >
+              <RotateCcw className={`h-3.5 w-3.5 ${resetting ? 'animate-spin' : ''}`} />
+              Fresh
+            </Button>
             <Button
               variant={showBookmarksOnly ? 'secondary' : 'ghost'}
               size="sm"
@@ -1067,16 +1151,18 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
               )}
               Bookmarks
             </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-7 text-xs"
-              onClick={() => { setShowSearch(true); setTimeout(() => document.getElementById('chat-search-input')?.focus(), 50); }}
-            >
-              <Search className="h-3.5 w-3.5 mr-1" />
-              Search
-              <kbd className="ml-2 px-1 py-0.5 rounded bg-muted border text-[10px]">⌘F</kbd>
-            </Button>
+            {messages.length > 0 && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 text-xs"
+                onClick={() => { setShowSearch(true); setTimeout(() => document.getElementById('chat-search-input')?.focus(), 50); }}
+              >
+                <Search className="h-3.5 w-3.5 mr-1" />
+                Search
+                <kbd className="ml-2 px-1 py-0.5 rounded bg-muted border text-[10px]">⌘F</kbd>
+              </Button>
+            )}
           </div>
         </div>
       )}

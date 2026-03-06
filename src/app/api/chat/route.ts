@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { chatStream, type ChatMessage } from '@/lib/gateway/client';
 import { db, messages, threads, projects, settings, vault, messageReactions } from '@/lib/db';
-import { eq, desc } from 'drizzle-orm';
+import { eq, desc, like, and, lt, sql } from 'drizzle-orm';
 import { v4 as uuidv4 } from 'uuid';
 import { redactSecrets } from '@/lib/redact';
 import { eventBus } from '@/lib/event-bus';
@@ -248,36 +248,50 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'projectId required' }, { status: 400 });
   }
 
-  // Stable session key per project — no thread ID.
-  // OpenClaw's daily reset applies naturally (same key, new sessionId).
+  const limit = Math.min(parseInt(request.nextUrl.searchParams.get('limit') || '50', 10), 200);
+  const beforeParam = request.nextUrl.searchParams.get('before'); // ISO timestamp cursor
+
   const sessionKey = `clawdify:${projectId}`;
 
-  // Load ALL threads for this project (messages persist across resets)
-  const projectThreads = db.select().from(threads)
+  // Load ALL threads for this project — including archived threads from old session rotations
+  const currentThreads = db.select().from(threads)
     .where(eq(threads.projectId, projectId))
-    .orderBy(threads.createdAt)
     .all();
-  if (!projectThreads.length) {
-    return NextResponse.json({ messages: [], sessionKey });
-  }
-
-  const threadIds = projectThreads.map(t => t.id);
-
-  // Load messages from all threads, ordered by time
-  const history = db
-    .select()
-    .from(messages)
-    .all()
-    .filter(m => threadIds.includes(m.threadId))
+  const archivedThreads = db.select().from(threads)
+    .where(like(threads.projectId, `archived-${projectId}%`))
+    .all();
+  const allThreads = [...currentThreads, ...archivedThreads]
     .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
 
-  // Load all reactions for these messages
-  const messageIds = history.map(m => m.id);
+  if (!allThreads.length) {
+    return NextResponse.json({ messages: [], sessionKey, hasMore: false });
+  }
+
+  const threadIds = allThreads.map(t => t.id);
+
+  // Load messages from all threads, sorted newest-first for pagination
+  let allMsgs = db.select().from(messages).all()
+    .filter(m => threadIds.includes(m.threadId));
+  allMsgs.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+  // Apply cursor filter (messages strictly before the cursor timestamp)
+  if (beforeParam) {
+    const cursorTime = new Date(beforeParam).getTime();
+    allMsgs = allMsgs.filter(m => new Date(m.createdAt).getTime() < cursorTime);
+  }
+
+  // Check if there are more beyond the limit
+  const hasMore = allMsgs.length > limit;
+
+  // Take `limit` messages (newest first) then reverse for chronological order
+  const paginated = allMsgs.slice(0, limit).reverse();
+
+  // Load reactions for these messages
+  const messageIds = paginated.map(m => m.id);
   const allReactions = messageIds.length > 0
     ? db.select().from(messageReactions).all().filter(r => messageIds.includes(r.messageId))
     : [];
 
-  // Group reactions by messageId
   const reactionsByMessage = new Map<string, Array<{ emoji: string; id: string }>>();
   for (const r of allReactions) {
     if (!reactionsByMessage.has(r.messageId)) {
@@ -287,9 +301,10 @@ export async function GET(request: NextRequest) {
   }
 
   return NextResponse.json({
-    threadId: projectThreads[projectThreads.length - 1].id,
+    threadId: allThreads[allThreads.length - 1].id,
     sessionKey,
-    messages: history.map((m) => ({
+    hasMore,
+    messages: paginated.map((m) => ({
       id: m.id,
       role: m.role,
       content: m.content,

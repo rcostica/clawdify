@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useRef, useCallback, use } from 'react';
+import { useEffect, useLayoutEffect, useState, useRef, useCallback, use, Fragment } from 'react';
 import { useProjectsStore } from '@/lib/stores/projects';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Button } from '@/components/ui/button';
@@ -62,7 +62,7 @@ interface Reaction {
 
 interface Message {
   id: string;
-  role: 'user' | 'assistant';
+  role: 'user' | 'assistant' | 'system';
   content: string;
   attachedFiles?: AttachedFile[];
   bookmarked?: boolean;
@@ -97,6 +97,23 @@ function HighlightedText({ text, query }: { text: string; query: string }) {
       })}
     </>
   );
+}
+
+function formatDateSeparator(date: Date): string {
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const yesterday = new Date(today.getTime() - 86400000);
+  const msgDate = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  if (msgDate.getTime() === today.getTime()) return 'Today';
+  if (msgDate.getTime() === yesterday.getTime()) return 'Yesterday';
+  return date.toLocaleDateString(undefined, {
+    weekday: 'short', month: 'short', day: 'numeric',
+    ...(date.getFullYear() !== now.getFullYear() ? { year: 'numeric' } : {}),
+  });
+}
+
+function formatMessageTime(date: Date): string {
+  return date.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
 }
 
 export default function ProjectPage({ params }: { params: Promise<{ id: string }> }) {
@@ -144,6 +161,11 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
   const recordingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const pendingVoiceRef = useRef<AttachedFile | null>(null);
+  const [hasMore, setHasMore] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const scrollAdjustRef = useRef<{ prevScrollHeight: number } | null>(null);
+  const skipAutoScrollRef = useRef(false);
+  const loadingMoreRef = useRef(false);
 
   useEffect(() => {
     selectProject(id);
@@ -163,10 +185,10 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
     
     fetchProject();
 
-    // Load chat history
+    // Load chat history (most recent page)
     async function fetchHistory() {
       try {
-        const res = await fetch(`/api/chat?projectId=${id}`);
+        const res = await fetch(`/api/chat?projectId=${id}&limit=50`);
         if (res.ok) {
           const data = await res.json();
           if (data.messages?.length) {
@@ -180,7 +202,7 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
               createdAt: new Date(m.createdAt),
             })));
           }
-          // Fetch session stats if we have a session key
+          setHasMore(data.hasMore ?? false);
           if (data.sessionKey) {
             fetchSessionStats(data.sessionKey);
           }
@@ -236,11 +258,11 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
   useEffect(() => {
     const refreshMessages = async () => {
       try {
-        const res = await fetch(`/api/chat?projectId=${id}`);
+        const res = await fetch(`/api/chat?projectId=${id}&limit=50`);
         if (res.ok) {
           const data = await res.json();
           if (data.messages?.length) {
-            setMessages(data.messages.map((m: any) => ({
+            const freshMsgs = data.messages.map((m: any) => ({
               id: m.id,
               role: m.role,
               content: m.content,
@@ -248,8 +270,16 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
               reactions: m.reactions || [],
               attachedFiles: m.attachedFiles || undefined,
               createdAt: new Date(m.createdAt),
-            })));
+            }));
+            // Merge: keep older loaded messages, update/add newer ones
+            setMessages(prev => {
+              const freshIds = new Set(freshMsgs.map((m: Message) => m.id));
+              const oldestFresh = freshMsgs.length > 0 ? freshMsgs[0].createdAt.getTime() : Infinity;
+              const olderKept = prev.filter(m => m.createdAt.getTime() < oldestFresh && !freshIds.has(m.id));
+              return [...olderKept, ...freshMsgs];
+            });
           }
+          setHasMore(data.hasMore ?? false);
         }
       } catch { /* ignore */ }
     };
@@ -342,6 +372,72 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
     });
   }, []);
 
+  // Load older messages (virtual scrolling)
+  const loadMoreMessages = useCallback(async () => {
+    if (loadingMoreRef.current || !hasMore || messages.length === 0) return;
+    loadingMoreRef.current = true;
+    setLoadingMore(true);
+    skipAutoScrollRef.current = true;
+
+    // Record scroll position for adjustment after prepend
+    const container = document.querySelector('[data-messages-scroll]');
+    if (container && container.clientHeight > 0) {
+      scrollAdjustRef.current = { prevScrollHeight: container.scrollHeight };
+    }
+
+    try {
+      const oldest = messages[0];
+      const params = new URLSearchParams({ projectId: id, limit: '50' });
+      if (oldest) params.set('before', oldest.createdAt.toISOString());
+      const res = await fetch(`/api/chat?${params}`);
+      if (res.ok) {
+        const data = await res.json();
+        const olderMsgs = (data.messages || []).map((m: any) => ({
+          id: m.id,
+          role: m.role,
+          content: m.content,
+          bookmarked: m.bookmarked || false,
+          reactions: m.reactions || [],
+          attachedFiles: m.attachedFiles || undefined,
+          createdAt: new Date(m.createdAt),
+        }));
+        setMessages(prev => {
+          const existingIds = new Set(prev.map(m => m.id));
+          const newMsgs = olderMsgs.filter((m: Message) => !existingIds.has(m.id));
+          return [...newMsgs, ...prev];
+        });
+        setHasMore(data.hasMore ?? false);
+      }
+    } catch (err) {
+      console.error('Failed to load older messages:', err);
+    } finally {
+      setLoadingMore(false);
+      loadingMoreRef.current = false;
+    }
+  }, [hasMore, messages, id]);
+
+  // Scroll handler for infinite scroll up
+  const handleMessagesScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
+    const el = e.currentTarget;
+    if (el.scrollTop < 200 && hasMore && !loadingMoreRef.current) {
+      loadMoreMessages();
+    }
+  }, [hasMore, loadMoreMessages]);
+
+  // Adjust scroll position after prepending older messages
+  useLayoutEffect(() => {
+    if (scrollAdjustRef.current) {
+      const containers = document.querySelectorAll('[data-messages-scroll]');
+      containers.forEach(el => {
+        if (el.clientHeight > 0) {
+          const diff = el.scrollHeight - scrollAdjustRef.current!.prevScrollHeight;
+          el.scrollTop += diff;
+        }
+      });
+      scrollAdjustRef.current = null;
+    }
+  }, [messages]);
+
   // Auto-scroll to bottom on initial load (instant) 
   useEffect(() => {
     if (messages.length > 0 && !initialScrollDone.current) {
@@ -352,10 +448,14 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
     }
   }, [messages.length, scrollToBottom]);
 
-  // Auto-scroll to bottom on new messages/streaming (smooth)
+  // Auto-scroll to bottom on new messages/streaming (but not on loadMore prepend)
   useEffect(() => {
     if (initialScrollDone.current) {
-      scrollToBottom();
+      if (skipAutoScrollRef.current) {
+        skipAutoScrollRef.current = false;
+      } else {
+        scrollToBottom();
+      }
     }
   }, [messages, streamingContent, scrollToBottom]);
 
@@ -1016,7 +1116,7 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
 
         // Refresh session stats after response
         try {
-          const statsRes = await fetch(`/api/chat?projectId=${id}`);
+          const statsRes = await fetch(`/api/chat?projectId=${id}&limit=1`);
           if (statsRes.ok) {
             const statsData = await statsRes.json();
             if (statsData.sessionKey) {
@@ -1048,11 +1148,11 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
         if (errMsg.includes('network') || errMsg.includes('Failed to fetch') || errMsg.includes('terminated')) {
           try {
             await new Promise(r => setTimeout(r, 2000));
-            const res = await fetch(`/api/chat?projectId=${id}`);
+            const res = await fetch(`/api/chat?projectId=${id}&limit=50`);
             if (res.ok) {
               const data = await res.json();
               if (data.messages?.length) {
-                setMessages(data.messages.map((m: any) => ({
+                const freshMsgs = data.messages.map((m: any) => ({
                   id: m.id,
                   role: m.role,
                   content: m.content,
@@ -1060,7 +1160,14 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
                   reactions: m.reactions || [],
                   attachedFiles: m.attachedFiles || undefined,
                   createdAt: new Date(m.createdAt),
-                })));
+                }));
+                setMessages(prev => {
+                  const freshIds = new Set(freshMsgs.map((m: Message) => m.id));
+                  const oldestFresh = freshMsgs.length > 0 ? freshMsgs[0].createdAt.getTime() : Infinity;
+                  const olderKept = prev.filter(m => m.createdAt.getTime() < oldestFresh && !freshIds.has(m.id));
+                  return [...olderKept, ...freshMsgs];
+                });
+                setHasMore(data.hasMore ?? false);
                 return; // Recovered successfully, no error shown
               }
             }
@@ -1281,7 +1388,7 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
       )}
 
       {/* Chat Area */}
-      <div data-messages-scroll ref={messagesContainerRef} className="flex-1 overflow-y-auto overflow-x-hidden p-4">
+      <div data-messages-scroll ref={messagesContainerRef} className="flex-1 overflow-y-auto overflow-x-hidden p-4" onScroll={handleMessagesScroll}>
         {messages.length === 0 && !streamingContent ? (
           <div className="flex flex-col items-center justify-center h-full text-center">
             <MessageSquare className="h-12 w-12 text-muted-foreground/30 mb-4" />
@@ -1292,10 +1399,54 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
             </p>
           </div>
         ) : (
-          <div className="space-y-4 max-w-full pb-4">
-            {(showBookmarksOnly ? messages.filter(m => m.bookmarked) : messages).map((message) => (
+          <div className="space-y-3 max-w-full pb-4">
+            {/* Load more indicator */}
+            {hasMore && (
+              <div className="flex justify-center py-2">
+                {loadingMore ? (
+                  <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                ) : (
+                  <button className="text-xs text-muted-foreground hover:text-foreground transition-colors px-3 py-1.5 rounded-md hover:bg-muted" onClick={loadMoreMessages}>
+                    ↑ Load older messages
+                  </button>
+                )}
+              </div>
+            )}
+            {(showBookmarksOnly ? messages.filter(m => m.bookmarked) : messages).map((message, _mi, _ma) => {
+              const _prev = _mi > 0 ? _ma[_mi - 1] : null;
+              const _showDate = !_prev || message.createdAt.toDateString() !== _prev.createdAt.toDateString();
+              const _dateSep = _showDate ? (
+                <div className="flex items-center gap-3 my-3">
+                  <div className="flex-1 border-t border-border/50" />
+                  <span className="text-[11px] font-medium text-muted-foreground/70 whitespace-nowrap">
+                    {formatDateSeparator(message.createdAt)}
+                  </span>
+                  <div className="flex-1 border-t border-border/50" />
+                </div>
+              ) : null;
+
+              // System message (session reset divider)
+              if (message.role === 'system') {
+                return (
+                  <Fragment key={message.id}>
+                    {_dateSep}
+                    <div className="flex items-center gap-3 my-2">
+                      <div className="flex-1 border-t border-dashed border-border/40" />
+                      <span className="text-[11px] text-muted-foreground/50 italic flex items-center gap-1.5">
+                        <RotateCcw className="h-3 w-3" />
+                        {message.content.replace(/^—\s*/g, '').replace(/\s*—$/g, '').trim() || 'Session reset'}
+                      </span>
+                      <div className="flex-1 border-t border-dashed border-border/40" />
+                    </div>
+                  </Fragment>
+                );
+              }
+
+              // Regular message
+              return (
+              <Fragment key={message.id}>
+                {_dateSep}
               <div
-                key={message.id}
                 className={`flex group ${
                   message.role === 'user' ? 'justify-end' : 'justify-start'
                 }`}
@@ -1471,9 +1622,15 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
                       ))}
                     </div>
                   )}
+                  {/* Timestamp */}
+                  <div className={`text-[10px] text-muted-foreground/40 mt-0.5 px-1 select-none ${message.role === 'user' ? 'text-right' : 'text-left'}`}>
+                    {formatMessageTime(message.createdAt)}
+                  </div>
                 </div>
               </div>
-            ))}
+              </Fragment>
+              );
+            })}
             
             {/* Streaming response */}
             {streamingContent && (

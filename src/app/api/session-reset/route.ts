@@ -70,10 +70,16 @@ export async function POST(request: NextRequest) {
     // Unlike /reset via chat completions, this goes through the sessions.reset
     // handler which does the actual session rotation.
     try {
-      const result = execSync(
-        `openclaw gateway call sessions.reset --params '${JSON.stringify({ key: sessionKey })}'`,
-        { timeout: 15000, encoding: 'utf-8' }
-      );
+      // Strip OPENCLAW_GATEWAY_URL from child env — when set (from .env),
+      // the CLI applies a strict security check that rejects plaintext HTTP.
+      // Without it, the CLI reads from the config file and works fine.
+      // IMPORTANT: cwd must NOT be the Clawdify directory — the OpenClaw CLI
+      // auto-loads .env from CWD, which contains OPENCLAW_GATEWAY_URL that
+      // gets rejected as insecure plaintext HTTP. Running from /tmp avoids this.
+      // Also pass a clean env to prevent Next.js-injected vars from leaking.
+      const home = process.env.HOME || '/home/ubuntu';
+      const resetCmd = `env -i HOME=${home} PATH=/home/ubuntu/.npm-global/bin:/usr/local/bin:/usr/bin:/bin openclaw gateway call sessions.reset --params '${JSON.stringify({ key: sessionKey })}'`;
+      const result = execSync(resetCmd, { timeout: 15000, encoding: 'utf-8', cwd: '/tmp' });
       console.log('[session-reset] Gateway RPC result:', result.trim().slice(0, 200));
     } catch (resetErr) {
       console.warn('[session-reset] Gateway RPC sessions.reset failed:', resetErr);

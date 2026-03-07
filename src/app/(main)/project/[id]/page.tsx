@@ -665,6 +665,33 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
 
   // Session reset: flush context to memory, then reset OpenClaw context.
   // Messages stay visible in the UI — only the LLM context resets (like Telegram daily reset).
+  // Quick reset — no flush, no confirm. For /reset and /new typed commands.
+  const handleQuickReset = useCallback(async () => {
+    if (resetting || sending) return;
+    setResetting(true);
+    try {
+      const res = await fetch('/api/session-reset', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ projectId: id, flush: false }),
+      });
+      if (!res.ok) throw new Error('Reset failed');
+      setMessages((prev) => [...prev, {
+        id: `msg-${Date.now()}-divider`,
+        role: 'system' as const,
+        content: '— Session reset —',
+        createdAt: new Date(),
+      }]);
+      setSessionStats({ context: 0, max: sessionStats?.max || 200000, compactions: 0, model: sessionStats?.model || null });
+      toast.success('Context reset');
+    } catch (err) {
+      console.error('Quick reset failed:', err);
+      toast.error('Failed to reset session');
+    } finally {
+      setResetting(false);
+    }
+  }, [id, resetting, sending, sessionStats]);
+
   const handleSessionReset = useCallback(async () => {
     if (resetting || sending) return;
     if (!confirm('Reset AI context? Messages stay visible. The AI will save unsaved context first.')) return;
@@ -1052,7 +1079,7 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
     const trimmed = input.trim().toLowerCase();
     if (trimmed === '/reset' || trimmed === '/new') {
       setInput('');
-      handleSessionReset();
+      handleQuickReset();
       return;
     }
 

@@ -1048,6 +1048,14 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
   const handleSend = useCallback(async () => {
     if ((!input.trim() && attachedFiles.length === 0) || sending) return;
 
+    // Intercept OpenClaw slash commands — route to session reset instead of LLM
+    const trimmed = input.trim().toLowerCase();
+    if (trimmed === '/reset' || trimmed === '/new') {
+      setInput('');
+      handleSessionReset();
+      return;
+    }
+
     const currentFiles = [...attachedFiles];
     const messageText = input.trim() || (currentFiles.some(f => isAudioFile(f.name)) ? '🎙️' : '📎');
     const sendPayload = {

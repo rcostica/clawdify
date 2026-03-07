@@ -3,12 +3,19 @@ import { db, threads, messages } from '@/lib/db';
 import { eq, desc } from 'drizzle-orm';
 import { v4 as uuidv4 } from 'uuid';
 import { chatStream } from '@/lib/gateway/client';
+import * as fs from 'fs';
+import * as path from 'path';
+
+const SESSIONS_STORE = path.join(
+  process.env.HOME || '/home/ubuntu',
+  '.openclaw/agents/main/sessions/sessions.json'
+);
 
 /**
  * POST /api/session-reset
  * Body: { projectId: string, flush?: boolean }
  * 
- * Resets the OpenClaw session context (sends /reset to the gateway).
+ * Resets the OpenClaw session context by rotating the sessionId in the store.
  * Messages stay in the UI — only the LLM context resets.
  * Optionally flushes memory first (flush=true, default).
  */
@@ -55,25 +62,55 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Send /reset to OpenClaw — resets session context, keeps the same key
+    // Reset by rotating the sessionId in the OpenClaw session store directly.
+    // This is equivalent to what /reset does — new sessionId = fresh context.
+    let rotated = false;
     try {
-      const resetRes = await chatStream({
-        messages: [
-          { role: 'user', content: '/reset' },
-        ],
-        sessionKey,
-        user: sessionKey,
-      });
-      // Consume the response
-      if (resetRes.body) {
-        const reader = resetRes.body.getReader();
-        while (true) {
-          const { done } = await reader.read();
-          if (done) break;
+      if (fs.existsSync(SESSIONS_STORE)) {
+        const store = JSON.parse(fs.readFileSync(SESSIONS_STORE, 'utf-8'));
+        
+        // Rotate both possible key formats
+        const keys = [sessionKey, `agent:main:${sessionKey}`];
+        for (const key of keys) {
+          if (store[key]) {
+            const oldSessionId = store[key].sessionId;
+            store[key].sessionId = uuidv4();
+            store[key].updatedAt = Date.now();
+            // Reset token counters
+            store[key].inputTokens = 0;
+            store[key].outputTokens = 0;
+            store[key].totalTokens = 0;
+            store[key].cacheRead = 0;
+            store[key].cacheWrite = 0;
+            store[key].compactionCount = 0;
+            console.log(`[session-reset] Rotated ${key}: ${oldSessionId} → ${store[key].sessionId}`);
+            rotated = true;
+          }
+        }
+        
+        if (rotated) {
+          fs.writeFileSync(SESSIONS_STORE, JSON.stringify(store, null, 2));
         }
       }
-    } catch (resetErr) {
-      console.warn('[session-reset] OpenClaw /reset failed:', resetErr);
+    } catch (storeErr) {
+      console.warn('[session-reset] Session store rotation failed:', storeErr);
+      // Fall back to sending /reset through chat (may not work for active sessions)
+      try {
+        const resetRes = await chatStream({
+          messages: [{ role: 'user', content: '/reset' }],
+          sessionKey,
+          user: sessionKey,
+        });
+        if (resetRes.body) {
+          const reader = resetRes.body.getReader();
+          while (true) {
+            const { done } = await reader.read();
+            if (done) break;
+          }
+        }
+      } catch (resetErr) {
+        console.warn('[session-reset] /reset fallback also failed:', resetErr);
+      }
     }
 
     // Insert a visual divider in the UI thread
@@ -86,12 +123,13 @@ export async function POST(request: NextRequest) {
       createdAt: now,
     }).run();
 
-    console.log(`[session-reset] Project ${projectId}: context reset (session key: ${sessionKey})`);
+    console.log(`[session-reset] Project ${projectId}: context reset (session key: ${sessionKey}, rotated: ${rotated})`);
 
     return NextResponse.json({
       ok: true,
       sessionKey,
       threadId: existing.id,
+      rotated,
     });
   } catch (error) {
     console.error('[session-reset] Error:', error);

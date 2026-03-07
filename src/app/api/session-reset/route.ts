@@ -3,14 +3,24 @@ import { db, threads, messages } from '@/lib/db';
 import { eq, desc } from 'drizzle-orm';
 import { v4 as uuidv4 } from 'uuid';
 import { chatStream } from '@/lib/gateway/client';
+import { execSync } from 'child_process';
 
 /**
  * POST /api/session-reset
  * Body: { projectId: string, flush?: boolean }
  * 
- * Resets the OpenClaw session context (sends /reset to the gateway).
+ * Resets the OpenClaw session context via gateway RPC (sessions.reset).
  * Messages stay in the UI — only the LLM context resets.
  * Optionally flushes memory first (flush=true, default).
+ * 
+ * IMPORTANT: /reset sent via /v1/chat/completions does NOT trigger a reset —
+ * the HTTP completions path uses agentCommandFromIngress which bypasses
+ * initSessionState (where reset triggers are checked). Only channel dispatchers
+ * (Telegram, Discord, native webchat) go through initSessionState.
+ * 
+ * The fix: use `openclaw gateway call sessions.reset` RPC which directly
+ * resets the session in the store, archives the transcript, and creates
+ * a fresh session entry.
  */
 export async function POST(request: NextRequest) {
   try {
@@ -55,25 +65,19 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Send /reset to OpenClaw — resets session context, keeps the same key
+    // Reset session via gateway RPC — this properly resets the session store,
+    // archives the old transcript, and creates a fresh session entry.
+    // Unlike /reset via chat completions, this goes through the sessions.reset
+    // handler which does the actual session rotation.
     try {
-      const resetRes = await chatStream({
-        messages: [
-          { role: 'user', content: '/reset' },
-        ],
-        sessionKey,
-        user: sessionKey,
-      });
-      // Consume the response
-      if (resetRes.body) {
-        const reader = resetRes.body.getReader();
-        while (true) {
-          const { done } = await reader.read();
-          if (done) break;
-        }
-      }
+      const result = execSync(
+        `openclaw gateway call sessions.reset --params '${JSON.stringify({ key: sessionKey })}'`,
+        { timeout: 15000, encoding: 'utf-8' }
+      );
+      console.log('[session-reset] Gateway RPC result:', result.trim().slice(0, 200));
     } catch (resetErr) {
-      console.warn('[session-reset] OpenClaw /reset failed:', resetErr);
+      console.warn('[session-reset] Gateway RPC sessions.reset failed:', resetErr);
+      // Don't throw — we still want the visual divider even if reset fails
     }
 
     // Insert a visual divider in the UI thread

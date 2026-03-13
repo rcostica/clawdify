@@ -15,6 +15,7 @@ import { FilesPanel } from '@/components/files-panel';
 import { ProjectMobileTabs, type ProjectMobileTab } from '@/components/project-mobile-tabs';
 import { DocsPanel } from '@/components/docs-panel';
 import type { Project } from '@/lib/db/schema';
+import { MarkdownMessage } from '@/components/markdown-message';
 
 const IMAGE_EXTENSIONS = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg'];
 function isImageFile(name: string): boolean {
@@ -1568,13 +1569,13 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
                         )}
                       </div>
                     )}
-                    <p className="whitespace-pre-wrap text-sm leading-relaxed">
-                      {showSearch && searchQuery.trim() ? (
+                    {showSearch && searchQuery.trim() ? (
+                      <p className="whitespace-pre-wrap text-sm leading-relaxed">
                         <HighlightedText text={message.content} query={searchQuery} />
-                      ) : (
-                        message.content
-                      )}
-                    </p>
+                      </p>
+                    ) : (
+                      <MarkdownMessage content={message.content} />
+                    )}
                     {/* Failed message indicator + retry */}
                     {message.failed && (
                       <div className="flex items-center gap-2 mt-2 pt-2 border-t border-red-200 dark:border-red-800">
@@ -1705,7 +1706,7 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
             {streamingContent && (
               <div className="flex justify-start">
                 <div className="max-w-[85%] overflow-hidden rounded-lg px-4 py-2.5 bg-muted">
-                  <p className="whitespace-pre-wrap text-sm leading-relaxed">{streamingContent}</p>
+                  <MarkdownMessage content={streamingContent} />
                   <span className="inline-block w-2 h-4 bg-foreground/50 animate-pulse ml-0.5" />
                 </div>
               </div>

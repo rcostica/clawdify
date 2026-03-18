@@ -13,6 +13,7 @@ type MessageEvent = {
     role: string;
     content: string;
     attachedFiles?: Array<{ path: string; name: string }>;
+    replyTo?: { id: string; content: string | null; role: string | null };
     createdAt: string;
   };
 };

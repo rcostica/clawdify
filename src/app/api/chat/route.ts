@@ -322,6 +322,7 @@ export async function GET(request: NextRequest) {
       bookmarked: m.bookmarked === 1,
       reactions: reactionsByMessage.get(m.id) || [],
       attachedFiles: m.attachedFiles ? JSON.parse(m.attachedFiles) : undefined,
+      replyTo: m.replyToId ? { id: m.replyToId, content: m.replyToContent, role: m.replyToRole } : undefined,
       createdAt: m.createdAt,
     })),
   });
@@ -349,6 +350,20 @@ export async function POST(request: NextRequest) {
       ? JSON.stringify(attachedFiles.map((fp: string) => ({ path: fp, name: fp.split('/').pop() || fp })))
       : null;
 
+    // Resolve reply-to metadata
+    let replyToId: string | null = null;
+    let replyToContent: string | null = null;  // Short snippet for UI display
+    let replyToRole: string | null = null;
+    let replyToFullContent: string | null = null;  // Full content for LLM context
+    if (replyTo && typeof replyTo === 'object' && replyTo.id) {
+      replyToId = replyTo.id;
+      // Look up the full original message from DB
+      const origMsg = db.select({ role: messages.role, content: messages.content }).from(messages).where(eq(messages.id, replyTo.id)).get();
+      replyToRole = origMsg?.role || (replyTo.role || null);
+      replyToFullContent = origMsg?.content || replyTo.content || null;
+      replyToContent = (replyToFullContent || '').slice(0, 200);  // Short snippet for DB/UI
+    }
+
     if (threadId) {
       db.insert(messages).values({
         id: userMsgId,
@@ -356,6 +371,9 @@ export async function POST(request: NextRequest) {
         role: 'user',
         content: redactSecrets(message),
         attachedFiles: attachedFilesJson,
+        replyToId,
+        replyToContent: replyToContent ? redactSecrets(replyToContent) : null,
+        replyToRole,
         createdAt: userCreatedAt,
       }).run();
 
@@ -370,6 +388,7 @@ export async function POST(request: NextRequest) {
             role: 'user',
             content: redactSecrets(message),
             attachedFiles: attachedFilesJson ? JSON.parse(attachedFilesJson) : undefined,
+            replyTo: replyToId ? { id: replyToId, content: replyToContent, role: replyToRole } : undefined,
             createdAt: userCreatedAt.toISOString(),
           },
         });
@@ -389,9 +408,9 @@ export async function POST(request: NextRequest) {
     let userTextContent = message;
 
     // Prepend reply/reference context if replying to a specific message
-    if (replyTo && typeof replyTo === 'object' && replyTo.content) {
-      const quotedContent = replyTo.content.slice(0, 300);
-      userTextContent = `[Replying to: "${quotedContent}"${replyTo.content.length > 300 ? '...' : ''}]\n\n${userTextContent}`;
+    // Use the full original message from DB for LLM context (not the truncated UI snippet)
+    if (replyToFullContent) {
+      userTextContent = `[Replying to: "${replyToFullContent}"]\n\n${userTextContent}`;
     }
 
     // Process attached files (images become vision content blocks, text stays inline)
@@ -460,6 +479,14 @@ export async function POST(request: NextRequest) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const streamRef: { current: any } = { current: null };
 
+    // SSE keepalive: send a comment every 15s during silent periods (tool use, thinking)
+    // to prevent browsers/proxies from killing the connection
+    const keepaliveInterval = setInterval(() => {
+      if (!clientCancelled) {
+        try { streamRef.current?.enqueue(encoder.encode(': keepalive\n\n')); } catch {}
+      }
+    }, 15000);
+
     const backgroundTask = (async () => {
       let content = '';
       const reader = gatewayResponse.body!.getReader();
@@ -495,6 +522,8 @@ export async function POST(request: NextRequest) {
         }
       } catch (error) {
         console.error('Gateway stream error:', error);
+      } finally {
+        clearInterval(keepaliveInterval);
       }
 
       // Always save assistant response to DB

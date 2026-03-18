@@ -183,3 +183,14 @@ try {
 try {
   sqlite.exec(`ALTER TABLE messages ADD COLUMN bookmarked INTEGER NOT NULL DEFAULT 0;`);
 } catch { /* column already exists */ }
+
+// Migration: reply-to fields on messages (for in-chat reply references)
+try {
+  sqlite.exec(`ALTER TABLE messages ADD COLUMN reply_to_id TEXT;`);
+} catch { /* column already exists */ }
+try {
+  sqlite.exec(`ALTER TABLE messages ADD COLUMN reply_to_content TEXT;`);
+} catch { /* column already exists */ }
+try {
+  sqlite.exec(`ALTER TABLE messages ADD COLUMN reply_to_role TEXT;`);
+} catch { /* column already exists */ }

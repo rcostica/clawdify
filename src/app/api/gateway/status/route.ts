@@ -27,19 +27,24 @@ export async function GET() {
     return NextResponse.json(result);
   }
 
-  // Check if chatCompletions endpoint is enabled (OPTIONS — no LLM call)
+  // Check if chatCompletions endpoint is enabled
+  // Send a minimal POST (empty messages) — the endpoint will return 400 (bad request)
+  // if enabled, or 404/405 if disabled. This avoids triggering an LLM call.
   try {
     const chatCheck = await fetch(`${GATEWAY_URL}/v1/chat/completions`, {
-      method: 'OPTIONS',
+      method: 'POST',
       headers: {
         'Authorization': `Bearer ${GATEWAY_TOKEN}`,
+        'Content-Type': 'application/json',
       },
+      body: JSON.stringify({ model: 'openclaw:main', messages: [] }),
       signal: AbortSignal.timeout(5000),
     });
 
-    if (chatCheck.status === 405) {
+    if (chatCheck.status === 404 || chatCheck.status === 405) {
       result.chatEndpoint = 'disabled';
     } else {
+      // 400, 200, or anything else means the endpoint exists and is active
       result.chatEndpoint = 'enabled';
     }
     await chatCheck.text().catch(() => {});

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { chatStream, type ChatMessage } from '@/lib/gateway/client';
+import { chatStream, type ChatMessage, type ChatStreamResult } from '@/lib/gateway/client';
 import { db, messages, threads, projects, settings, vault, messageReactions } from '@/lib/db';
 import { eq, desc, like, and, lt, sql } from 'drizzle-orm';
 import { v4 as uuidv4 } from 'uuid';
@@ -460,7 +460,7 @@ export async function POST(request: NextRequest) {
         ? `multimodal[${(chatMessages[chatMessages.length - 1].content as Array<{type:string}>).map(p => p.type).join(',')}]`
         : 'text'
     );
-    const gatewayResponse = await chatStream({
+    const { response: gatewayResponse, usedFallback, fallbackModel } = await chatStream({
       messages: chatMessages,
       sessionKey: effectiveSessionKey,
       user: effectiveSessionKey,
@@ -491,6 +491,20 @@ export async function POST(request: NextRequest) {
       let content = '';
       const reader = gatewayResponse.body!.getReader();
       let buffer = '';
+
+      // If fallback was used, inject notice as first chunk
+      if (usedFallback) {
+        const notice = `⚠️ **Primary model overloaded** — using ${fallbackModel || 'fallback model'} instead.\n\n`;
+        content += notice;
+        if (!clientCancelled) {
+          try {
+            const noticeChunk = JSON.stringify({
+              choices: [{ delta: { content: notice } }]
+            });
+            streamRef.current?.enqueue(encoder.encode(`data: ${noticeChunk}\n\n`));
+          } catch {}
+        }
+      }
 
       try {
         while (true) {

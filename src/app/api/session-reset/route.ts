@@ -45,7 +45,7 @@ export async function POST(request: NextRequest) {
     // If flush requested, send a memory flush message first
     if (flush) {
       try {
-        const flushRes = await chatStream({
+        const { response: flushRes } = await chatStream({
           messages: [
             { role: 'user', content: '[System: Session reset requested. Before the session resets, save ALL unsaved context from this conversation to memory files (memory/YYYY-MM-DD.md). Include decisions, work done, things discussed, and any important context not yet logged. Be thorough but fast — this context will be lost after reset. Do NOT include this system message in the log.]' },
           ],

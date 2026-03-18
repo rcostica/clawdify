@@ -61,6 +61,12 @@ interface Reaction {
   id: string;
 }
 
+interface ReplyRef {
+  id: string;
+  content: string;
+  role?: string;
+}
+
 interface Message {
   id: string;
   role: 'user' | 'assistant' | 'system';
@@ -68,6 +74,7 @@ interface Message {
   attachedFiles?: AttachedFile[];
   bookmarked?: boolean;
   reactions?: Reaction[];
+  replyTo?: ReplyRef;
   createdAt: Date;
   failed?: boolean;
   _sendPayload?: { message: string; projectId: string; tabId: string; attachedFiles?: string[]; replyTo?: { id: string; content: string } };
@@ -203,6 +210,7 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
               bookmarked: m.bookmarked || false,
               reactions: m.reactions || [],
               attachedFiles: m.attachedFiles || undefined,
+              replyTo: m.replyTo || undefined,
               createdAt: new Date(m.createdAt),
             })));
           }
@@ -241,6 +249,7 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
               bookmarked: msg.bookmarked || false,
               reactions: msg.reactions || [],
               attachedFiles: msg.attachedFiles || undefined,
+              replyTo: msg.replyTo || undefined,
               createdAt: new Date(msg.createdAt),
             }];
           });
@@ -403,6 +412,7 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
           bookmarked: m.bookmarked || false,
           reactions: m.reactions || [],
           attachedFiles: m.attachedFiles || undefined,
+          replyTo: m.replyTo || undefined,
           createdAt: new Date(m.createdAt),
         }));
         setMessages(prev => {
@@ -440,6 +450,7 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
             bookmarked: m.bookmarked || false,
             reactions: m.reactions || [],
             attachedFiles: m.attachedFiles || undefined,
+            replyTo: m.replyTo || undefined,
             createdAt: new Date(m.createdAt),
           })));
         }
@@ -1098,6 +1109,7 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
       role: 'user',
       content: messageText,
       attachedFiles: currentFiles.length > 0 ? currentFiles : undefined,
+      replyTo: replyTo ? { id: replyTo.id, content: replyTo.content.slice(0, 200), role: replyTo.role } : undefined,
       createdAt: new Date(),
       _sendPayload: sendPayload,
     };
@@ -1112,6 +1124,9 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
 
     const controller = new AbortController();
     abortControllerRef.current = controller;
+    // Accumulated response text — declared outside try so catch can access it
+    // for preserving partial content when the stream dies mid-response.
+    let accumulated = '';
 
     try {
       const res = await fetch('/api/chat', {
@@ -1131,7 +1146,6 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
       // Read the SSE stream with proper line buffering
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
-      let accumulated = '';
       let lineBuf = ''; // buffer for partial lines across chunks
       lastStreamDataRef.current = Date.now(); // mark stream start
 
@@ -1147,6 +1161,11 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
 
         for (const line of parts) {
           const trimmed = line.trim();
+          // SSE keepalive comments (": keepalive") — just update timestamp
+          if (trimmed.startsWith(':')) {
+            lastStreamDataRef.current = Date.now();
+            continue;
+          }
           if (!trimmed.startsWith('data: ')) continue;
           const data = trimmed.slice(6);
           if (data === '[DONE]') continue;
@@ -1166,13 +1185,44 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
 
       // Streaming complete — add as full message
       if (accumulated) {
+        const assistantMsgId = `msg-${Date.now()}-assistant`;
         const assistantMessage: Message = {
-          id: `msg-${Date.now()}-assistant`,
+          id: assistantMsgId,
           role: 'assistant',
           content: accumulated,
           createdAt: new Date(),
         };
         setMessages((prev) => [...prev, assistantMessage]);
+
+        // Ensure the message is persisted to DB.
+        // Normally the backend's backgroundTask saves it, but if the server
+        // crashed/restarted mid-stream, it may not have. Save as safety net.
+        try {
+          // Short delay to let the backend's own save complete first
+          await new Promise(r => setTimeout(r, 1000));
+          // Check if the backend already saved it by refreshing from DB
+          const checkRes = await fetch(`/api/chat?projectId=${id}&limit=5`);
+          if (checkRes.ok) {
+            const checkData = await checkRes.json();
+            const userMsgTime = userMessage.createdAt.getTime();
+            const alreadySaved = checkData.messages?.some((m: any) =>
+              m.role === 'assistant' && new Date(m.createdAt).getTime() > userMsgTime
+            );
+            if (!alreadySaved) {
+              // Backend didn't save it — persist from frontend
+              await fetch('/api/messages/save', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  id: assistantMsgId,
+                  projectId: id,
+                  role: 'assistant',
+                  content: accumulated,
+                }),
+              });
+            }
+          }
+        } catch { /* best effort */ }
 
         // Browser notification if tab not focused
         if (document.hidden && Notification.permission === 'granted') {
@@ -1214,40 +1264,82 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
       } else {
         console.error('Chat error:', error);
         const errMsg = (error as Error).message || '';
-        // Network errors (e.g. PWA suspended mid-stream) — try to recover from DB
-        if (errMsg.includes('network') || errMsg.includes('Failed to fetch') || errMsg.includes('terminated')) {
-          try {
-            await new Promise(r => setTimeout(r, 2000));
-            const res = await fetch(`/api/chat?projectId=${id}&limit=50`);
-            if (res.ok) {
-              const data = await res.json();
-              if (data.messages?.length) {
-                const freshMsgs = data.messages.map((m: any) => ({
-                  id: m.id,
-                  role: m.role,
-                  content: m.content,
-                  bookmarked: m.bookmarked || false,
-                  reactions: m.reactions || [],
-                  attachedFiles: m.attachedFiles || undefined,
-                  createdAt: new Date(m.createdAt),
-                }));
-                setMessages(prev => {
-                  const freshIds = new Set(freshMsgs.map((m: Message) => m.id));
-                  const oldestFresh = freshMsgs.length > 0 ? freshMsgs[0].createdAt.getTime() : Infinity;
-                  const olderKept = prev.filter(m => m.createdAt.getTime() < oldestFresh && !freshIds.has(m.id));
-                  return [...olderKept, ...freshMsgs];
-                });
-                setHasMore(data.hasMore ?? false);
-                return; // Recovered successfully, no error shown
+        // Stream died unexpectedly — the backend may still be processing.
+        // Poll DB for the completed response (backend saves regardless of client state).
+        let recovered = false;
+        try {
+          // Wait a bit, then poll up to 3 times for the response to land in DB
+          for (let attempt = 0; attempt < 3 && !recovered; attempt++) {
+            await new Promise(r => setTimeout(r, attempt === 0 ? 2000 : 5000));
+            try {
+              const res = await fetch(`/api/chat?projectId=${id}&limit=50`);
+              if (res.ok) {
+                const data = await res.json();
+                if (data.messages?.length) {
+                  // Check if there's a newer assistant message than our user message
+                  const userMsgTime = userMessage.createdAt.getTime();
+                  const hasNewAssistant = data.messages.some((m: any) =>
+                    m.role === 'assistant' && new Date(m.createdAt).getTime() > userMsgTime
+                  );
+                  if (hasNewAssistant) {
+                    const freshMsgs = data.messages.map((m: any) => ({
+                      id: m.id,
+                      role: m.role,
+                      content: m.content,
+                      bookmarked: m.bookmarked || false,
+                      reactions: m.reactions || [],
+                      attachedFiles: m.attachedFiles || undefined,
+                      replyTo: m.replyTo || undefined,
+                      createdAt: new Date(m.createdAt),
+                    }));
+                    setMessages(prev => {
+                      const freshIds = new Set(freshMsgs.map((m: Message) => m.id));
+                      const oldestFresh = freshMsgs.length > 0 ? freshMsgs[0].createdAt.getTime() : Infinity;
+                      const olderKept = prev.filter(m => m.createdAt.getTime() < oldestFresh && !freshIds.has(m.id));
+                      return [...olderKept, ...freshMsgs];
+                    });
+                    setHasMore(data.hasMore ?? false);
+                    recovered = true;
+                  }
+                }
               }
-            }
-          } catch { /* recovery failed, show error below */ }
+            } catch { /* server might still be restarting, try again */ }
+          }
+        } catch { /* recovery failed */ }
+        if (!recovered) {
+          // If we had partial streaming content, preserve it as an incomplete message
+          // (e.g. server crashed mid-stream — response was never saved to DB)
+          if (accumulated) {
+            const partialId = `msg-${Date.now()}-partial`;
+            const partialContent = accumulated + '\n\n---\n⚠️ *Response interrupted — server restarted*';
+            const partialCreatedAt = new Date();
+            setMessages((prev) => [...prev, {
+              id: partialId,
+              role: 'assistant' as const,
+              content: partialContent,
+              createdAt: partialCreatedAt,
+            }]);
+            // Persist to DB so it survives project switches and page reloads
+            try {
+              await fetch('/api/messages/save', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  id: partialId,
+                  projectId: id,
+                  role: 'assistant',
+                  content: partialContent,
+                }),
+              });
+            } catch { /* best effort — DB save failed but UI still shows it */ }
+          } else {
+            // No content at all — mark the user message as failed
+            setMessages((prev) => prev.map(m =>
+              m.id === userMessage.id ? { ...m, failed: true } : m
+            ));
+            toast.error(`Send failed: ${errMsg}`);
+          }
         }
-        // Mark the user message as failed so they can retry
-        setMessages((prev) => prev.map(m =>
-          m.id === userMessage.id ? { ...m, failed: true } : m
-        ));
-        toast.error(`Send failed: ${errMsg}`);
       }
     } finally {
       setSending(false);
@@ -1517,7 +1609,8 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
               <Fragment key={message.id}>
                 {_dateSep}
               <div
-                className={`flex group ${
+                id={`msg-${message.id}`}
+                className={`flex group transition-all ${
                   message.role === 'user' ? 'justify-end' : 'justify-start'
                 }`}
               >
@@ -1531,6 +1624,35 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
                           : 'bg-muted'
                     } ${message.bookmarked ? 'ring-2 ring-amber-400/50 ring-offset-1 ring-offset-background' : ''}`}
                   >
+                    {/* Reply quote — shown above message content */}
+                    {message.replyTo && (
+                      <button
+                        onClick={() => {
+                          const el = document.getElementById(`msg-${message.replyTo!.id}`);
+                          if (el) {
+                            el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                            el.classList.add('ring-2', 'ring-primary/60');
+                            setTimeout(() => el.classList.remove('ring-2', 'ring-primary/60'), 1500);
+                          }
+                        }}
+                        className={`w-full text-left mb-2 rounded px-2.5 py-1.5 border-l-2 cursor-pointer transition-colors ${
+                          message.role === 'user'
+                            ? 'bg-white/10 border-white/40 hover:bg-white/15'
+                            : 'bg-foreground/5 border-primary/40 hover:bg-foreground/10'
+                        }`}
+                      >
+                        <span className={`text-[11px] font-medium ${
+                          message.role === 'user' ? 'text-primary-foreground/70' : 'text-primary/80'
+                        }`}>
+                          {message.replyTo.role === 'user' ? 'You' : 'Assistant'}
+                        </span>
+                        <p className={`text-xs truncate ${
+                          message.role === 'user' ? 'text-primary-foreground/60' : 'text-muted-foreground'
+                        }`}>
+                          {message.replyTo.content}
+                        </p>
+                      </button>
+                    )}
                     {message.attachedFiles && message.attachedFiles.length > 0 && (
                       <div className="flex flex-wrap gap-1.5 mb-2">
                         {message.attachedFiles.map((f) =>

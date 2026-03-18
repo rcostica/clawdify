@@ -37,6 +37,9 @@ export const messages = sqliteTable('messages', {
   tokensUsed: integer('tokens_used'),
   bookmarked: integer('bookmarked').default(0).notNull(),
   attachedFiles: text('attached_files'),  // JSON array of {path, name} objects
+  replyToId: text('reply_to_id'),         // ID of the message being replied to
+  replyToContent: text('reply_to_content'), // Snippet of the replied-to message
+  replyToRole: text('reply_to_role'),     // Role of the replied-to message (user/assistant)
   createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
 });
 

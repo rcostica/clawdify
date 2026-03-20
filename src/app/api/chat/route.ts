@@ -332,6 +332,9 @@ export async function GET(request: NextRequest) {
 // POST /api/chat
 // ---------------------------------------------------------------------------
 
+// Track recent POSTs to detect duplicates
+const recentPosts = new Map<string, { time: number; count: number }>();
+
 export async function POST(request: NextRequest) {
   try {
     const { message, projectId, sessionKey, attachedFiles, tabId, replyTo } = await request.json();
@@ -339,6 +342,25 @@ export async function POST(request: NextRequest) {
     if (!message || typeof message !== 'string') {
       return NextResponse.json({ error: 'Message is required' }, { status: 400 });
     }
+
+    // Duplicate detection: log and reject if same message+project within 30s
+    const dedupKey = `${projectId}:${message.slice(0, 100)}`;
+    const now = Date.now();
+    const prev = recentPosts.get(dedupKey);
+    if (prev && now - prev.time < 30_000) {
+      prev.count++;
+      console.warn(`[chat] ⚠️ DUPLICATE POST detected! key="${dedupKey.slice(0, 60)}" count=${prev.count} gap=${now - prev.time}ms`);
+      console.warn(`[chat]   tabId=${tabId} projectId=${projectId}`);
+      console.warn(`[chat]   headers: ${JSON.stringify(Object.fromEntries(request.headers.entries()))}`);
+      // Don't send to gateway again — just return an empty success
+      return NextResponse.json({ deduplicated: true }, { status: 200 });
+    }
+    recentPosts.set(dedupKey, { time: now, count: 1 });
+    // Cleanup old entries
+    for (const [k, v] of recentPosts) {
+      if (now - v.time > 60_000) recentPosts.delete(k);
+    }
+    console.log(`[chat] POST received: tabId=${tabId} msg="${message.slice(0, 60)}..." projectId=${projectId}`);
 
     const threadId = projectId ? getOrCreateThread(projectId) : null;
 

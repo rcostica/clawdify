@@ -32,6 +32,22 @@ const OVERLOAD_MAX_RETRIES = 2;        // retry twice before fallback
 const OVERLOAD_RETRY_DELAYS = [2000, 3000]; // ms between retries
 const SILENCE_TIMEOUT_MS = 60_000;     // 60s of total silence (no bytes at all) → assume dead
 
+// When falling back to a different model, we must NOT re-send the original user
+// message because the gateway already appended it to the session transcript on
+// the first (failed) attempt. Re-sending would create a duplicate in the session
+// history, causing the fallback model to see the message twice and respond with
+// "I already answered this." Instead, we send a short system-level nudge that
+// tells the fallback model to respond to the user's last message in the session.
+const FALLBACK_RETRY_MESSAGE = '[System: The previous model attempt failed or timed out. Please respond to the user\'s most recent message above. Do not mention this system note.]';
+
+function buildFallbackBody(originalBody: Record<string, unknown>): Record<string, unknown> {
+  return {
+    ...originalBody,
+    model: FALLBACK_MODEL,
+    messages: [{ role: 'user', content: FALLBACK_RETRY_MESSAGE }],
+  };
+}
+
 export type ChatStreamResult = {
   response: Response;
   usedFallback: boolean;
@@ -201,7 +217,9 @@ export async function chatStream(opts: {
     }
   }
 
-  // If still 529 after retries, fall back to alternate model
+  // If still 529 after retries, fall back to alternate model.
+  // 529 = gateway rejected the request outright, so the user message was likely
+  // never appended to the session transcript. Send the full original message.
   if (response.status === 529) {
     console.log(`[chatStream] 529 persisted after ${OVERLOAD_MAX_RETRIES} retries — falling back to ${FALLBACK_MODEL}`);
     const fallbackBody = { ...body, model: FALLBACK_MODEL };
@@ -230,7 +248,8 @@ export async function chatStream(opts: {
 
   if (!chunkResult.ok) {
     console.log(`[chatStream] Primary model stream went silent for ${SILENCE_TIMEOUT_MS}ms — falling back to ${FALLBACK_MODEL}`);
-    const fallbackBody = { ...body, model: FALLBACK_MODEL };
+    // User message is already in the gateway session — send retry nudge, not the original.
+    const fallbackBody = buildFallbackBody(body);
     const fallbackResponse = await attempt(fallbackBody);
 
     if (!fallbackResponse.ok) {

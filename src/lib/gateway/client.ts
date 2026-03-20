@@ -30,23 +30,7 @@ export type ChatMessage = {
 const FALLBACK_MODEL = 'anthropic/claude-sonnet-4-6';
 const OVERLOAD_MAX_RETRIES = 2;        // retry twice before fallback
 const OVERLOAD_RETRY_DELAYS = [2000, 3000]; // ms between retries
-const SILENCE_TIMEOUT_MS = 60_000;     // 60s of total silence (no bytes at all) → assume dead
-
-// When falling back to a different model, we must NOT re-send the original user
-// message because the gateway already appended it to the session transcript on
-// the first (failed) attempt. Re-sending would create a duplicate in the session
-// history, causing the fallback model to see the message twice and respond with
-// "I already answered this." Instead, we send a short system-level nudge that
-// tells the fallback model to respond to the user's last message in the session.
-const FALLBACK_RETRY_MESSAGE = '[System: The previous model attempt failed or timed out. Please respond to the user\'s most recent message above. Do not mention this system note.]';
-
-function buildFallbackBody(originalBody: Record<string, unknown>): Record<string, unknown> {
-  return {
-    ...originalBody,
-    model: FALLBACK_MODEL,
-    messages: [{ role: 'user', content: FALLBACK_RETRY_MESSAGE }],
-  };
-}
+const FIRST_CHUNK_TIMEOUT_MS = 45_000; // 45s — if no real data chunk arrives, assume overloaded
 
 export type ChatStreamResult = {
   response: Response;
@@ -56,17 +40,15 @@ export type ChatStreamResult = {
 
 /**
  * Wait for the first meaningful SSE data chunk from a streaming response.
- * Uses a rolling silence timer: any bytes from the gateway (including SSE
- * comments / keepalives) reset the timer. This means tool-call phases that
- * produce no text but do send keepalives won't trigger a false timeout.
- * Only truly silent streams (no bytes at all for SILENCE_TIMEOUT_MS) fall back.
+ * Buffers all bytes read while waiting and returns them so they can be
+ * prepended back into the stream for downstream consumers.
  *
  * Returns { ok: true, buffered, reader } if data arrived,
  *         { ok: false } if timed out (stream is aborted).
  */
 async function waitForFirstChunk(
   response: Response,
-  silenceMs: number,
+  timeoutMs: number,
 ): Promise<
   | { ok: true; buffered: Uint8Array[]; reader: ReadableStreamDefaultReader<Uint8Array> }
   | { ok: false }
@@ -80,22 +62,13 @@ async function waitForFirstChunk(
 
   return new Promise((resolve) => {
     let settled = false;
-
-    // Rolling silence timer — resets every time we receive ANY bytes
-    let timer = setTimeout(onSilenceTimeout, silenceMs);
-
-    function onSilenceTimeout() {
+    const timer = setTimeout(() => {
       if (settled) return;
       settled = true;
-      console.log(`[chatStream] Stream silent for ${silenceMs}ms (no bytes at all) — aborting`);
+      console.log(`[chatStream] No data chunk within ${timeoutMs}ms — aborting`);
       reader.cancel().catch(() => {});
       resolve({ ok: false });
-    }
-
-    function resetTimer() {
-      clearTimeout(timer);
-      timer = setTimeout(onSilenceTimeout, silenceMs);
-    }
+    }, timeoutMs);
 
     (async () => {
       try {
@@ -106,13 +79,9 @@ async function waitForFirstChunk(
             if (!settled) { settled = true; resolve({ ok: true, buffered, reader }); }
             return;
           }
-
-          // Any bytes received = gateway is alive, reset silence timer
-          resetTimer();
-
           buffered.push(value);
           textBuf += decoder.decode(value, { stream: true });
-          // Check for any real data line (actual content, not just SSE comments)
+          // Check for any real data line (not SSE comments like `: keepalive`)
           if (textBuf.split('\n').some(line => line.startsWith('data: '))) {
             clearTimeout(timer);
             if (!settled) { settled = true; resolve({ ok: true, buffered, reader }); }
@@ -217,9 +186,7 @@ export async function chatStream(opts: {
     }
   }
 
-  // If still 529 after retries, fall back to alternate model.
-  // 529 = gateway rejected the request outright, so the user message was likely
-  // never appended to the session transcript. Send the full original message.
+  // If still 529 after retries, fall back to alternate model
   if (response.status === 529) {
     console.log(`[chatStream] 529 persisted after ${OVERLOAD_MAX_RETRIES} retries — falling back to ${FALLBACK_MODEL}`);
     const fallbackBody = { ...body, model: FALLBACK_MODEL };
@@ -242,14 +209,12 @@ export async function chatStream(opts: {
   }
 
   // Stream got 200 — but OpenClaw may sit idle while retrying Opus internally.
-  // Use a rolling silence timeout: any bytes (including keepalives) reset the timer.
-  // Only fall back if the stream goes completely silent (truly dead gateway/model).
-  const chunkResult = await waitForFirstChunk(response, SILENCE_TIMEOUT_MS);
+  // Wait for the first real data chunk within timeout, otherwise fall back.
+  const chunkResult = await waitForFirstChunk(response, FIRST_CHUNK_TIMEOUT_MS);
 
   if (!chunkResult.ok) {
-    console.log(`[chatStream] Primary model stream went silent for ${SILENCE_TIMEOUT_MS}ms — falling back to ${FALLBACK_MODEL}`);
-    // User message is already in the gateway session — send retry nudge, not the original.
-    const fallbackBody = buildFallbackBody(body);
+    console.log(`[chatStream] Primary model stream timed out (no data in ${FIRST_CHUNK_TIMEOUT_MS}ms) — falling back to ${FALLBACK_MODEL}`);
+    const fallbackBody = { ...body, model: FALLBACK_MODEL };
     const fallbackResponse = await attempt(fallbackBody);
 
     if (!fallbackResponse.ok) {

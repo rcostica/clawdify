@@ -8,11 +8,15 @@ import {
   LayoutDashboard, 
   FolderKanban, 
   Files,
+  BarChart3,
   Settings,
   BookOpen,
   LogOut,
   GripVertical,
-  Activity
+  Clock,
+  Brain,
+  HeartPulse,
+  Bell,
 } from 'lucide-react';
 import {
   Sidebar,
@@ -396,6 +400,22 @@ export function AppSidebar() {
                 </SidebarMenuButton>
               </SidebarMenuItem>
               <SidebarMenuItem>
+                <SidebarMenuButton isActive={pathname === '/health'} asChild>
+                  <Link href="/health">
+                    <HeartPulse className="h-4 w-4" />
+                    <span>Health</span>
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+              <SidebarMenuItem>
+                <SidebarMenuButton isActive={pathname === '/activity'} asChild>
+                  <Link href="/activity">
+                    <Bell className="h-4 w-4" />
+                    <span>Activity</span>
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+              <SidebarMenuItem>
                 <SidebarMenuButton isActive={pathname === '/kanban'} asChild>
                   <Link href="/kanban">
                     <FolderKanban className="h-4 w-4" />
@@ -412,10 +432,26 @@ export function AppSidebar() {
                 </SidebarMenuButton>
               </SidebarMenuItem>
               <SidebarMenuItem>
+                <SidebarMenuButton isActive={pathname === '/usage'} asChild>
+                  <Link href="/usage">
+                    <BarChart3 className="h-4 w-4" />
+                    <span>Usage</span>
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+              <SidebarMenuItem>
+                <SidebarMenuButton isActive={pathname === '/memory'} asChild>
+                  <Link href="/memory">
+                    <Brain className="h-4 w-4" />
+                    <span>Memory</span>
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+              <SidebarMenuItem>
                 <SidebarMenuButton isActive={pathname === '/sessions'} asChild>
                   <Link href="/sessions">
-                    <Activity className="h-4 w-4" />
-                    <span>Sessions</span>
+                    <Clock className="h-4 w-4" />
+                    <span>Cron Jobs</span>
                   </Link>
                 </SidebarMenuButton>
               </SidebarMenuItem>

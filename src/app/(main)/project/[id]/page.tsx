@@ -29,6 +29,12 @@ function isAudioFile(name: string): boolean {
   return AUDIO_EXTENSIONS.includes(ext);
 }
 
+/** Check if message content is a NO_REPLY directive (should not be rendered) */
+function isNoReply(content: string): boolean {
+  const trimmed = content.trim();
+  return trimmed === 'NO_REPLY' || trimmed === 'NO' || trimmed === 'NO_RE' || trimmed === 'NO_REP' || trimmed === 'NO_REPL';
+}
+
 function ThinkingIndicator() {
   const [dots, setDots] = useState(1);
   const [showText, setShowText] = useState(false);
@@ -160,6 +166,7 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
   const abortControllerRef = useRef<AbortController | null>(null);
   const sendingRef = useRef(false);
   const lastStreamDataRef = useRef<number>(0); // timestamp of last received SSE data
+  const lastStreamCompleteRef = useRef<number>(0); // timestamp when streaming finished (for SSE dedup)
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [lightboxSrc, setLightboxSrc] = useState<string | null>(null);
   const [showBookmarksOnly, setShowBookmarksOnly] = useState(false);
@@ -237,6 +244,7 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
         const data = JSON.parse(event.data);
         if (data.type === 'message' && data.message) {
           // Skip events from our own tab
+          console.log('[SSE] event | role:', data.message?.role, '| eventTabId:', data.tabId, '| myTabId:', tabId, '| match:', data.tabId === tabId, '| msgId:', data.message?.id?.slice(0,8));
           if (data.tabId === tabId) return;
           const msg = data.message;
           setMessages((prev) => {
@@ -974,7 +982,7 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
           } catch { /* skip */ }
         }
       }
-      if (accumulated) {
+      if (accumulated && !isNoReply(accumulated)) {
         setMessages((prev) => [...prev, {
           id: `msg-${Date.now()}-assistant`,
           role: 'assistant',
@@ -1183,8 +1191,9 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
         }
       }
 
-      // Streaming complete — add as full message
-      if (accumulated) {
+      // Streaming complete — add as full message (skip NO_REPLY directives)
+      lastStreamCompleteRef.current = Date.now();
+      if (accumulated && !isNoReply(accumulated)) {
         const assistantMsgId = `msg-${Date.now()}-assistant`;
         const assistantMessage: Message = {
           id: assistantMsgId,
@@ -1406,7 +1415,7 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
         }
       }
 
-      if (accumulated) {
+      if (accumulated && !isNoReply(accumulated)) {
         setMessages(prev => [...prev, {
           id: `msg-${Date.now()}-assistant`,
           role: 'assistant',
@@ -1824,8 +1833,8 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
               );
             })}
             
-            {/* Streaming response */}
-            {streamingContent && (
+            {/* Streaming response (hide NO_REPLY directives) */}
+            {streamingContent && !isNoReply(streamingContent) && (
               <div className="flex justify-start">
                 <div className="max-w-[85%] overflow-hidden rounded-lg px-4 py-2.5 bg-muted">
                   <MarkdownMessage content={streamingContent} />

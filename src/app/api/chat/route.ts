@@ -340,6 +340,9 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Message is required' }, { status: 400 });
     }
 
+    const requestId = uuidv4().slice(0, 8);
+    console.log('[chat] POST received | reqId:', requestId, '| tabId:', tabId, '| projectId:', projectId, '| msg:', message.slice(0, 60), '| time:', new Date().toISOString());
+
     const threadId = projectId ? getOrCreateThread(projectId) : null;
 
     // Save user message
@@ -365,6 +368,7 @@ export async function POST(request: NextRequest) {
     }
 
     if (threadId) {
+      console.log('[chat] Saving user msg | reqId:', requestId, '| msgId:', userMsgId, '| threadId:', threadId);
       db.insert(messages).values({
         id: userMsgId,
         threadId,
@@ -460,6 +464,7 @@ export async function POST(request: NextRequest) {
         ? `multimodal[${(chatMessages[chatMessages.length - 1].content as Array<{type:string}>).map(p => p.type).join(',')}]`
         : 'text'
     );
+    console.log('[chat] SSE stream starting | reqId:', requestId, '| sessionKey:', effectiveSessionKey);
     const { response: gatewayResponse, usedFallback, fallbackModel } = await chatStream({
       messages: chatMessages,
       sessionKey: effectiveSessionKey,
@@ -487,19 +492,22 @@ export async function POST(request: NextRequest) {
       }
     }, 15000);
 
-    const backgroundTask = (async () => {
+    // Helper: read an SSE stream from the gateway, forwarding chunks to the client.
+    // Returns the accumulated text content.
+    async function consumeGatewayStream(
+      body: ReadableStream<Uint8Array>,
+      opts: { prependNotice?: string } = {}
+    ): Promise<string> {
       let content = '';
-      const reader = gatewayResponse.body!.getReader();
+      const reader = body.getReader();
       let buffer = '';
 
-      // If fallback was used, inject notice as first chunk
-      if (usedFallback) {
-        const notice = `⚠️ **Primary model overloaded** — using ${fallbackModel || 'fallback model'} instead.\n\n`;
-        content += notice;
+      if (opts.prependNotice) {
+        content += opts.prependNotice;
         if (!clientCancelled) {
           try {
             const noticeChunk = JSON.stringify({
-              choices: [{ delta: { content: notice } }]
+              choices: [{ delta: { content: opts.prependNotice } }]
             });
             streamRef.current?.enqueue(encoder.encode(`data: ${noticeChunk}\n\n`));
           } catch {}
@@ -519,7 +527,7 @@ export async function POST(request: NextRequest) {
             if (!line.startsWith('data: ')) continue;
             const data = line.slice(6).trim();
             if (data === '[DONE]') {
-              if (!clientCancelled) try { streamRef.current?.enqueue(encoder.encode('data: [DONE]\n\n')); } catch {}
+              // Don't forward [DONE] yet — we may need to retry with fallback
               continue;
             }
             try {
@@ -536,14 +544,66 @@ export async function POST(request: NextRequest) {
         }
       } catch (error) {
         console.error('Gateway stream error:', error);
-      } finally {
-        clearInterval(keepaliveInterval);
       }
 
-      // Always save assistant response to DB
-      if (threadId && content) {
+      return content;
+    }
+
+    const backgroundTask = (async () => {
+      // --- First attempt (primary model via gateway) ---
+      let content = await consumeGatewayStream(gatewayResponse.body!, {
+        prependNotice: usedFallback
+          ? `⚠️ **Primary model overloaded** — using ${fallbackModel || 'fallback model'} instead.\n\n`
+          : undefined,
+      });
+
+      console.log('[chat] SSE primary stream ended | reqId:', requestId, '| contentLen:', content.length, '| clientCancelled:', clientCancelled);
+
+      // --- Empty response fallback ---
+      // If the gateway returned zero content, the primary model likely failed silently
+      // (overload errors exhausted without triggering gateway-level fallback).
+      // Retry once with an explicit fallback model.
+      const FALLBACK_MODEL = 'anthropic/claude-sonnet-4-6';
+      if (content.trim().length === 0 && !clientCancelled) {
+        console.log('[chat] Empty response detected — retrying with fallback model:', FALLBACK_MODEL, '| reqId:', requestId);
+
+        try {
+          const fallbackResult = await chatStream({
+            messages: chatMessages,
+            sessionKey: effectiveSessionKey,
+            model: FALLBACK_MODEL,
+            user: effectiveSessionKey,
+          });
+
+          if (fallbackResult.response.body) {
+            // Inject a notice so the user knows this is a fallback response
+            const notice = `⚠️ **Primary model unavailable** — responding with ${FALLBACK_MODEL.split('/')[1]}.\n\n`;
+            content = await consumeGatewayStream(fallbackResult.response.body, {
+              prependNotice: notice,
+            });
+            console.log('[chat] Fallback stream ended | reqId:', requestId, '| contentLen:', content.length);
+          }
+        } catch (fallbackErr) {
+          console.error('[chat] Fallback retry also failed:', fallbackErr, '| reqId:', requestId);
+        }
+      }
+
+      // Send final [DONE] to client
+      if (!clientCancelled) try { streamRef.current?.enqueue(encoder.encode('data: [DONE]\n\n')); } catch {}
+
+      clearInterval(keepaliveInterval);
+
+      // Skip NO_REPLY directives — these are system signals, not real messages
+      const trimmedContent = content.trim();
+      const isNoReply = trimmedContent === 'NO_REPLY' || trimmedContent === 'NO' || trimmedContent === 'NO_RE' || trimmedContent === 'NO_REP' || trimmedContent === 'NO_REPL';
+
+      console.log('[chat] SSE stream ended | reqId:', requestId, '| contentLen:', content.length, '| isNoReply:', isNoReply, '| clientCancelled:', clientCancelled);
+
+      // Always save assistant response to DB (unless it's a NO_REPLY directive)
+      if (threadId && content && !isNoReply) {
         const assistantMsgId = uuidv4();
         const assistantCreatedAt = new Date();
+        console.log('[chat] Saving assistant msg | reqId:', requestId, '| msgId:', assistantMsgId, '| preview:', content.slice(0, 80));
         try {
           db.insert(messages).values({
             id: assistantMsgId,

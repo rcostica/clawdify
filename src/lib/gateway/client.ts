@@ -33,8 +33,7 @@ export type ChatStreamResult = {
   fallbackModel?: string;
 };
 
-// Fallback model when gateway returns empty response (overload gap)
-const EMPTY_RESPONSE_FALLBACK_MODEL = 'anthropic/claude-sonnet-4-6';
+// Gateway handles model failover natively — no Clawdify-level model override needed.
 
 export async function chatStream(opts: {
   messages: ChatMessage[];

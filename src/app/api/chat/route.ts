@@ -562,29 +562,23 @@ export async function POST(request: NextRequest) {
       // --- Empty response fallback ---
       // If the gateway returned zero content, the primary model likely failed silently
       // (overload errors exhausted without triggering gateway-level fallback).
-      // Retry once with an explicit fallback model.
-      const FALLBACK_MODEL = 'anthropic/claude-sonnet-4-6';
+      // Retry once — don't specify a model, let the gateway handle failover natively.
       if (content.trim().length === 0 && !clientCancelled) {
-        console.log('[chat] Empty response detected — retrying with fallback model:', FALLBACK_MODEL, '| reqId:', requestId);
+        console.log('[chat] Empty response detected — retrying (gateway-managed failover) | reqId:', requestId);
 
         try {
           const fallbackResult = await chatStream({
             messages: chatMessages,
             sessionKey: effectiveSessionKey,
-            model: FALLBACK_MODEL,
             user: effectiveSessionKey,
           });
 
           if (fallbackResult.response.body) {
-            // Inject a notice so the user knows this is a fallback response
-            const notice = `⚠️ **Primary model unavailable** — responding with ${FALLBACK_MODEL.split('/')[1]}.\n\n`;
-            content = await consumeGatewayStream(fallbackResult.response.body, {
-              prependNotice: notice,
-            });
-            console.log('[chat] Fallback stream ended | reqId:', requestId, '| contentLen:', content.length);
+            content = await consumeGatewayStream(fallbackResult.response.body, {});
+            console.log('[chat] Retry stream ended | reqId:', requestId, '| contentLen:', content.length);
           }
         } catch (fallbackErr) {
-          console.error('[chat] Fallback retry also failed:', fallbackErr, '| reqId:', requestId);
+          console.error('[chat] Retry also failed:', fallbackErr, '| reqId:', requestId);
         }
       }
 

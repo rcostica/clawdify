@@ -560,11 +560,15 @@ export async function POST(request: NextRequest) {
       console.log('[chat] SSE primary stream ended | reqId:', requestId, '| contentLen:', content.length, '| clientCancelled:', clientCancelled);
 
       // --- Empty response fallback ---
-      // If the gateway returned zero content, the primary model likely failed silently
-      // (overload errors exhausted without triggering gateway-level fallback).
-      // Retry once — don't specify a model, let the gateway handle failover natively.
-      if (content.trim().length === 0 && !clientCancelled) {
-        console.log('[chat] Empty response detected — retrying (gateway-managed failover) | reqId:', requestId);
+      // If the gateway returned zero content, Opus likely returned 529 and the gateway's
+      // HTTP endpoint closed the stream before the Sonnet fallback completed.
+      // Retry up to 2 times with a short delay to let the gateway auth profile cooldown clear.
+      let retryAttempt = 0;
+      while (content.trim().length === 0 && !clientCancelled && retryAttempt < 2) {
+        retryAttempt++;
+        const delayMs = retryAttempt === 1 ? 2000 : 5000;
+        console.log(`[chat] Empty response — retry ${retryAttempt}/2 in ${delayMs}ms (gateway-managed failover) | reqId:`, requestId);
+        await new Promise(resolve => setTimeout(resolve, delayMs));
 
         try {
           const fallbackResult = await chatStream({
@@ -575,10 +579,10 @@ export async function POST(request: NextRequest) {
 
           if (fallbackResult.response.body) {
             content = await consumeGatewayStream(fallbackResult.response.body, {});
-            console.log('[chat] Retry stream ended | reqId:', requestId, '| contentLen:', content.length);
+            console.log(`[chat] Retry ${retryAttempt} stream ended | reqId:`, requestId, '| contentLen:', content.length);
           }
         } catch (fallbackErr) {
-          console.error('[chat] Retry also failed:', fallbackErr, '| reqId:', requestId);
+          console.error(`[chat] Retry ${retryAttempt} failed:`, fallbackErr, '| reqId:', requestId);
         }
       }
 

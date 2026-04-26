@@ -40,8 +40,9 @@ export async function chatStream(opts: {
   sessionKey?: string;
   model?: string;
   user?: string;
+  signal?: AbortSignal;
 }): Promise<ChatStreamResult> {
-  const { messages, sessionKey, model, user } = opts;
+  const { messages, sessionKey, model, user, signal } = opts;
   
   const extraHeaders: Record<string, string> = {};
   if (sessionKey) {
@@ -83,7 +84,7 @@ export async function chatStream(opts: {
   // - 500/timeout → same rotation + fallback chain
   // - Config: agents.defaults.model.fallbacks (currently Sonnet 4.6 → Sonnet 4.5)
   // No Clawdify-level timeout or retry — the gateway manages the full lifecycle.
-  const response = await attempt();
+  const response = await attempt(undefined, signal);
 
   if (!response.ok) {
     const error = await response.text();

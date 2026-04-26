@@ -5,6 +5,7 @@ import { eq, desc, like, and, lt, sql } from 'drizzle-orm';
 import { v4 as uuidv4 } from 'uuid';
 import { redactSecrets } from '@/lib/redact';
 import { eventBus } from '@/lib/event-bus';
+import { registerActiveGatewayRun } from '@/lib/gateway/active-runs';
 import fs from 'fs/promises';
 import path from 'path';
 import sharp from 'sharp';
@@ -55,7 +56,76 @@ async function transcribeAudio(audioPath: string): Promise<string> {
 // when client disconnects before the response is fully streamed
 const _pendingTasks = new Set<Promise<void>>();
 
-const DEFAULT_GLOBAL_PROMPT = `Never share API keys or secrets in chat. All credentials are stored in the shared vault (.env). Reference them by name, never paste actual values.`;
+const DEFAULT_GLOBAL_PROMPT = `Never share API keys or secrets in chat. All credentials are stored in the shared vault (.env). Reference them by name, never paste actual values.\n\nClawdify attachment rule: when sending a generated or workspace file back to the user in this Clawdify webchat, do not use MEDIA: directives because OpenClaw strips them before Clawdify can save/render them. Put each attachment path on its own line as CLAWDIFY_FILE:<path-or-url> instead. Use workspace-relative paths when possible, e.g. CLAWDIFY_FILE:_uploads/example.png.`;
+
+const DUPLICATE_USER_WINDOW_MS = 2 * 60 * 1000;
+
+function asTimeMs(value: Date | number | string): number {
+  if (value instanceof Date) return value.getTime();
+  if (typeof value === 'number') return value < 1e12 ? value * 1000 : value;
+  return new Date(value).getTime();
+}
+
+function sseDoneResponse(reason: string, status = 202): Response {
+  const encoder = new TextEncoder();
+  const stream = new ReadableStream({
+    start(controller) {
+      controller.enqueue(encoder.encode(`: ${reason}\n\n`));
+      controller.enqueue(encoder.encode('data: [DONE]\n\n'));
+      controller.close();
+    },
+  });
+  return new Response(stream, {
+    status,
+    headers: {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      'Connection': 'keep-alive',
+    },
+  });
+}
+
+function findRecentDuplicateUserMessage(opts: {
+  threadId: string;
+  clientMessageId: string | null;
+  message: string;
+  attachedFilesJson: string | null;
+  replyToId: string | null;
+}) {
+  const { threadId, clientMessageId, message, attachedFilesJson, replyToId } = opts;
+
+  if (clientMessageId) {
+    const existingByClientId = db.select().from(messages)
+      .where(and(
+        eq(messages.threadId, threadId),
+        eq(messages.role, 'user'),
+        eq(messages.clientMessageId, clientMessageId),
+      ))
+      .get();
+    if (existingByClientId) return existingByClientId;
+  }
+
+  // Secondary safety net for browser/proxy retries that don't preserve a client key.
+  // Avoid blocking short intentional repeats like "so?".
+  if (message.trim().length < 10) return null;
+
+  const cutoff = Date.now() - DUPLICATE_USER_WINDOW_MS;
+  const recent = db.select().from(messages)
+    .where(and(
+      eq(messages.threadId, threadId),
+      eq(messages.role, 'user'),
+      eq(messages.content, redactSecrets(message)),
+    ))
+    .orderBy(desc(messages.createdAt))
+    .limit(10)
+    .all();
+
+  return recent.find((m) =>
+    asTimeMs(m.createdAt) >= cutoff &&
+    (m.attachedFiles || null) === attachedFilesJson &&
+    (m.replyToId || null) === replyToId
+  ) || null;
+}
 
 // ---------------------------------------------------------------------------
 // Minimal context — project scoping only, OpenClaw handles the rest
@@ -334,7 +404,7 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const { message, projectId, sessionKey, attachedFiles, tabId, replyTo } = await request.json();
+    const { message, projectId, sessionKey, attachedFiles, tabId, replyTo, clientMessageId } = await request.json();
 
     if (!message || typeof message !== 'string') {
       return NextResponse.json({ error: 'Message is required' }, { status: 400 });
@@ -344,6 +414,9 @@ export async function POST(request: NextRequest) {
     console.log('[chat] POST received | reqId:', requestId, '| tabId:', tabId, '| projectId:', projectId, '| msg:', message.slice(0, 60), '| time:', new Date().toISOString());
 
     const threadId = projectId ? getOrCreateThread(projectId) : null;
+    const normalizedClientMessageId = typeof clientMessageId === 'string' && clientMessageId.trim()
+      ? clientMessageId.trim().slice(0, 160)
+      : null;
 
     // Save user message
     const userMsgId = uuidv4();
@@ -368,12 +441,25 @@ export async function POST(request: NextRequest) {
     }
 
     if (threadId) {
+      const duplicate = findRecentDuplicateUserMessage({
+        threadId,
+        clientMessageId: normalizedClientMessageId,
+        message,
+        attachedFilesJson,
+        replyToId,
+      });
+      if (duplicate) {
+        console.warn('[chat] Duplicate user message blocked | reqId:', requestId, '| existingMsgId:', duplicate.id, '| clientMessageId:', normalizedClientMessageId);
+        return sseDoneResponse('duplicate user message ignored');
+      }
+
       console.log('[chat] Saving user msg | reqId:', requestId, '| msgId:', userMsgId, '| threadId:', threadId);
       db.insert(messages).values({
         id: userMsgId,
         threadId,
         role: 'user',
         content: redactSecrets(message),
+        clientMessageId: normalizedClientMessageId,
         attachedFiles: attachedFilesJson,
         replyToId,
         replyToContent: replyToContent ? redactSecrets(replyToContent) : null,
@@ -403,8 +489,9 @@ export async function POST(request: NextRequest) {
     // OpenClaw handles full session memory, context, and compaction natively.
     const globalContext = getGlobalContext();
     const projectContext = projectId ? buildProjectContext(projectId) : '';
+    const clawdifyAttachmentRule = 'Clawdify attachment rule: when sending a generated or workspace file back to the user in this Clawdify webchat, do not use MEDIA: directives because OpenClaw strips them before Clawdify can save/render them. Put each attachment path on its own line as CLAWDIFY_FILE:<path-or-url> instead. Use workspace-relative paths when possible, e.g. CLAWDIFY_FILE:_uploads/example.png.';
 
-    const systemParts = [globalContext];
+    const systemParts = [globalContext, clawdifyAttachmentRule];
     if (projectContext) systemParts.push(projectContext);
     const systemContent = systemParts.join('\n\n');
 
@@ -465,11 +552,25 @@ export async function POST(request: NextRequest) {
         : 'text'
     );
     console.log('[chat] SSE stream starting | reqId:', requestId, '| sessionKey:', effectiveSessionKey);
-    const { response: gatewayResponse, usedFallback, fallbackModel } = await chatStream({
-      messages: chatMessages,
-      sessionKey: effectiveSessionKey,
-      user: effectiveSessionKey,
-    });
+    const gatewayAbort = new AbortController();
+    const unregisterGatewayRun = registerActiveGatewayRun(effectiveSessionKey, requestId, gatewayAbort);
+    let gatewayResponse: Response;
+    let usedFallback = false;
+    let fallbackModel: string | undefined;
+    try {
+      const streamResult = await chatStream({
+        messages: chatMessages,
+        sessionKey: effectiveSessionKey,
+        user: effectiveSessionKey,
+        signal: gatewayAbort.signal,
+      });
+      gatewayResponse = streamResult.response;
+      usedFallback = streamResult.usedFallback;
+      fallbackModel = streamResult.fallbackModel;
+    } catch (error) {
+      unregisterGatewayRun();
+      throw error;
+    }
 
     if (!gatewayResponse.body) {
       return NextResponse.json({ error: 'No response body from Gateway' }, { status: 502 });
@@ -559,31 +660,12 @@ export async function POST(request: NextRequest) {
 
       console.log('[chat] SSE primary stream ended | reqId:', requestId, '| contentLen:', content.length, '| clientCancelled:', clientCancelled);
 
-      // --- Empty response fallback ---
-      // If the gateway returned zero content, Opus likely returned 529 and the gateway's
-      // HTTP endpoint closed the stream before the Sonnet fallback completed.
-      // Retry up to 2 times with a short delay to let the gateway auth profile cooldown clear.
-      let retryAttempt = 0;
-      while (content.trim().length === 0 && !clientCancelled && retryAttempt < 2) {
-        retryAttempt++;
-        const delayMs = retryAttempt === 1 ? 2000 : 5000;
-        console.log(`[chat] Empty response — retry ${retryAttempt}/2 in ${delayMs}ms (gateway-managed failover) | reqId:`, requestId);
-        await new Promise(resolve => setTimeout(resolve, delayMs));
-
-        try {
-          const fallbackResult = await chatStream({
-            messages: chatMessages,
-            sessionKey: effectiveSessionKey,
-            user: effectiveSessionKey,
-          });
-
-          if (fallbackResult.response.body) {
-            content = await consumeGatewayStream(fallbackResult.response.body, {});
-            console.log(`[chat] Retry ${retryAttempt} stream ended | reqId:`, requestId, '| contentLen:', content.length);
-          }
-        } catch (fallbackErr) {
-          console.error(`[chat] Retry ${retryAttempt} failed:`, fallbackErr, '| reqId:', requestId);
-        }
+      // Do not retry by re-sending the same user message here. This endpoint is
+      // stateful: every gateway call appends another user turn to the OpenClaw
+      // session. Empty streams should fail visibly and let the user manually retry
+      // with a new clientMessageId.
+      if (content.trim().length === 0) {
+        console.warn('[chat] Empty gateway response — not retrying to avoid duplicate user turn | reqId:', requestId);
       }
 
       // Send final [DONE] to client
@@ -630,7 +712,10 @@ export async function POST(request: NextRequest) {
 
     // Prevent GC of the background task
     _pendingTasks.add(backgroundTask);
-    backgroundTask.finally(() => _pendingTasks.delete(backgroundTask));
+    backgroundTask.finally(() => {
+      unregisterGatewayRun();
+      _pendingTasks.delete(backgroundTask);
+    });
 
     const stream = new ReadableStream({
       start(controller) {

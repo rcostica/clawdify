@@ -4,6 +4,7 @@ import path from 'path';
 import { incrementFileAccess } from '@/lib/file-intelligence';
 
 const WORKSPACE_PATH = process.env.OPENCLAW_WORKSPACE_PATH || '';
+const OPENCLAW_MEDIA_PATH = process.env.OPENCLAW_MEDIA_PATH || path.join(process.env.HOME || '/home/ubuntu', '.openclaw', 'media');
 
 interface FileEntry {
   name: string;
@@ -12,6 +13,54 @@ interface FileEntry {
   size?: number;
   modifiedAt?: string;
   extension?: string;
+}
+
+const MIME_MAP: Record<string, string> = {
+  pdf: 'application/pdf', doc: 'application/msword',
+  docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  xls: 'application/vnd.ms-excel',
+  xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  ppt: 'application/vnd.ms-powerpoint',
+  pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+  csv: 'text/csv; charset=utf-8',
+  jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png',
+  gif: 'image/gif', webp: 'image/webp', svg: 'image/svg+xml',
+  mp3: 'audio/mpeg', wav: 'audio/wav', ogg: 'audio/ogg',
+  webm: 'audio/webm', m4a: 'audio/mp4', mp4: 'video/mp4',
+  zip: 'application/zip', tar: 'application/x-tar', gz: 'application/gzip',
+  json: 'application/json; charset=utf-8', xml: 'application/xml; charset=utf-8',
+  html: 'text/html; charset=utf-8', css: 'text/css; charset=utf-8', js: 'text/javascript; charset=utf-8',
+  ts: 'text/typescript; charset=utf-8', md: 'text/markdown; charset=utf-8', txt: 'text/plain; charset=utf-8',
+  py: 'text/x-python; charset=utf-8', sh: 'text/x-shellscript; charset=utf-8',
+};
+
+function isInside(child: string, parent: string): boolean {
+  const childResolved = path.resolve(child);
+  const parentResolved = path.resolve(parent);
+  return childResolved === parentResolved || childResolved.startsWith(parentResolved + path.sep);
+}
+
+function resolveAllowedPath(relativePath: string): { fullPath: string; normalizedPath: string } | null {
+  const rawPath = relativePath.startsWith('file://') ? relativePath.slice('file://'.length) : relativePath;
+  const workspaceRoot = path.resolve(WORKSPACE_PATH);
+  const mediaRoot = path.resolve(OPENCLAW_MEDIA_PATH);
+
+  if (path.isAbsolute(rawPath)) {
+    const fullPath = path.resolve(rawPath);
+    if (isInside(fullPath, workspaceRoot)) {
+      return { fullPath, normalizedPath: path.relative(workspaceRoot, fullPath) };
+    }
+    if (isInside(fullPath, mediaRoot)) {
+      return { fullPath, normalizedPath: fullPath };
+    }
+    return null;
+  }
+
+  // Prevent directory traversal for normal workspace-relative paths.
+  const normalizedPath = path.normalize(rawPath).replace(/^([.][.][/\\])+/, '');
+  const fullPath = path.resolve(WORKSPACE_PATH, normalizedPath);
+  if (!isInside(fullPath, workspaceRoot)) return null;
+  return { fullPath, normalizedPath };
 }
 
 // GET /api/files?path=relative/path
@@ -25,13 +74,11 @@ export async function GET(request: NextRequest) {
   const showHidden = searchParams.get('showHidden') === 'true';
   const download = searchParams.get('download') === 'true';
   
-  // Prevent directory traversal
-  const normalizedPath = path.normalize(relativePath).replace(/^(\.\.[/\\])+/, '');
-  const fullPath = path.join(WORKSPACE_PATH, normalizedPath);
-  
-  if (!fullPath.startsWith(WORKSPACE_PATH)) {
+  const resolved = resolveAllowedPath(relativePath);
+  if (!resolved) {
     return NextResponse.json({ error: 'Access denied' }, { status: 403 });
   }
+  const { fullPath, normalizedPath } = resolved;
 
   try {
     const stat = await fs.stat(fullPath);
@@ -42,31 +89,12 @@ export async function GET(request: NextRequest) {
       const fileName = path.basename(fullPath);
       const ext = path.extname(fullPath).slice(1).toLowerCase();
       
-      // Common MIME types
-      const mimeMap: Record<string, string> = {
-        pdf: 'application/pdf', doc: 'application/msword',
-        docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-        xls: 'application/vnd.ms-excel',
-        xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-        ppt: 'application/vnd.ms-powerpoint',
-        pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
-        csv: 'text/csv',
-        jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png',
-        gif: 'image/gif', webp: 'image/webp', svg: 'image/svg+xml',
-        mp3: 'audio/mpeg', wav: 'audio/wav', ogg: 'audio/ogg',
-        webm: 'audio/webm', m4a: 'audio/mp4', mp4: 'video/mp4',
-        zip: 'application/zip', tar: 'application/x-tar', gz: 'application/gzip',
-        json: 'application/json', xml: 'application/xml',
-        html: 'text/html', css: 'text/css', js: 'text/javascript',
-        ts: 'text/typescript', md: 'text/markdown', txt: 'text/plain',
-        py: 'text/x-python', sh: 'text/x-shellscript',
-      };
-      const contentType = mimeMap[ext] || 'application/octet-stream';
+      const contentType = MIME_MAP[ext] || 'application/octet-stream';
       
       return new Response(buffer, {
         headers: {
           'Content-Type': contentType,
-          'Content-Disposition': `attachment; filename="${encodeURIComponent(fileName)}"`,
+          'Content-Disposition': `attachment; filename*=UTF-8''${encodeURIComponent(fileName)}`,
           'Content-Length': buffer.length.toString(),
         },
       });
@@ -118,7 +146,7 @@ export async function GET(request: NextRequest) {
       // Determine which project directory this file belongs to by checking
       // if the path is inside a project workspace (first path segment)
       const pathSegments = normalizedPath.split('/').filter(Boolean);
-      if (pathSegments.length >= 1) {
+      if (!path.isAbsolute(normalizedPath) && pathSegments.length >= 1) {
         const projectWorkspace = pathSegments[0];
         const projectDir = path.join(WORKSPACE_PATH, projectWorkspace);
         const fileRelPath = pathSegments.slice(1).join('/');
@@ -129,28 +157,30 @@ export async function GET(request: NextRequest) {
 
       const ext = path.extname(fullPath).slice(1).toLowerCase();
       const isImage = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg'].includes(ext);
-      const isBinary = ['pdf', 'zip', 'tar', 'gz', 'exe', 'bin', 'db', 'sqlite'].includes(ext);
+      const isBinary = ['zip', 'tar', 'gz', 'exe', 'bin', 'db', 'sqlite', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx'].includes(ext);
 
       if (isImage) {
         const buffer = await fs.readFile(fullPath);
-        const mimeMap: Record<string, string> = {
-          jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png',
-          gif: 'image/gif', webp: 'image/webp', svg: 'image/svg+xml',
-        };
         return new Response(buffer, {
-          headers: { 'Content-Type': mimeMap[ext] || 'application/octet-stream' },
+          headers: { 'Content-Type': MIME_MAP[ext] || 'application/octet-stream' },
         });
       }
 
       const isAudio = ['webm', 'ogg', 'mp3', 'wav', 'm4a'].includes(ext);
       if (isAudio) {
         const buffer = await fs.readFile(fullPath);
-        const audioMimeMap: Record<string, string> = {
-          webm: 'audio/webm', ogg: 'audio/ogg', mp3: 'audio/mpeg',
-          wav: 'audio/wav', m4a: 'audio/mp4',
-        };
         return new Response(buffer, {
-          headers: { 'Content-Type': audioMimeMap[ext] || 'application/octet-stream' },
+          headers: { 'Content-Type': MIME_MAP[ext] || 'application/octet-stream' },
+        });
+      }
+
+      if (ext === 'pdf') {
+        const buffer = await fs.readFile(fullPath);
+        return new Response(buffer, {
+          headers: {
+            'Content-Type': 'application/pdf',
+            'Content-Disposition': `inline; filename*=UTF-8''${encodeURIComponent(path.basename(fullPath))}`,
+          },
         });
       }
 

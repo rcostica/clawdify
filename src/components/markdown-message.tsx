@@ -1,5 +1,6 @@
 'use client';
 
+import { memo } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import type { Components } from 'react-markdown';
@@ -112,7 +113,7 @@ interface MarkdownMessageProps {
   className?: string;
 }
 
-export function MarkdownMessage({ content, className }: MarkdownMessageProps) {
+export const MarkdownMessage = memo(function MarkdownMessage({ content, className }: MarkdownMessageProps) {
   return (
     <div className={`text-sm leading-relaxed markdown-message ${className || ''}`}>
       <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>
@@ -120,4 +121,6 @@ export function MarkdownMessage({ content, className }: MarkdownMessageProps) {
       </ReactMarkdown>
     </div>
   );
-}
+});
+
+MarkdownMessage.displayName = 'MarkdownMessage';

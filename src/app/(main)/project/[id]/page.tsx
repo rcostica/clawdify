@@ -4,7 +4,7 @@ import { useEffect, useLayoutEffect, useState, useRef, useCallback, use, Fragmen
 import { useProjectsStore } from '@/lib/stores/projects';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Button } from '@/components/ui/button';
-import { Send, MessageSquare, Square, Loader2, Paperclip, X, FileText, FileCode, File as FileIcon, Search, Copy, Check, Reply, Upload, ChevronUp, ChevronDown, FolderKanban, Files, Mic, Bookmark, BookmarkCheck, SmilePlus, RotateCcw, AlertCircle } from 'lucide-react';
+import { Send, MessageSquare, Square, Loader2, Paperclip, X, FileText, FileCode, File as FileIcon, Search, Copy, Check, Reply, Upload, ChevronUp, ChevronDown, FolderKanban, Files, Mic, Bookmark, BookmarkCheck, SmilePlus, RotateCcw, AlertCircle, Download, Eye, ExternalLink } from 'lucide-react';
 import { useChatAttachmentsStore } from '@/lib/stores/chat-attachments';
 import { useNotificationsStore, getLastSeen, setLastSeen } from '@/lib/stores/notifications';
 import { useSearchParams } from 'next/navigation';
@@ -29,10 +29,116 @@ function isAudioFile(name: string): boolean {
   return AUDIO_EXTENSIONS.includes(ext);
 }
 
+const PDF_EXTENSIONS = ['pdf'];
+const TEXT_EXTENSIONS = ['txt', 'md', 'csv', 'json', 'xml', 'html', 'css', 'js', 'ts', 'tsx', 'jsx', 'py', 'sh', 'log', 'sql', 'yaml', 'yml'];
+const OFFICE_EXTENSIONS = ['doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx'];
+
+function getFileExtension(nameOrPath: string): string {
+  const clean = nameOrPath.split(/[?#]/)[0];
+  return clean.split('.').pop()?.toLowerCase() || '';
+}
+
+function isPdfFile(name: string): boolean {
+  return PDF_EXTENSIONS.includes(getFileExtension(name));
+}
+
+function isTextPreviewFile(name: string): boolean {
+  return TEXT_EXTENSIONS.includes(getFileExtension(name));
+}
+
+function isOfficeFile(name: string): boolean {
+  return OFFICE_EXTENSIONS.includes(getFileExtension(name));
+}
+
+function isRemoteUrl(pathOrUrl: string): boolean {
+  return /^https?:\/\//i.test(pathOrUrl);
+}
+
+function fileUrl(file: AttachedFile, download = false): string {
+  if (isRemoteUrl(file.path)) return file.path;
+  const query = new URLSearchParams({ path: file.path });
+  if (download) query.set('download', 'true');
+  return `/api/files?${query.toString()}`;
+}
+
+function formatBytes(size?: number): string | null {
+  if (!size || size < 0) return null;
+  if (size < 1024) return `${size} B`;
+  if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`;
+  return `${(size / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function basenameFromPath(pathOrUrl: string): string {
+  const cleaned = pathOrUrl.replace(/^file:\/\//i, '').split(/[?#]/)[0].replace(/[`"'<>]+$/g, '');
+  return decodeURIComponent(cleaned.split(/[\\/]/).pop() || cleaned || 'attachment');
+}
+
+function cleanMediaPath(raw: string): string {
+  return raw.trim().replace(/^file:\/\//i, '').replace(/^[`"'[{(]+/, '').replace(/[`"'\]})>,]+$/, '');
+}
+
+function parseMediaAttachments(content: string): { cleanContent: string; files: AttachedFile[] } {
+  const files: AttachedFile[] = [];
+  const cleanLines: string[] = [];
+
+  for (const line of content.split('\n')) {
+    const mediaMatch = line.match(/^\s*(?:MEDIA|CLAWDIFY_FILE):\s*(.+?)\s*$/i);
+    if (mediaMatch) {
+      const rawValue = mediaMatch[1].trim();
+      const quoted = rawValue.match(/^[`"'](.+)[`"']$/)?.[1];
+      const candidates = quoted ? [quoted] : rawValue.split(/\s+/).filter(Boolean);
+      let found = false;
+
+      for (const candidate of candidates) {
+        const mediaPath = cleanMediaPath(candidate);
+        if (!mediaPath || mediaPath.toLowerCase() === 'media') continue;
+        files.push({
+          path: mediaPath,
+          name: basenameFromPath(mediaPath),
+          extension: getFileExtension(mediaPath),
+        });
+        found = true;
+      }
+
+      if (!found) cleanLines.push(line);
+      continue;
+    }
+
+    // OpenClaw's hosted UI strips MEDIA:path lines. In Clawdify, older saved
+    // messages can contain orphaned literal "MEDIA" placeholders. Hide those
+    // as broken directives instead of showing ugly "MEDIA MEDIA MEDIA" text.
+    if (/^\s*MEDIA\s*$/i.test(line)) continue;
+    cleanLines.push(line);
+  }
+
+  return { cleanContent: cleanLines.join('\n').trim(), files };
+}
+
+function mergeAttachmentLists(...lists: Array<AttachedFile[] | undefined>): AttachedFile[] {
+  const seen = new Set<string>();
+  const merged: AttachedFile[] = [];
+  for (const list of lists) {
+    for (const file of list || []) {
+      const key = file.path || file.name;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      merged.push(file);
+    }
+  }
+  return merged;
+}
+
 /** Check if message content is a NO_REPLY directive (should not be rendered) */
 function isNoReply(content: string): boolean {
   const trimmed = content.trim();
   return trimmed === 'NO_REPLY' || trimmed === 'NO' || trimmed === 'NO_RE' || trimmed === 'NO_REP' || trimmed === 'NO_REPL';
+}
+
+function createClientMessageId(): string {
+  if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
+    return crypto.randomUUID();
+  }
+  return `client-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }
 
 function ThinkingIndicator() {
@@ -83,7 +189,170 @@ interface Message {
   replyTo?: ReplyRef;
   createdAt: Date;
   failed?: boolean;
-  _sendPayload?: { message: string; projectId: string; tabId: string; attachedFiles?: string[]; replyTo?: { id: string; content: string } };
+  cancelled?: boolean;
+  _sendPayload?: { message: string; projectId: string; tabId: string; clientMessageId: string; attachedFiles?: string[]; replyTo?: { id: string; content: string } };
+}
+
+function AttachmentIcon({ file }: { file: AttachedFile }) {
+  if (isTextPreviewFile(file.name)) return <FileCode className="h-4 w-4" />;
+  return <FileIcon className="h-4 w-4" />;
+}
+
+function AttachmentCard({
+  file,
+  role,
+  onPreview,
+}: {
+  file: AttachedFile;
+  role: Message['role'];
+  onPreview: (file: AttachedFile) => void;
+}) {
+  const canPreview = isImageFile(file.name) || isAudioFile(file.name) || isPdfFile(file.name) || isTextPreviewFile(file.name);
+  const size = formatBytes(file.size);
+  const href = fileUrl(file);
+  const downloadHref = fileUrl(file, true);
+  const isUser = role === 'user';
+  const cardClass = isUser
+    ? 'bg-white/10 border-white/20 text-primary-foreground'
+    : 'bg-background/80 border-border text-foreground';
+  const mutedText = isUser ? 'text-primary-foreground/70' : 'text-muted-foreground';
+
+  return (
+    <div className={`group/attachment w-full overflow-hidden rounded-lg border ${cardClass}`} title={file.path}>
+      {isImageFile(file.name) && (
+        <button type="button" onClick={() => onPreview(file)} className="block w-full bg-black/5 dark:bg-white/5">
+          <img
+            src={href}
+            alt={file.name}
+            className="max-h-[240px] w-full object-contain"
+            loading="lazy"
+          />
+        </button>
+      )}
+      {isAudioFile(file.name) && (
+        <div className="px-3 pt-3">
+          <audio controls preload="metadata" className="h-9 w-full max-w-[360px]" src={href} />
+        </div>
+      )}
+      <div className="flex items-center gap-2 p-2.5">
+        <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-md ${isUser ? 'bg-white/10' : 'bg-muted'}`}>
+          {isImageFile(file.name) ? <FileIcon className="h-4 w-4" /> : <AttachmentIcon file={file} />}
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="truncate text-xs font-medium">{file.name}</div>
+          <div className={`text-[11px] ${mutedText}`}>
+            {getFileExtension(file.name).toUpperCase() || 'FILE'}{size ? ` · ${size}` : ''}
+            {isOfficeFile(file.name) ? ' · download to open' : ''}
+          </div>
+        </div>
+        <div className="flex shrink-0 items-center gap-1">
+          {canPreview ? (
+            <button
+              type="button"
+              onClick={() => onPreview(file)}
+              className={`rounded-md p-1.5 transition-colors ${isUser ? 'hover:bg-white/15' : 'hover:bg-muted'}`}
+              title="Preview"
+            >
+              <Eye className="h-3.5 w-3.5" />
+            </button>
+          ) : isRemoteUrl(file.path) ? (
+            <a
+              href={href}
+              target="_blank"
+              rel="noopener noreferrer"
+              className={`rounded-md p-1.5 transition-colors ${isUser ? 'hover:bg-white/15' : 'hover:bg-muted'}`}
+              title="Open"
+            >
+              <ExternalLink className="h-3.5 w-3.5" />
+            </a>
+          ) : null}
+          <a
+            href={downloadHref}
+            target="_blank"
+            rel="noopener noreferrer"
+            download={file.name}
+            className={`rounded-md p-1.5 transition-colors ${isUser ? 'hover:bg-white/15' : 'hover:bg-muted'}`}
+            title="Download"
+          >
+            <Download className="h-3.5 w-3.5" />
+          </a>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function AttachmentPreviewModal({ file, onClose }: { file: AttachedFile | null; onClose: () => void }) {
+  const [textContent, setTextContent] = useState<string | null>(null);
+  const [textError, setTextError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setTextContent(null);
+    setTextError(null);
+    if (!file || !isTextPreviewFile(file.name) || isRemoteUrl(file.path)) return;
+
+    let cancelled = false;
+    fetch(fileUrl(file))
+      .then(async (res) => {
+        if (!res.ok) throw new Error(`Preview failed (${res.status})`);
+        const data = await res.json();
+        if (!cancelled) setTextContent(typeof data.content === 'string' ? data.content : 'No text preview available.');
+      })
+      .catch((err) => {
+        if (!cancelled) setTextError(err instanceof Error ? err.message : 'Preview failed');
+      });
+
+    return () => { cancelled = true; };
+  }, [file]);
+
+  if (!file) return null;
+
+  const href = fileUrl(file);
+  const downloadHref = fileUrl(file, true);
+  const titleExt = getFileExtension(file.name).toUpperCase() || 'FILE';
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm" onClick={onClose}>
+      <div className="flex max-h-[92vh] w-full max-w-5xl flex-col overflow-hidden rounded-xl border bg-background shadow-2xl" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center gap-3 border-b px-4 py-3">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-muted">
+            <AttachmentIcon file={file} />
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="truncate text-sm font-medium">{file.name}</div>
+            <div className="text-xs text-muted-foreground">{titleExt}{formatBytes(file.size) ? ` · ${formatBytes(file.size)}` : ''}</div>
+          </div>
+          <a href={downloadHref} target="_blank" rel="noopener noreferrer" download={file.name} className="inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs hover:bg-muted">
+            <Download className="h-3.5 w-3.5" /> Download
+          </a>
+          <button onClick={onClose} className="rounded-md p-1.5 hover:bg-muted" title="Close">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+        <div className="min-h-0 flex-1 overflow-auto bg-muted/20 p-4">
+          {isImageFile(file.name) ? (
+            <img src={href} alt={file.name} className="mx-auto max-h-[78vh] max-w-full rounded-lg object-contain" />
+          ) : isAudioFile(file.name) ? (
+            <div className="flex min-h-[220px] items-center justify-center">
+              <audio controls preload="metadata" className="w-full max-w-xl" src={href} />
+            </div>
+          ) : isPdfFile(file.name) ? (
+            <iframe title={file.name} src={href} className="h-[78vh] w-full rounded-md border bg-background" />
+          ) : isTextPreviewFile(file.name) ? (
+            <pre className="max-h-[78vh] overflow-auto whitespace-pre-wrap rounded-md border bg-background p-4 text-xs leading-relaxed">
+              {textError || textContent || 'Loading preview...'}
+            </pre>
+          ) : (
+            <div className="flex min-h-[220px] flex-col items-center justify-center gap-3 text-center text-sm text-muted-foreground">
+              <FileIcon className="h-10 w-10" />
+              <p>No inline preview for this file type yet.</p>
+              <p>Use Download to open it locally.</p>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
 }
 
 function HighlightedText({ text, query }: { text: string; query: string }) {
@@ -111,6 +380,46 @@ function HighlightedText({ text, query }: { text: string; query: string }) {
       })}
     </>
   );
+}
+
+
+function normalizeMessageFingerprintContent(content: string): string {
+  return content.trim().replace(/\s+/g, ' ');
+}
+
+function isSameRenderedMessage(a: Pick<Message, 'role' | 'content' | 'createdAt'>, b: Pick<Message, 'role' | 'content' | 'createdAt'>, windowMs = 30_000): boolean {
+  if (a.role !== b.role) return false;
+  if (normalizeMessageFingerprintContent(a.content) !== normalizeMessageFingerprintContent(b.content)) return false;
+  return Math.abs(a.createdAt.getTime() - b.createdAt.getTime()) <= windowMs;
+}
+
+function mergeMessagesByIdAndFingerprint(prev: Message[], incoming: Message[]): Message[] {
+  let merged = [...prev];
+  for (const msg of incoming) {
+    const idIndex = merged.findIndex((m) => m.id === msg.id);
+    if (idIndex >= 0) {
+      merged[idIndex] = { ...merged[idIndex], ...msg };
+      continue;
+    }
+
+    const fingerprintIndex = merged.findIndex((m) => isSameRenderedMessage(m, msg));
+    if (fingerprintIndex >= 0) {
+      // Replace temp/local render IDs with the persisted DB message, preserving
+      // any local UI-only flags that the incoming DB row doesn't know about.
+      merged[fingerprintIndex] = {
+        ...merged[fingerprintIndex],
+        ...msg,
+        bookmarked: msg.bookmarked ?? merged[fingerprintIndex].bookmarked,
+        reactions: msg.reactions?.length ? msg.reactions : merged[fingerprintIndex].reactions,
+        failed: false,
+        cancelled: false,
+      };
+      continue;
+    }
+
+    merged.push(msg);
+  }
+  return merged.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
 }
 
 function formatDateSeparator(date: Date): string {
@@ -165,20 +474,24 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
   const sendingRef = useRef(false);
+  const stopRequestedRef = useRef(false);
   const lastStreamDataRef = useRef<number>(0); // timestamp of last received SSE data
   const lastStreamCompleteRef = useRef<number>(0); // timestamp when streaming finished (for SSE dedup)
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [lightboxSrc, setLightboxSrc] = useState<string | null>(null);
+  const [previewFile, setPreviewFile] = useState<AttachedFile | null>(null);
   const [showBookmarksOnly, setShowBookmarksOnly] = useState(false);
   const [emojiPickerMessageId, setEmojiPickerMessageId] = useState<string | null>(null);
   const [isRecording, setIsRecording] = useState(false);
   const [recordingDuration, setRecordingDuration] = useState(0);
   const [sessionStats, setSessionStats] = useState<{ context: number; max: number; compactions: number; model: string | null } | null>(null);
   const [resetting, setResetting] = useState(false);
+  const [stopping, setStopping] = useState(false);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const recordingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const pendingVoiceRef = useRef<AttachedFile | null>(null);
+  const cancelRecordingRef = useRef(false);
   const [hasMore, setHasMore] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const scrollAdjustRef = useRef<{ prevScrollHeight: number } | null>(null);
@@ -247,20 +560,17 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
           console.log('[SSE] event | role:', data.message?.role, '| eventTabId:', data.tabId, '| myTabId:', tabId, '| match:', data.tabId === tabId, '| msgId:', data.message?.id?.slice(0,8));
           if (data.tabId === tabId) return;
           const msg = data.message;
-          setMessages((prev) => {
-            // Skip if we already have this message by ID
-            if (prev.some((m) => m.id === msg.id)) return prev;
-            return [...prev, {
-              id: msg.id,
-              role: msg.role,
-              content: msg.content,
-              bookmarked: msg.bookmarked || false,
-              reactions: msg.reactions || [],
-              attachedFiles: msg.attachedFiles || undefined,
-              replyTo: msg.replyTo || undefined,
-              createdAt: new Date(msg.createdAt),
-            }];
-          });
+          const incomingMsg: Message = {
+            id: msg.id,
+            role: msg.role,
+            content: msg.content,
+            bookmarked: msg.bookmarked || false,
+            reactions: msg.reactions || [],
+            attachedFiles: msg.attachedFiles || undefined,
+            replyTo: msg.replyTo || undefined,
+            createdAt: new Date(msg.createdAt),
+          };
+          setMessages((prev) => mergeMessagesByIdAndFingerprint(prev, [incomingMsg]));
         }
       } catch { /* ignore parse errors */ }
     };
@@ -292,12 +602,13 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
               attachedFiles: m.attachedFiles || undefined,
               createdAt: new Date(m.createdAt),
             }));
-            // Merge: keep older loaded messages, update/add newer ones
+            // Merge: keep older loaded messages, update/add newer ones.
+            // Also reconcile temp streamed messages with persisted DB rows by
+            // role/content/time so users don't see a brief duplicate bubble.
             setMessages(prev => {
-              const freshIds = new Set(freshMsgs.map((m: Message) => m.id));
               const oldestFresh = freshMsgs.length > 0 ? freshMsgs[0].createdAt.getTime() : Infinity;
-              const olderKept = prev.filter(m => m.createdAt.getTime() < oldestFresh && !freshIds.has(m.id));
-              return [...olderKept, ...freshMsgs];
+              const olderKept = prev.filter(m => m.createdAt.getTime() < oldestFresh);
+              return mergeMessagesByIdAndFingerprint(olderKept, freshMsgs);
             });
           }
           setHasMore(data.hasMore ?? false);
@@ -598,9 +909,11 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
 
   // Copy message as markdown
   const copyMessage = useCallback(async (message: Message) => {
-    let text = message.content;
-    if (message.attachedFiles?.length) {
-      const fileList = message.attachedFiles.map(f => `- ${f.name}`).join('\n');
+    const parsedMedia = parseMediaAttachments(message.content);
+    let text = parsedMedia.cleanContent || message.content;
+    const allFiles = mergeAttachmentLists(message.attachedFiles, parsedMedia.files);
+    if (allFiles.length) {
+      const fileList = allFiles.map(f => `- ${f.name}`).join('\n');
       text = `**Attached files:**\n${fileList}\n\n${text}`;
     }
     try {
@@ -886,6 +1199,8 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
       const mediaRecorder = new MediaRecorder(stream, mimeOptions);
       mediaRecorderRef.current = mediaRecorder;
       audioChunksRef.current = [];
+      pendingVoiceRef.current = null;
+      cancelRecordingRef.current = false;
 
       mediaRecorder.ondataavailable = (e) => {
         if (e.data.size > 0) {
@@ -895,6 +1210,14 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
 
       mediaRecorder.onstop = async () => {
         stream.getTracks().forEach(t => t.stop());
+
+        if (cancelRecordingRef.current) {
+          audioChunksRef.current = [];
+          pendingVoiceRef.current = null;
+          cancelRecordingRef.current = false;
+          return;
+        }
+
         const recMime = mediaRecorder.mimeType;
         const ext = recMime.includes('webm') ? 'webm' : recMime.includes('ogg') ? 'ogg' : recMime.includes('mp4') ? 'm4a' : 'webm';
         const blob = new Blob(audioChunksRef.current, { type: recMime });
@@ -951,6 +1274,7 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
           message: '🎙️ [Voice message]',
           projectId: id,
           tabId,
+          clientMessageId: createClientMessageId(),
           attachedFiles: [voiceFile.path],
         }),
         signal: controller.signal,
@@ -1007,8 +1331,9 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
     }
   }, [id]);
 
-  // Stop voice recording
+  // Stop voice recording and send it
   const stopRecording = useCallback(() => {
+    cancelRecordingRef.current = false;
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
       mediaRecorderRef.current.stop();
     }
@@ -1030,9 +1355,30 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
     setTimeout(() => clearInterval(checkInterval), 10000);
   }, [sendVoiceMessage]);
 
+  // Cancel voice recording without uploading or sending it
+  const cancelRecording = useCallback(() => {
+    cancelRecordingRef.current = true;
+    pendingVoiceRef.current = null;
+    audioChunksRef.current = [];
+
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+      mediaRecorderRef.current.stop();
+    } else if (mediaRecorderRef.current?.stream) {
+      mediaRecorderRef.current.stream.getTracks().forEach(t => t.stop());
+    }
+
+    setIsRecording(false);
+    setRecordingDuration(0);
+    if (recordingTimerRef.current) {
+      clearInterval(recordingTimerRef.current);
+      recordingTimerRef.current = null;
+    }
+  }, []);
+
   // Cleanup recording on unmount
   useEffect(() => {
     return () => {
+      cancelRecordingRef.current = true;
       if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
         mediaRecorderRef.current.stop();
       }
@@ -1092,11 +1438,78 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
     }
   }, [addFile]);
 
+  const handleGatewayStop = useCallback(async (opts: { fallbackAbortMs?: number | null; quiet?: boolean } = {}) => {
+    if (stopping) return;
+    const { fallbackAbortMs = 2500, quiet = false } = opts;
+    setStopping(true);
+
+    try {
+      const res = await fetch('/api/chat/stop', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ projectId: id }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || `Stop failed (${res.status})`);
+
+      if (!quiet) {
+        if (data.aborted) {
+          toast.success('Stopped gateway run');
+        } else {
+          toast.info('No active gateway run to stop');
+        }
+      }
+    } catch (err) {
+      console.error('Gateway stop failed:', err);
+      if (!quiet) toast.error(err instanceof Error ? err.message : 'Failed to stop gateway run');
+      // If the gateway stop call itself fails, still unblock the local UI.
+      abortControllerRef.current?.abort();
+    } finally {
+      // Normally chat.abort makes the active stream finish cleanly so partial
+      // output can still be saved. If the browser stream does not close shortly,
+      // fall back to local abort so the Stop button never leaves the UI stuck.
+      if (fallbackAbortMs != null) {
+        window.setTimeout(() => {
+          if (sendingRef.current) abortControllerRef.current?.abort();
+        }, fallbackAbortMs);
+      }
+      setStopping(false);
+    }
+  }, [id, stopping]);
+
+  const focusComposer = useCallback(() => {
+    const focus = () => {
+      const inputEl = inputRef.current;
+      if (!inputEl) return;
+      inputEl.focus({ preventScroll: true });
+      const cursorPosition = inputEl.value.length;
+      inputEl.setSelectionRange(cursorPosition, cursorPosition);
+    };
+
+    // Do it immediately for desktop, then again after the reply preview renders.
+    focus();
+    requestAnimationFrame(focus);
+    window.setTimeout(focus, 0);
+  }, []);
+
+  const startReplyTo = useCallback((message: Message) => {
+    setReplyTo(message);
+    focusComposer();
+  }, [focusComposer]);
+
   const handleSend = useCallback(async () => {
+    // Intercept OpenClaw slash commands before the normal sending guard so
+    // `/stop` can work as a control command instead of being sent to the model.
+    const trimmed = input.trim().toLowerCase();
+    if (trimmed === '/stop') {
+      setInput('');
+      await handleGatewayStop({ fallbackAbortMs: sendingRef.current ? 2500 : null });
+      return;
+    }
+
     if ((!input.trim() && attachedFiles.length === 0) || sending) return;
 
     // Intercept OpenClaw slash commands — route to session reset instead of LLM
-    const trimmed = input.trim().toLowerCase();
     if (trimmed === '/reset' || trimmed === '/new') {
       setInput('');
       handleQuickReset();
@@ -1105,10 +1518,12 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
 
     const currentFiles = [...attachedFiles];
     const messageText = input.trim() || (currentFiles.some(f => isAudioFile(f.name)) ? '🎙️' : '📎');
+    const clientMessageId = createClientMessageId();
     const sendPayload = {
       message: messageText,
       projectId: id,
       tabId,
+      clientMessageId,
       attachedFiles: currentFiles.map(f => f.path),
       ...(replyTo ? { replyTo: { id: replyTo.id, content: replyTo.content?.slice(0, 200) } } : {}),
     };
@@ -1122,6 +1537,7 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
       _sendPayload: sendPayload,
     };
 
+    stopRequestedRef.current = false;
     setMessages((prev) => [...prev, userMessage]);
     setInput('');
     setAttachedFiles([]);
@@ -1193,6 +1609,10 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
 
       // Streaming complete — add as full message (skip NO_REPLY directives)
       lastStreamCompleteRef.current = Date.now();
+      // Empty stream means the gateway/model failed without producing content.
+      // Do not auto-retry here: /api/chat is stateful and a retry re-submits the
+      // same user turn to OpenClaw. Mark the message failed so the user can retry
+      // explicitly with a fresh clientMessageId.
       if (accumulated && !isNoReply(accumulated)) {
         const assistantMsgId = `msg-${Date.now()}-assistant`;
         const assistantMessage: Message = {
@@ -1258,10 +1678,24 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
         if (document.hidden) {
           markUnread(id);
         }
+      } else if (!accumulated && stopRequestedRef.current) {
+        setMessages((prev) => prev.map(m =>
+          m.id === userMessage.id ? { ...m, cancelled: true, failed: false } : m
+        ));
+        toast.info('Cancelled by user');
+      } else if (!accumulated && !controller.signal.aborted) {
+        setMessages((prev) => prev.map(m =>
+          m.id === userMessage.id ? { ...m, failed: true, cancelled: false } : m
+        ));
+        toast.error('No response from model. Please retry.');
       }
     } catch (error) {
       if ((error as Error).name === 'AbortError') {
         // User cancelled
+        setMessages((prev) => prev.map(m =>
+          m.id === userMessage.id ? { ...m, cancelled: true, failed: false } : m
+        ));
+        toast.info('Cancelled by user');
         if (streamingContent) {
           setMessages((prev) => [...prev, {
             id: `msg-${Date.now()}-cancelled`,
@@ -1305,7 +1739,7 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
                       const freshIds = new Set(freshMsgs.map((m: Message) => m.id));
                       const oldestFresh = freshMsgs.length > 0 ? freshMsgs[0].createdAt.getTime() : Infinity;
                       const olderKept = prev.filter(m => m.createdAt.getTime() < oldestFresh && !freshIds.has(m.id));
-                      return [...olderKept, ...freshMsgs];
+                      return mergeMessagesByIdAndFingerprint(olderKept, freshMsgs);
                     });
                     setHasMore(data.hasMore ?? false);
                     recovered = true;
@@ -1342,11 +1776,18 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
               });
             } catch { /* best effort — DB save failed but UI still shows it */ }
           } else {
-            // No content at all — mark the user message as failed
-            setMessages((prev) => prev.map(m =>
-              m.id === userMessage.id ? { ...m, failed: true } : m
-            ));
-            toast.error(`Send failed: ${errMsg}`);
+            if (stopRequestedRef.current) {
+              setMessages((prev) => prev.map(m =>
+                m.id === userMessage.id ? { ...m, cancelled: true, failed: false } : m
+              ));
+              toast.info('Cancelled by user');
+            } else {
+              // No content at all — mark the user message as failed
+              setMessages((prev) => prev.map(m =>
+                m.id === userMessage.id ? { ...m, failed: true, cancelled: false } : m
+              ));
+              toast.error(`Send failed: ${errMsg}`);
+            }
           }
         }
       }
@@ -1355,20 +1796,22 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
       sendingRef.current = false;
       setStreamingContent('');
       abortControllerRef.current = null;
+      stopRequestedRef.current = false;
       inputRef.current?.focus();
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [input, sending, id, attachedFiles, replyTo]);
 
-  const handleStop = () => {
-    abortControllerRef.current?.abort();
-  };
+  const handleStop = useCallback(() => {
+    stopRequestedRef.current = true;
+    void handleGatewayStop();
+  }, [handleGatewayStop]);
 
   const handleRetry = useCallback(async (failedMsg: Message) => {
     if (sending || !failedMsg._sendPayload) return;
 
-    // Clear failed state
-    setMessages(prev => prev.map(m => m.id === failedMsg.id ? { ...m, failed: false } : m));
+    // Clear failed/cancelled state
+    setMessages(prev => prev.map(m => m.id === failedMsg.id ? { ...m, failed: false, cancelled: false } : m));
     setSending(true);
     sendingRef.current = true;
     setStreamingContent('');
@@ -1380,7 +1823,7 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
       const res = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(failedMsg._sendPayload),
+        body: JSON.stringify({ ...failedMsg._sendPayload, clientMessageId: createClientMessageId() }),
         signal: controller.signal,
       });
 
@@ -1613,6 +2056,10 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
                 );
               }
 
+              const parsedMedia = parseMediaAttachments(message.content);
+              const messageFiles = mergeAttachmentLists(message.attachedFiles, parsedMedia.files);
+              const renderedContent = parsedMedia.cleanContent;
+
               // Regular message
               return (
               <Fragment key={message.id}>
@@ -1626,9 +2073,11 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
                 <div className="max-w-[85%] overflow-hidden">
                   <div
                     className={`rounded-lg px-4 py-2.5 ${
-                      message.failed
-                        ? 'bg-red-100 dark:bg-red-950/40 border border-red-300 dark:border-red-800 text-red-900 dark:text-red-200'
-                        : message.role === 'user'
+                      message.cancelled
+                        ? 'bg-amber-100 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-800 text-amber-950 dark:text-amber-100'
+                        : message.failed
+                          ? 'bg-red-100 dark:bg-red-950/40 border border-red-300 dark:border-red-800 text-red-900 dark:text-red-200'
+                          : message.role === 'user'
                           ? 'bg-primary text-primary-foreground'
                           : 'bg-muted'
                     } ${message.bookmarked ? 'ring-2 ring-amber-400/50 ring-offset-1 ring-offset-background' : ''}`}
@@ -1662,53 +2111,33 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
                         </p>
                       </button>
                     )}
-                    {message.attachedFiles && message.attachedFiles.length > 0 && (
-                      <div className="flex flex-wrap gap-1.5 mb-2">
-                        {message.attachedFiles.map((f) =>
-                          isAudioFile(f.name) ? (
-                            <div key={f.path} className="w-full">
-                              <audio
-                                controls
-                                preload="metadata"
-                                className="h-8 max-w-[260px]"
-                                src={`/api/files?path=${encodeURIComponent(f.path)}`}
-                              />
-                            </div>
-                          ) : isImageFile(f.name) ? (
-                            <button
-                              key={f.path}
-                              onClick={() => setLightboxSrc(`/api/files?path=${encodeURIComponent(f.path)}`)}
-                              className="block text-left"
-                            >
-                              <img
-                                src={`/api/files?path=${encodeURIComponent(f.path)}`}
-                                alt={f.name}
-                                className="max-w-[280px] max-h-[200px] rounded-md object-cover cursor-pointer hover:opacity-90 transition-opacity"
-                                loading="lazy"
-                              />
-                            </button>
-                          ) : (
-                            <span
-                              key={f.path}
-                              className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded bg-black/10 dark:bg-white/10"
-                              title={f.path}
-                            >
-                              <FileText className="h-3 w-3" />
-                              {f.name}
-                            </span>
-                          )
-                        )}
+                    {messageFiles.length > 0 && (
+                      <div className="mb-2 grid max-w-[420px] gap-2">
+                        {messageFiles.map((f) => (
+                          <AttachmentCard
+                            key={f.path}
+                            file={f}
+                            role={message.role}
+                            onPreview={setPreviewFile}
+                          />
+                        ))}
                       </div>
                     )}
-                    {showSearch && searchQuery.trim() ? (
+                    {renderedContent && (showSearch && searchQuery.trim() ? (
                       <p className="whitespace-pre-wrap text-sm leading-relaxed">
-                        <HighlightedText text={message.content} query={searchQuery} />
+                        <HighlightedText text={renderedContent} query={searchQuery} />
                       </p>
                     ) : (
-                      <MarkdownMessage content={message.content} />
+                      <MarkdownMessage content={renderedContent} />
+                    ))}
+                    {/* Cancelled / failed message indicators */}
+                    {message.cancelled && (
+                      <div className="flex items-center gap-2 mt-2 pt-2 border-t border-amber-200 dark:border-amber-800">
+                        <AlertCircle className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
+                        <span className="text-xs font-medium text-amber-700 dark:text-amber-300 flex-1">Cancelled by user</span>
+                      </div>
                     )}
-                    {/* Failed message indicator + retry */}
-                    {message.failed && (
+                    {message.failed && !message.cancelled && (
                       <div className="flex items-center gap-2 mt-2 pt-2 border-t border-red-200 dark:border-red-800">
                         <AlertCircle className="h-3.5 w-3.5 text-red-500 shrink-0" />
                         <span className="text-xs text-red-600 dark:text-red-400 flex-1">Failed to send</span>
@@ -1742,7 +2171,11 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
                         )}
                       </button>
                       <button
-                        onClick={() => { setReplyTo(message); inputRef.current?.focus(); }}
+                        onPointerDown={(e) => {
+                          e.preventDefault();
+                          startReplyTo(message);
+                        }}
+                        onClick={() => startReplyTo(message)}
                         className={`p-1 rounded transition-colors ${
                           message.role === 'user'
                             ? 'text-primary-foreground/50 hover:text-primary-foreground'
@@ -1978,11 +2411,20 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
               </span>
               <span className="text-xs text-red-500 dark:text-red-400">Recording...</span>
               <button
+                onClick={cancelRecording}
+                className="ml-auto inline-flex items-center gap-1 px-2 py-1 rounded hover:bg-red-100 dark:hover:bg-red-900/50 text-xs text-red-600 dark:text-red-400"
+                title="Cancel recording"
+              >
+                <X className="h-3.5 w-3.5" />
+                Cancel
+              </button>
+              <button
                 onClick={stopRecording}
-                className="ml-auto p-1 rounded hover:bg-red-100 dark:hover:bg-red-900/50 text-red-600 dark:text-red-400"
-                title="Stop recording"
+                className="inline-flex items-center gap-1 px-2 py-1 rounded bg-red-600 hover:bg-red-700 text-xs text-white"
+                title="Stop and send recording"
               >
                 <Square className="h-3.5 w-3.5" />
+                Send
               </button>
             </div>
           )}
@@ -2040,13 +2482,18 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
               }}
             />
             {sending ? (
-              <Button onClick={handleStop} variant="destructive" size="icon" className="shrink-0">
-                <Square className="h-4 w-4" />
+              <Button onClick={handleStop} variant="destructive" size="icon" className="shrink-0" disabled={stopping} title="Stop gateway run">
+                {stopping ? <Loader2 className="h-4 w-4 animate-spin" /> : <Square className="h-4 w-4" />}
               </Button>
             ) : isRecording ? (
-              <Button onClick={stopRecording} variant="destructive" size="icon" className="shrink-0 animate-pulse">
-                <Square className="h-4 w-4" />
-              </Button>
+              <div className="flex gap-1 shrink-0">
+                <Button onClick={cancelRecording} variant="ghost" size="icon" title="Cancel recording">
+                  <X className="h-4 w-4" />
+                </Button>
+                <Button onClick={stopRecording} variant="destructive" size="icon" className="animate-pulse" title="Stop and send recording">
+                  <Square className="h-4 w-4" />
+                </Button>
+              </div>
             ) : input.trim() || attachedFiles.length > 0 ? (
               <Button onClick={handleSend} disabled={!input.trim() && attachedFiles.length === 0} size="icon" className="shrink-0">
                 <Send className="h-4 w-4" />
@@ -2131,6 +2578,8 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
           {mobileTab === 'docs' && <DocsPanel projectId={id} />}
         </div>
       </div>
+      <AttachmentPreviewModal file={previewFile} onClose={() => setPreviewFile(null)} />
+
       {/* Image lightbox overlay */}
       {lightboxSrc && (
         <div

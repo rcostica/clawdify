@@ -194,3 +194,13 @@ try {
 try {
   sqlite.exec(`ALTER TABLE messages ADD COLUMN reply_to_role TEXT;`);
 } catch { /* column already exists */ }
+
+// Migration: client-generated idempotency key for user messages
+try {
+  sqlite.exec(`ALTER TABLE messages ADD COLUMN client_message_id TEXT;`);
+} catch { /* column already exists */ }
+
+// One user send should only be persisted once per thread. NULLs remain unrestricted.
+sqlite.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_messages_thread_client_message_id
+  ON messages(thread_id, client_message_id)
+  WHERE client_message_id IS NOT NULL;`);

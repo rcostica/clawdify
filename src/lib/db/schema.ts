@@ -35,6 +35,7 @@ export const messages = sqliteTable('messages', {
   content: text('content').notNull(),
   model: text('model'),
   tokensUsed: integer('tokens_used'),
+  clientMessageId: text('client_message_id'), // Browser-generated idempotency key for user sends
   bookmarked: integer('bookmarked').default(0).notNull(),
   attachedFiles: text('attached_files'),  // JSON array of {path, name} objects
   replyToId: text('reply_to_id'),         // ID of the message being replied to

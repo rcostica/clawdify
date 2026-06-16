@@ -9,6 +9,7 @@ import { useChatAttachmentsStore } from '@/lib/stores/chat-attachments';
 import { useNotificationsStore, getLastSeen, setLastSeen } from '@/lib/stores/notifications';
 import { useSearchParams } from 'next/navigation';
 import { toast } from 'sonner';
+import { useIsMobile } from '@/hooks/use-mobile';
 import { SplitPane } from '@/components/split-pane';
 import { TasksPanel } from '@/components/tasks-panel';
 import { FilesPanel } from '@/components/files-panel';
@@ -443,6 +444,7 @@ function formatMessageTime(date: Date): string {
 }
 
 export default function ProjectPage({ params }: { params: Promise<{ id: string }> }) {
+  const isMobile = useIsMobile();
   const { id } = use(params);
   const { selectProject } = useProjectsStore();
   const { markUnread, markRead } = useNotificationsStore();
@@ -1027,76 +1029,15 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
 
   const handleSessionReset = useCallback(async () => {
     if (resetting || sending) return;
-    if (!confirm('Reset AI context? Messages stay visible. The AI will save unsaved context first.')) return;
+    if (!confirm('Reset AI context? Messages stay visible. The current OpenClaw transcript will be archived before reset.')) return;
     setResetting(true);
 
     try {
-      // Step 1: Send a memory flush message so the AI saves unsaved context
-      const flushMessage = '[System: Session reset requested. Before the session resets, save ALL unsaved context from this conversation to memory files (memory/YYYY-MM-DD.md). Include decisions, work done, things discussed, and any important context not yet logged. Be thorough but fast — this context will be lost after reset. Do NOT include this system message in the log.]';
-      const flushUserMsg: Message = {
-        id: `msg-${Date.now()}-flush`,
-        role: 'user',
-        content: '🔄 Saving context before session reset...',
-        createdAt: new Date(),
-      };
-      setMessages((prev) => [...prev, flushUserMsg]);
-      setSending(true);
-      sendingRef.current = true;
-      setStreamingContent('');
-
-      const flushRes = await fetch('/api/chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          message: flushMessage,
-          projectId: id,
-          tabId,
-        }),
-      });
-
-      if (!flushRes.ok || !flushRes.body) {
-        throw new Error('Failed to send memory flush message');
-      }
-
-      // Stream the flush response so user sees what's being saved
-      const reader = flushRes.body.getReader();
-      const decoder = new TextDecoder();
-      let accumulated = '';
-      let lineBuf = '';
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        lineBuf += decoder.decode(value, { stream: true });
-        const parts = lineBuf.split('\n');
-        lineBuf = parts.pop() || '';
-        for (const line of parts) {
-          const trimmed = line.trim();
-          if (!trimmed.startsWith('data: ')) continue;
-          const data = trimmed.slice(6);
-          if (data === '[DONE]') continue;
-          try {
-            const parsed = JSON.parse(data);
-            const delta = parsed.choices?.[0]?.delta?.content;
-            if (delta) { accumulated += delta; setStreamingContent(accumulated); }
-          } catch { /* skip */ }
-        }
-      }
-
-      // Add the flush response as a message
-      if (accumulated) {
-        setMessages((prev) => [...prev, {
-          id: `msg-${Date.now()}-flush-response`,
-          role: 'assistant',
-          content: accumulated,
-          createdAt: new Date(),
-        }]);
-      }
-      setStreamingContent('');
-      setSending(false);
-      sendingRef.current = false;
-
-      // Step 2: Reset OpenClaw context (server-side /reset, no flush since we already did it)
+      // Use the Gateway sessions.reset RPC directly. It archives the current
+      // OpenClaw transcript before creating a fresh session. Do not send a
+      // synthetic “save memory before reset” chat turn here: that path is
+      // stateful/race-prone and can surface stale queued assistant output as a
+      // normal visible reply before the reset divider.
       const res = await fetch('/api/session-reset', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -1104,11 +1045,12 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
       });
       if (!res.ok) throw new Error('Reset failed');
 
-      // Add visual divider — messages stay visible
+      // Add visual divider locally — messages stay visible. The API also
+      // persists a system divider so reloads keep the reset marker.
       setMessages((prev) => [...prev, {
         id: `msg-${Date.now()}-divider`,
-        role: 'assistant' as const,
-        content: '— *Session reset* — context cleared, messages preserved —',
+        role: 'system' as const,
+        content: '— Session reset — context cleared, messages preserved —',
         createdAt: new Date(),
       }]);
       setSessionStats({ context: 0, max: sessionStats?.max || 200000, compactions: 0, model: sessionStats?.model || null });
@@ -1122,7 +1064,7 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
     } finally {
       setResetting(false);
     }
-  }, [id, resetting, sending, sessionStats, tabId]);
+  }, [id, resetting, sending, sessionStats]);
 
   // File picker: browse workspace files
   const loadPickerDir = useCallback(async (dirPath: string) => {
@@ -1253,6 +1195,12 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
 
   // Auto-send voice message once upload completes
   const sendVoiceMessage = useCallback(async (voiceFile: AttachedFile) => {
+    if (sendingRef.current) {
+      addFile(voiceFile);
+      toast.info('Voice message recorded — send it after the current response finishes.');
+      return;
+    }
+
     const voiceMsg: Message = {
       id: `msg-${Date.now()}`,
       role: 'user',
@@ -1329,7 +1277,7 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
       setStreamingContent('');
       abortControllerRef.current = null;
     }
-  }, [id]);
+  }, [id, addFile]);
 
   // Stop voice recording and send it
   const stopRecording = useCallback(() => {
@@ -1507,7 +1455,7 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
       return;
     }
 
-    if ((!input.trim() && attachedFiles.length === 0) || sending) return;
+    if ((!input.trim() && attachedFiles.length === 0) || sending || sendingRef.current) return;
 
     // Intercept OpenClaw slash commands — route to session reset instead of LLM
     if (trimmed === '/reset' || trimmed === '/new') {
@@ -1808,7 +1756,7 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
   }, [handleGatewayStop]);
 
   const handleRetry = useCallback(async (failedMsg: Message) => {
-    if (sending || !failedMsg._sendPayload) return;
+    if (sending || sendingRef.current || !failedMsg._sendPayload) return;
 
     // Clear failed/cancelled state
     setMessages(prev => prev.map(m => m.id === failedMsg.id ? { ...m, failed: false, cancelled: false } : m));
@@ -2465,8 +2413,9 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
               onChange={(e) => setInput(e.target.value)}
               placeholder={isDragOver ? 'Drop files here...' : `Message ${project.name}...`}
               onPaste={handlePaste}
+              enterKeyHint={isMobile ? 'enter' : 'send'}
               onKeyDown={(e) => {
-                if (e.key === 'Enter' && !e.shiftKey) {
+                if (e.key === 'Enter' && !e.shiftKey && !isMobile) {
                   e.preventDefault();
                   handleSend();
                 }

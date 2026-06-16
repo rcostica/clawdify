@@ -3,6 +3,9 @@
  * All calls happen in API routes — secrets never reach the browser.
  */
 
+import { request as httpRequest } from 'node:http';
+import { request as httpsRequest } from 'node:https';
+
 const GATEWAY_URL = process.env.OPENCLAW_GATEWAY_URL || 'http://localhost:18789';
 const GATEWAY_TOKEN = process.env.OPENCLAW_GATEWAY_TOKEN || '';
 
@@ -12,6 +15,110 @@ function headers(extra?: Record<string, string>): Record<string, string> {
     'Content-Type': 'application/json',
     ...extra,
   };
+}
+
+async function streamingPost(
+  url: string,
+  jsonBody: Record<string, unknown>,
+  extraHeaders: Record<string, string>,
+  signal?: AbortSignal,
+): Promise<Response> {
+  const parsedUrl = new URL(url);
+  const payload = JSON.stringify(jsonBody);
+  const transport = parsedUrl.protocol === 'https:' ? httpsRequest : httpRequest;
+
+  return new Promise<Response>((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(new Error('Request aborted'));
+      return;
+    }
+
+    let settled = false;
+    let upstreamEnded = false;
+    let upstreamResponse: import('node:http').IncomingMessage | null = null;
+    let responseController: ReadableStreamDefaultController<Uint8Array> | null = null;
+
+    function cleanupAbortListener() {
+      signal?.removeEventListener('abort', abortRequest);
+    }
+
+    const req = transport(parsedUrl, {
+      method: 'POST',
+      headers: {
+        ...headers(extraHeaders),
+        Accept: 'text/event-stream',
+        'Content-Length': Buffer.byteLength(payload),
+      },
+      timeout: 0,
+    }, (res) => {
+      settled = true;
+      upstreamResponse = res;
+
+      const responseHeaders = new Headers();
+      for (const [key, value] of Object.entries(res.headers)) {
+        if (Array.isArray(value)) {
+          for (const item of value) responseHeaders.append(key, item);
+        } else if (typeof value === 'string') {
+          responseHeaders.set(key, value);
+        } else if (typeof value === 'number') {
+          responseHeaders.set(key, String(value));
+        }
+      }
+
+      const body = new ReadableStream<Uint8Array>({
+        start(controller) {
+          responseController = controller;
+          res.on('data', (chunk: Buffer | string) => {
+            const bytes = typeof chunk === 'string'
+              ? new TextEncoder().encode(chunk)
+              : new Uint8Array(chunk);
+            controller.enqueue(bytes);
+          });
+          res.on('end', () => {
+            upstreamEnded = true;
+            cleanupAbortListener();
+            controller.close();
+          });
+          res.on('error', (error) => {
+            upstreamEnded = true;
+            cleanupAbortListener();
+            controller.error(error);
+          });
+        },
+        cancel() {
+          upstreamEnded = true;
+          cleanupAbortListener();
+          res.destroy();
+          req.destroy();
+        },
+      });
+
+      resolve(new Response(body, {
+        status: res.statusCode || 502,
+        statusText: res.statusMessage,
+        headers: responseHeaders,
+      }));
+    });
+
+    function abortRequest() {
+      if (upstreamEnded) return;
+      upstreamEnded = true;
+      const error = new Error('Request aborted');
+      responseController?.error(error);
+      upstreamResponse?.destroy(error);
+      req.destroy(error);
+    }
+
+    req.setTimeout(0);
+    req.on('error', (error) => {
+      cleanupAbortListener();
+      if (!settled) reject(error);
+    });
+    signal?.addEventListener('abort', abortRequest, { once: true });
+
+    req.write(payload);
+    req.end();
+  });
 }
 
 /**
@@ -63,18 +170,18 @@ export async function chatStream(opts: {
 
   const url = `${GATEWAY_URL}/v1/chat/completions`;
 
-  // Helper: single fetch attempt (with optional AbortController)
+  // Helper: single streaming POST attempt.
+  // Do not use global fetch here: Node/undici applies a body inactivity timeout
+  // to long-lived streams. During long OpenClaw thinking/tool phases the Gateway
+  // may legitimately stay silent for minutes, while Clawdify keeps the browser
+  // connection alive with its own SSE comments. Native http/https lets the
+  // upstream stream stay open until Gateway finishes or the user aborts.
   const attempt = async (overrideBody?: Record<string, unknown>, signal?: AbortSignal) => {
     const fetchBody = overrideBody || body;
     try {
-      return await fetch(url, {
-        method: 'POST',
-        headers: headers(extraHeaders),
-        body: JSON.stringify(fetchBody),
-        signal,
-      });
+      return await streamingPost(url, fetchBody, extraHeaders, signal);
     } catch (err) {
-      if (signal?.aborted) throw new Error('Request aborted (timeout)');
+      if (signal?.aborted) throw new Error('Request aborted');
       throw new Error(`Gateway unreachable at ${GATEWAY_URL}: ${err}`);
     }
   };

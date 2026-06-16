@@ -45,3 +45,8 @@ export function listActiveGatewayRuns(sessionKey: string) {
     aborted: run.controller.signal.aborted,
   }));
 }
+
+export function hasActiveGatewayRuns(sessionKey: string) {
+  const runs = activeGatewayRuns.get(sessionKey);
+  return Boolean(runs && Array.from(runs.values()).some(run => !run.controller.signal.aborted));
+}

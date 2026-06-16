@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { chatStream, type ChatMessage, type ChatStreamResult } from '@/lib/gateway/client';
 import { db, messages, threads, projects, settings, vault, messageReactions } from '@/lib/db';
+import { sqlite } from '@/lib/db/sqlite';
 import { eq, desc, like, and, lt, sql } from 'drizzle-orm';
 import { v4 as uuidv4 } from 'uuid';
 import { redactSecrets } from '@/lib/redact';
 import { eventBus } from '@/lib/event-bus';
-import { registerActiveGatewayRun } from '@/lib/gateway/active-runs';
+import { hasActiveGatewayRuns, registerActiveGatewayRun } from '@/lib/gateway/active-runs';
 import fs from 'fs/promises';
 import path from 'path';
 import sharp from 'sharp';
@@ -350,15 +351,28 @@ export async function GET(request: NextRequest) {
 
   const threadIds = allThreads.map(t => t.id);
 
-  // Load messages from all threads, sorted newest-first for pagination
+  // Load messages from all threads, sorted newest-first for pagination.
+  // Important: SQLite timestamps here have second-level precision via Drizzle's
+  // `timestamp` mode, so a user prompt and the assistant draft/final often share
+  // the same created_at value. Sort equal timestamps by rowid insertion order;
+  // otherwise the later reverse() step can flip assistant replies above prompts.
+  const rowIdRows = sqlite.prepare(
+    `SELECT rowid, id FROM messages WHERE thread_id IN (${threadIds.map(() => '?').join(',')})`
+  ).all(...threadIds) as Array<{ rowid: number; id: string }>;
+  const rowIdByMessageId = new Map(rowIdRows.map((r) => [r.id, r.rowid]));
+
   let allMsgs = db.select().from(messages).all()
     .filter(m => threadIds.includes(m.threadId));
-  allMsgs.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  allMsgs.sort((a, b) => {
+    const timeDiff = asTimeMs(b.createdAt) - asTimeMs(a.createdAt);
+    if (timeDiff !== 0) return timeDiff;
+    return (rowIdByMessageId.get(b.id) ?? 0) - (rowIdByMessageId.get(a.id) ?? 0);
+  });
 
   // Apply cursor filter (messages strictly before the cursor timestamp)
   if (beforeParam) {
     const cursorTime = new Date(beforeParam).getTime();
-    allMsgs = allMsgs.filter(m => new Date(m.createdAt).getTime() < cursorTime);
+    allMsgs = allMsgs.filter(m => asTimeMs(m.createdAt) < cursorTime);
   }
 
   // Check if there are more beyond the limit
@@ -418,6 +432,12 @@ export async function POST(request: NextRequest) {
       ? clientMessageId.trim().slice(0, 160)
       : null;
 
+    // Stable session key per project — no thread ID.
+    // OpenClaw's daily reset and compaction apply naturally.
+    const effectiveSessionKey = projectId
+      ? `clawdify:${projectId}`
+      : 'agent:main:main';
+
     // Save user message
     const userMsgId = uuidv4();
     const userCreatedAt = new Date();
@@ -451,6 +471,20 @@ export async function POST(request: NextRequest) {
       if (duplicate) {
         console.warn('[chat] Duplicate user message blocked | reqId:', requestId, '| existingMsgId:', duplicate.id, '| clientMessageId:', normalizedClientMessageId);
         return sseDoneResponse('duplicate user message ignored');
+      }
+
+      // OpenClaw sessions are stateful. If a second message is submitted while
+      // the same session is still running, Gateway queues it and folds earlier
+      // queued prompts into later turns ("Queued user message..."), which makes
+      // the assistant repeat previous answers before addressing the new prompt.
+      // Block overlapping sends at Clawdify instead; the UI should normally
+      // prevent this, but voice auto-send and multi-tab races can bypass it.
+      if (hasActiveGatewayRuns(effectiveSessionKey)) {
+        console.warn('[chat] Overlapping gateway run blocked | reqId:', requestId, '| sessionKey:', effectiveSessionKey, '| clientMessageId:', normalizedClientMessageId);
+        return NextResponse.json(
+          { error: 'A response is still running in this project. Please wait for it to finish, or press Stop before sending another message.' },
+          { status: 409 },
+        );
       }
 
       console.log('[chat] Saving user msg | reqId:', requestId, '| msgId:', userMsgId, '| threadId:', threadId);
@@ -538,12 +572,6 @@ export async function POST(request: NextRequest) {
     }
     chatMessages.push({ role: 'user', content: userTextContent });
 
-    // Stable session key per project — no thread ID.
-    // OpenClaw's daily reset and compaction apply naturally.
-    const effectiveSessionKey = projectId
-      ? `clawdify:${projectId}`
-      : 'agent:main:main';
-
     // Call Gateway — the agent loop handles tools natively
     console.log('[chat] Sending to gateway: %d messages, last msg content type=%s',
       chatMessages.length,
@@ -584,6 +612,50 @@ export async function POST(request: NextRequest) {
     let clientCancelled = false;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const streamRef: { current: any } = { current: null };
+
+    // Persist assistant output progressively. If Clawdify is restarted while a
+    // reply is streaming, the already-rendered text should survive reload instead
+    // of disappearing with a transient browser "network error".
+    let assistantMsgId: string | null = null;
+    const assistantCreatedAt = new Date();
+    let lastDraftPersistAt = 0;
+    let lastDraftPersistLen = 0;
+    function persistAssistantContent(content: string, opts: { force?: boolean } = {}) {
+      if (!threadId || !content || content.trim() === 'NO_REPLY') return;
+      const now = Date.now();
+      if (
+        assistantMsgId &&
+        !opts.force &&
+        now - lastDraftPersistAt < 2000 &&
+        content.length - lastDraftPersistLen < 1000
+      ) return;
+
+      const storedContent = opts.force
+        ? content
+        : `${content}\n\n---\n⏳ *Response still streaming — if this remains after reload, it was interrupted.*`;
+      const redactedContent = redactSecrets(storedContent);
+      try {
+        if (!assistantMsgId) {
+          assistantMsgId = uuidv4();
+          db.insert(messages).values({
+            id: assistantMsgId,
+            threadId,
+            role: 'assistant',
+            content: redactedContent,
+            createdAt: assistantCreatedAt,
+          }).run();
+        } else {
+          db.update(messages)
+            .set({ content: redactedContent })
+            .where(eq(messages.id, assistantMsgId))
+            .run();
+        }
+        lastDraftPersistAt = now;
+        lastDraftPersistLen = content.length;
+      } catch (dbError) {
+        console.error('[chat] Error saving assistant draft:', dbError);
+      }
+    }
 
     // SSE keepalive: send a comment every 15s during silent periods (tool use, thinking)
     // to prevent browsers/proxies from killing the connection
@@ -636,6 +708,7 @@ export async function POST(request: NextRequest) {
               const delta = parsed.choices?.[0]?.delta;
               if (delta?.content) {
                 content += delta.content;
+                persistAssistantContent(content);
               }
             } catch {
               // skip
@@ -679,31 +752,20 @@ export async function POST(request: NextRequest) {
 
       console.log('[chat] SSE stream ended | reqId:', requestId, '| contentLen:', content.length, '| isNoReply:', isNoReply, '| clientCancelled:', clientCancelled);
 
-      // Always save assistant response to DB (unless it's a NO_REPLY directive)
+      // Always save final assistant response to DB (unless it's a NO_REPLY directive).
+      // This updates the progressive draft row when one exists.
       if (threadId && content && !isNoReply) {
-        const assistantMsgId = uuidv4();
-        const assistantCreatedAt = new Date();
+        persistAssistantContent(content, { force: true });
         console.log('[chat] Saving assistant msg | reqId:', requestId, '| msgId:', assistantMsgId, '| preview:', content.slice(0, 80));
-        try {
-          db.insert(messages).values({
-            id: assistantMsgId,
-            threadId,
-            role: 'assistant',
-            content: redactSecrets(content),
-            createdAt: assistantCreatedAt,
-          }).run();
 
-          // Notify other devices of the completed response
-          if (projectId) {
-            eventBus.emit({
-              type: 'message',
-              projectId,
-              tabId,
-              message: { id: assistantMsgId, role: 'assistant', content: redactSecrets(content), createdAt: assistantCreatedAt.toISOString() },
-            });
-          }
-        } catch (dbError) {
-          console.error('Error saving message:', dbError);
+        // Notify other devices of the completed response
+        if (projectId && assistantMsgId) {
+          eventBus.emit({
+            type: 'message',
+            projectId,
+            tabId,
+            message: { id: assistantMsgId, role: 'assistant', content: redactSecrets(content), createdAt: assistantCreatedAt.toISOString() },
+          });
         }
       }
 

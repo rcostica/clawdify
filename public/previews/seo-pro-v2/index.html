@@ -1,0 +1,1003 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>SEO Pro Romania — Online Marketing</title>
+  <style>
+    :root {
+      --bg: #f6f3ee;
+      --bg-soft: #eee7dd;
+      --paper: #fffdf8;
+      --ink: #241f1d;
+      --muted: #756d66;
+      --faint: rgba(36, 31, 29, .08);
+      --line: rgba(36, 31, 29, .13);
+      --orange: #f79819;
+      --orange-dark: #b76508;
+      --shadow: 0 34px 90px rgba(36, 31, 29, .10);
+      --ease: cubic-bezier(.19, 1, .22, 1);
+    }
+
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--ink);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      line-height: 1.42;
+      overflow-x: hidden;
+      font-weight: 400;
+    }
+
+    a { color: inherit; text-decoration: none; }
+    button { font: inherit; }
+    .wrap { width: min(1460px, calc(100% - 44px)); margin: 0 auto; }
+    .narrow { width: min(1120px, calc(100% - 44px)); margin: 0 auto; }
+
+    .grain {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: 80;
+      opacity: .22;
+      background-image: radial-gradient(rgba(36,31,29,.13) .65px, transparent .65px);
+      background-size: 7px 7px;
+      mix-blend-mode: multiply;
+    }
+
+    .scroll-progress {
+      position: fixed;
+      left: 0;
+      top: 0;
+      width: 100%;
+      height: 3px;
+      z-index: 90;
+      transform-origin: left center;
+      transform: scaleX(var(--scroll-progress, 0));
+      background: linear-gradient(90deg, var(--orange), var(--ink));
+      pointer-events: none;
+    }
+
+    .ambient-orb {
+      position: fixed;
+      left: var(--orb-x, 50vw);
+      top: var(--orb-y, 50vh);
+      width: 220px;
+      height: 220px;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(247,152,25,.12), transparent 68%);
+      transform: translate(-50%, -50%);
+      pointer-events: none;
+      z-index: 1;
+      transition: opacity .35s ease;
+    }
+
+    .nav {
+      position: fixed;
+      inset: 0 0 auto;
+      z-index: 70;
+      padding: 0;
+      background: rgba(246, 243, 238, .82);
+      backdrop-filter: blur(18px);
+      border-bottom: 1px solid var(--line);
+    }
+
+    .nav-inner {
+      display: grid;
+      grid-template-columns: 1fr auto 1fr;
+      align-items: center;
+      gap: 20px;
+      padding: 18px 0;
+    }
+
+    .brand { display: inline-flex; align-items: center; }
+    .brand img { width: 116px; height: auto; display: block; }
+    .nav-links {
+      display: flex;
+      align-items: center;
+      gap: 26px;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: .07em;
+      font-size: 12px;
+    }
+    .nav-links a { transition: color .25s ease; }
+    .nav-links a:hover { color: var(--ink); }
+    .nav-cta { justify-self: end; }
+
+    .small-link {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      border: 1px solid var(--ink);
+      border-radius: 999px;
+      padding: 12px 18px;
+      color: var(--bg);
+      background: var(--ink);
+      text-transform: uppercase;
+      letter-spacing: .07em;
+      font-size: 12px;
+      box-shadow: 0 14px 34px rgba(36,31,29,.14);
+    }
+    .cta-arrow {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      flex: 0 0 auto;
+      color: var(--orange);
+      font-size: 20px;
+      line-height: 1;
+      transform: translateY(-1px);
+      transition: transform .25s var(--ease), color .25s ease;
+    }
+    .small-link:hover { background: var(--orange); border-color: var(--orange); color: var(--ink); }
+    .small-link:hover .cta-arrow { color: var(--ink); transform: translate(2px, -1px); }
+    .small-link, .btn, .focus-card, .experience-card, .process-card, .final-panel {
+      transform: translate3d(var(--mx, 0px), var(--my, 0px), 0);
+      transition: transform .45s var(--ease), background .32s ease, color .32s ease, border-color .32s ease;
+    }
+
+    .hero {
+      min-height: 100svh;
+      display: grid;
+      align-items: end;
+      padding: 148px 0 72px;
+    }
+
+    .kicker {
+      display: inline-flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 32px;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: .08em;
+      font-size: 12px;
+    }
+    .kicker:before { content: "/"; color: var(--orange); font-size: 22px; line-height: 0; }
+
+    h1 {
+      margin: 0;
+      max-width: 1360px;
+      font-size: clamp(58px, 12vw, 178px);
+      line-height: .98;
+      letter-spacing: -.08em;
+      font-weight: 380;
+    }
+
+    .hero-line { display: block; overflow: visible; padding-bottom: .12em; margin-bottom: -.08em; }
+    .hero-line > span {
+      display: inline-block;
+      transform: translateY(110%);
+      animation: lineIn 1.25s var(--ease) forwards;
+    }
+    .hero-line:nth-child(2) > span { animation-delay: .1s; }
+    .hero-line:nth-child(3) > span { animation-delay: .2s; color: var(--orange-dark); }
+    @keyframes lineIn { to { transform: translateY(0); } }
+
+    .hero-bottom {
+      display: grid;
+      grid-template-columns: minmax(260px, 520px) 1fr minmax(220px, 360px);
+      gap: 34px;
+      align-items: end;
+      margin-top: 54px;
+    }
+
+    .intro {
+      margin: 0;
+      color: var(--muted);
+      font-size: clamp(17px, 1.35vw, 22px);
+      max-width: 560px;
+    }
+
+    .focus-card {
+      position: relative;
+      min-height: 184px;
+      border: 1px solid var(--line);
+      border-radius: 30px;
+      background:
+        radial-gradient(circle at var(--glow-x, 70%) var(--glow-y, 60%), rgba(247,152,25,.16), transparent 42%),
+        rgba(255,253,248,.58);
+      overflow: hidden;
+      padding: 22px;
+      will-change: transform;
+    }
+    .focus-card:before {
+      content: "";
+      position: absolute;
+      right: -60px;
+      bottom: -75px;
+      width: 210px;
+      height: 210px;
+      border-radius: 50%;
+      border: 1px solid rgba(247,152,25,.30);
+    }
+    .focus-card small {
+      display: block;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: .08em;
+      font-size: 12px;
+      margin-bottom: 36px;
+    }
+    .focus-word {
+      position: absolute;
+      left: 22px;
+      right: 22px;
+      bottom: 20px;
+      font-size: clamp(36px, 4.3vw, 66px);
+      line-height: .94;
+      letter-spacing: -.06em;
+      font-weight: 380;
+      opacity: 0;
+      transform: translateY(22px);
+      animation: rotateFocus 9s var(--ease) infinite;
+    }
+    .focus-word:nth-of-type(2) { animation-delay: 3s; }
+    .focus-word:nth-of-type(3) { animation-delay: 6s; }
+    @keyframes rotateFocus {
+      0%, 8% { opacity: 0; transform: translateY(22px); }
+      15%, 30% { opacity: 1; transform: translateY(0); }
+      38%, 100% { opacity: 0; transform: translateY(-22px); }
+    }
+
+    .cta-stack { display: grid; gap: 12px; }
+    .btn {
+      min-height: 56px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 18px;
+      padding: 15px 18px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: transparent;
+      color: var(--ink);
+      text-transform: uppercase;
+      letter-spacing: .07em;
+      font-size: 12px;
+      transition: transform .32s var(--ease), background .32s ease, color .32s ease;
+    }
+    .btn:after { content: "→"; flex: 0 0 auto; font-size: 18px; color: var(--orange-dark); }
+    .btn.send:after { content: none; }
+    .btn:hover { transform: translateX(5px); }
+    .btn.primary { background: var(--ink); border-color: var(--ink); color: var(--bg); }
+    .btn.primary:after { color: var(--orange); }
+    .btn.orange { background: var(--orange); border-color: var(--orange); color: var(--ink); }
+    .btn.orange:after { color: var(--ink); }
+
+    .marquee {
+      border-block: 1px solid var(--line);
+      background: rgba(255,253,248,.36);
+      overflow: hidden;
+    }
+    .marquee-track {
+      width: max-content;
+      display: flex;
+      animation: marquee 32s linear infinite;
+    }
+    .marquee span {
+      display: inline-flex;
+      align-items: center;
+      gap: 18px;
+      padding: 22px 26px;
+      white-space: nowrap;
+      color: var(--muted);
+      font-size: clamp(18px, 1.8vw, 30px);
+      letter-spacing: -.03em;
+    }
+    .marquee b { color: var(--ink); font-weight: 400; }
+    .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--orange); display: inline-block; }
+    @keyframes marquee { to { transform: translateX(-50%); } }
+
+    section { padding: 112px 0; }
+    .section-label {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: .08em;
+      font-size: 12px;
+      margin-bottom: 26px;
+    }
+    .section-label:before { content: "/"; color: var(--orange); font-size: 22px; }
+    .section-title {
+      margin: 0;
+      max-width: 1050px;
+      font-size: clamp(42px, 7vw, 112px);
+      line-height: .94;
+      letter-spacing: -.07em;
+      font-weight: 380;
+    }
+    .section-copy {
+      margin: 26px 0 0;
+      max-width: 710px;
+      color: var(--muted);
+      font-size: clamp(17px, 1.55vw, 23px);
+    }
+
+    /* Reference-like sticky card section: normal cards that overlap only while scrolling */
+    .sticky-services {
+      position: relative;
+      padding: 86px 0 118px;
+      border-top: 1px solid var(--line);
+      border-bottom: 1px solid var(--line);
+      background:
+        radial-gradient(circle at 82% 35%, rgba(247,152,25,.10), transparent 34%),
+        var(--bg-soft);
+      overflow: clip;
+    }
+
+    .sticky-services-grid {
+      display: grid;
+      grid-template-columns: .72fr 1.28fr;
+      gap: clamp(38px, 6vw, 92px);
+      align-items: start;
+      position: relative;
+      z-index: 2;
+    }
+
+    .sticky-services-copy {
+      position: sticky;
+      top: 122px;
+      max-width: 560px;
+      min-height: 62svh;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+    }
+
+    .sticky-services-copy .section-title {
+      font-size: clamp(42px, 6vw, 96px);
+    }
+
+    .sticky-card-field {
+      position: relative;
+      min-height: 120vh;
+      padding-top: 5svh;
+      padding-bottom: 26svh;
+    }
+
+    .emblem {
+      position: absolute;
+      right: -16vw;
+      top: 4svh;
+      width: min(78vw, 760px);
+      aspect-ratio: 1;
+      transform: rotate(var(--emblem-rotate, -13deg));
+      z-index: 0;
+      opacity: .31;
+      pointer-events: none;
+      transition: transform .2s linear;
+    }
+    .emblem:before,
+    .emblem:after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      border-radius: 50%;
+      border: 1px solid rgba(36,31,29,.16);
+    }
+    .emblem:after {
+      inset: 16%;
+      border-color: rgba(247,152,25,.46);
+      border-right-color: transparent;
+      border-bottom-color: transparent;
+      transform: rotate(35deg);
+    }
+    .emblem-mark {
+      position: absolute;
+      left: 17%;
+      top: 48%;
+      width: 72%;
+      height: 1px;
+      background: rgba(36,31,29,.22);
+      transform: rotate(-9deg);
+      transform-origin: right center;
+    }
+    .emblem-mark:after {
+      content: "";
+      position: absolute;
+      right: -4px;
+      top: -4px;
+      width: 9px;
+      height: 9px;
+      border-radius: 50%;
+      background: var(--orange);
+    }
+
+    .sticky-card-list {
+      position: relative;
+      z-index: 3;
+      display: grid;
+      gap: clamp(22px, 4vw, 42px);
+    }
+
+    .build-card {
+      position: sticky;
+      top: 116px;
+      min-height: clamp(360px, 48svh, 520px);
+      border: 1px solid var(--line);
+      border-radius: 34px;
+      background:
+        radial-gradient(circle at var(--glow-x, 78%) var(--glow-y, 16%), rgba(247,152,25,.13), transparent 40%),
+        rgba(255,253,248,.88);
+      backdrop-filter: blur(14px);
+      box-shadow: var(--shadow);
+      padding: clamp(24px, 3.8vw, 48px);
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      transform: translate3d(var(--mx, 0px), var(--my, 0px), 0) scale(var(--card-scale, 1));
+      transform-origin: center top;
+      will-change: transform;
+      transition: transform .45s var(--ease), background .32s ease, border-color .32s ease;
+    }
+
+    .build-card:nth-child(1) { z-index: 1; }
+    .build-card:nth-child(2) { z-index: 2; }
+    .build-card:nth-child(3) { z-index: 3; }
+    .build-card:nth-child(4) { z-index: 4; }
+    .build-card:nth-child(5) { z-index: 5; }
+
+    .build-card:hover {
+      border-color: rgba(247,152,25,.38);
+    }
+
+    .card-top {
+      display: flex;
+      justify-content: space-between;
+      gap: 18px;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: .08em;
+      font-size: 12px;
+    }
+    .card-top strong { color: var(--orange-dark); font-weight: 500; }
+    .build-card h3 {
+      margin: clamp(48px, 8vw, 88px) 0 18px;
+      font-size: clamp(44px, 6vw, 86px);
+      line-height: .9;
+      letter-spacing: -.07em;
+      font-weight: 380;
+    }
+    .build-card p {
+      margin: 0;
+      max-width: 540px;
+      color: var(--muted);
+      font-size: clamp(16px, 1.35vw, 19px);
+    }
+    .card-tags { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 30px; }
+    .tag {
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      padding: 8px 11px;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: .055em;
+      font-size: 11px;
+    }
+
+    .experience-section {
+      background: var(--ink);
+      color: var(--bg);
+      border-bottom: 1px solid rgba(255,255,255,.12);
+      position: relative;
+      overflow: clip;
+    }
+    .experience-section:before {
+      content: "";
+      position: absolute;
+      left: -18vw;
+      top: 18%;
+      width: 48vw;
+      aspect-ratio: 1;
+      border-radius: 50%;
+      border: 1px solid rgba(247,152,25,.18);
+      pointer-events: none;
+    }
+    .experience-section .section-label,
+    .experience-section .large-copy,
+    .experience-section .experience-list { position: relative; z-index: 2; }
+    .experience-section .section-label { color: rgba(246,243,238,.64); }
+    .experience-section .large-copy .muted { color: rgba(246,243,238,.28); }
+    .experience-section .experience-card {
+      border-color: rgba(255,255,255,.14);
+      background:
+        radial-gradient(circle at var(--glow-x, 90%) var(--glow-y, 12%), rgba(247,152,25,.16), transparent 38%),
+        rgba(255,255,255,.055);
+      box-shadow: 0 28px 70px rgba(0,0,0,.18);
+    }
+    .experience-section .experience-card p { color: rgba(246,243,238,.66); }
+    .experience-section .experience-card small { color: var(--orange); }
+
+    .split {
+      display: grid;
+      grid-template-columns: .82fr 1.18fr;
+      gap: 70px;
+      align-items: start;
+    }
+    .sticky-side { position: sticky; top: 124px; }
+    .large-copy {
+      margin: 0;
+      font-size: clamp(32px, 4.8vw, 78px);
+      line-height: .98;
+      letter-spacing: -.06em;
+      font-weight: 380;
+    }
+    .large-copy .muted { color: rgba(36,31,29,.32); }
+
+    .experience-list { display: grid; gap: 14px; }
+    .experience-card {
+      position: relative;
+      display: grid;
+      grid-template-columns: 110px 1fr;
+      gap: 20px;
+      min-height: 160px;
+      padding: 26px;
+      border: 1px solid var(--line);
+      border-radius: 30px;
+      background:
+        radial-gradient(circle at var(--glow-x, 90%) var(--glow-y, 12%), rgba(247,152,25,.10), transparent 36%),
+        rgba(255,253,248,.56);
+      overflow: hidden;
+      will-change: transform;
+    }
+    .experience-card:after {
+      content: "";
+      position: absolute;
+      right: 24px;
+      top: 24px;
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: var(--orange);
+      opacity: .7;
+      transition: transform .5s var(--ease);
+    }
+    .experience-card:hover:after { transform: scale(2); }
+    .experience-card small { color: var(--orange-dark); text-transform: uppercase; letter-spacing: .08em; font-size: 12px; }
+    .experience-card h3 {
+      margin: 0 0 12px;
+      font-size: clamp(25px, 3.2vw, 46px);
+      line-height: .96;
+      letter-spacing: -.05em;
+      font-weight: 380;
+    }
+    .experience-card p { margin: 0; color: var(--muted); max-width: 740px; }
+
+    .process-section {
+      position: relative;
+      background:
+        radial-gradient(circle at 86% 16%, rgba(247,152,25,.10), transparent 32%),
+        var(--bg);
+      overflow: clip;
+    }
+    .process-section:after {
+      content: "process";
+      position: absolute;
+      right: -18px;
+      bottom: 18px;
+      color: rgba(36,31,29,.035);
+      font-size: clamp(94px, 18vw, 260px);
+      line-height: .74;
+      letter-spacing: -.08em;
+      pointer-events: none;
+    }
+    .process-panel {
+      position: relative;
+      color: var(--ink);
+      z-index: 2;
+    }
+    .process-panel .section-label,
+    .process-panel .section-copy { color: var(--muted); }
+    .process-grid {
+      position: relative;
+      z-index: 2;
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 14px;
+      margin-top: 54px;
+    }
+    .process-card {
+      min-height: 270px;
+      border: 1px solid var(--line);
+      border-radius: 30px;
+      padding: 25px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      background:
+        radial-gradient(circle at var(--glow-x, 82%) var(--glow-y, 18%), rgba(247,152,25,.12), transparent 42%),
+        rgba(255,253,248,.66);
+      will-change: transform;
+      box-shadow: 0 18px 50px rgba(36,31,29,.045);
+    }
+    .process-card small { color: var(--orange-dark); }
+    .process-card h3 {
+      margin: 0;
+      font-size: clamp(28px, 4vw, 56px);
+      line-height: .92;
+      letter-spacing: -.055em;
+      font-weight: 380;
+    }
+    .process-card p { margin: 0; color: var(--muted); }
+
+    .final { padding-bottom: 64px; }
+    .final-panel {
+      position: relative;
+      min-height: 72svh;
+      display: grid;
+      align-items: end;
+      overflow: hidden;
+      border: 1px solid rgba(255,255,255,.12);
+      border-radius: 42px;
+      background: var(--ink);
+      color: var(--bg);
+      padding: clamp(30px, 5vw, 58px);
+    }
+    .final-panel:before {
+      content: "";
+      position: absolute;
+      right: -9vw;
+      top: -12vw;
+      width: min(46vw, 640px);
+      aspect-ratio: 1;
+      min-width: 320px;
+      border: 1px solid rgba(247,152,25,.42);
+      border-radius: 50%;
+    }
+    .final h2 {
+      margin: 0 0 34px;
+      max-width: 1120px;
+      font-size: clamp(52px, 10vw, 148px);
+      line-height: .88;
+      letter-spacing: -.08em;
+      font-weight: 380;
+    }
+    .final-content { position: relative; z-index: 2; }
+    .final .section-label { color: rgba(246,243,238,.64); }
+    .final .btn:not(.orange) { color: var(--bg); border-color: rgba(255,255,255,.18); }
+
+    footer {
+      padding: 0 0 44px;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: .07em;
+      font-size: 12px;
+    }
+    .footer-inner {
+      display: flex;
+      justify-content: space-between;
+      gap: 18px;
+      flex-wrap: wrap;
+      border-top: 1px solid var(--line);
+      padding-top: 24px;
+    }
+
+    [data-reveal] {
+      opacity: 0;
+      transform: translateY(34px);
+      transition: opacity 1s var(--ease), transform 1s var(--ease);
+    }
+    [data-reveal].visible { opacity: 1; transform: translateY(0); }
+    [data-reveal="clip"] { overflow: hidden; transform: none; }
+    [data-reveal="clip"] > * { transform: translateY(112%); transition: transform 1.05s var(--ease); }
+    [data-reveal="clip"].visible > * { transform: translateY(0); }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *:before, *:after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; scroll-behavior: auto !important; transition-duration: .01ms !important; }
+      [data-reveal], [data-reveal="clip"] > * { opacity: 1 !important; transform: none !important; }
+    }
+
+    @media (max-width: 1000px) {
+      .nav-inner { grid-template-columns: 1fr auto; }
+      .nav-links { display: none; }
+      .hero { min-height: auto; padding-top: 132px; }
+      .hero-bottom, .sticky-services-grid, .split, .process-grid { grid-template-columns: 1fr; }
+      .sticky-services { padding-top: 64px; }
+      .sticky-services-copy { position: relative; top: auto; min-height: auto; display: block; }
+      .sticky-card-field { min-height: auto; padding-top: 18px; padding-bottom: 10svh; }
+      .emblem { width: 122vw; right: -58vw; top: 5svh; opacity: .24; }
+      .build-card { min-height: 330px; }
+      .sticky-side { position: static; }
+      .experience-card { grid-template-columns: 1fr; }
+    }
+
+    @media (max-width: 620px) {
+      .wrap, .narrow { width: min(100% - 28px, 1460px); }
+      .nav { padding: 0; }
+      .nav-inner { padding: 14px 0; }
+      .brand img { width: 104px; }
+      .nav-cta .small-link { padding: 11px 12px; font-size: 0; gap: 7px; }
+      .nav-cta .small-link:before { content: "Contact"; font-size: 11px; }
+      .nav-cta .small-link .cta-arrow { font-size: 22px; }
+      .btn { justify-content: center; padding-inline: 18px; gap: 12px; text-align: center; }
+      .btn:after { font-size: 20px; transform: translateY(-1px); }
+      h1 { font-size: clamp(54px, 17.4vw, 88px); line-height: 1.02; letter-spacing: -.073em; }
+      .hero-line { overflow: visible; padding-bottom: .12em; margin-bottom: -.08em; }
+      .hero { padding-bottom: 56px; }
+      .focus-card { min-height: 160px; }
+      section { padding: 76px 0; }
+      .sticky-services { padding: 54px 0 82px; }
+      .sticky-services-copy .section-title { font-size: clamp(36px, 11vw, 54px); letter-spacing: -.06em; }
+      .sticky-services-copy .section-copy { display: none; }
+      .sticky-services-copy .section-label { margin-bottom: 18px; }
+      .sticky-card-field { padding-top: 0; }
+      .sticky-card-list { gap: 18px; }
+      .build-card { top: 92px; border-radius: 28px; min-height: 318px; padding: 22px; }
+      .build-card h3 { margin-top: 42px; }
+      .build-card p { font-size: 15px; }
+      .card-tags .tag:nth-child(n+3) { display: none; }
+      .final-panel { border-radius: 30px; }
+      .process-card { min-height: 220px; }
+      .footer-inner { display: grid; }
+    }
+  </style>
+</head>
+<body>
+  <div class="scroll-progress" aria-hidden="true"></div>
+  <div class="ambient-orb" aria-hidden="true"></div>
+  <div class="grain" aria-hidden="true"></div>
+
+  <nav class="nav" aria-label="Main navigation">
+    <div class="wrap nav-inner">
+      <a class="brand" href="#" aria-label="SEO Pro Romania homepage">
+        <img src="assets/seo-pro-logo.png" alt="SEO Pro Romania logo" />
+      </a>
+      <div class="nav-links">
+        <a href="#what-we-do">What we do</a>
+        <a href="#experience">Experience</a>
+        <a href="#process">Process</a>
+        <a href="#contact">Contact</a>
+      </div>
+      <div class="nav-cta"><a class="small-link" data-magnetic href="#contact">Let’s talk <span class="cta-arrow" aria-hidden="true">→</span></a></div>
+    </div>
+  </nav>
+
+  <main>
+    <header class="hero">
+      <div class="wrap">
+        <div class="kicker">Boutique online marketing consultancy</div>
+        <h1 aria-label="Visibility. Better leads. Measurable growth.">
+          <span class="hero-line"><span>Visibility.</span></span>
+          <span class="hero-line"><span>Better leads.</span></span>
+          <span class="hero-line"><span>Measurable growth.</span></span>
+        </h1>
+
+        <div class="hero-bottom">
+          <p class="intro">SEO Pro Romania helps businesses improve search visibility, run smarter paid campaigns, and turn more visitors into customers through clear strategy, tracking and conversion-focused execution.</p>
+
+          <div class="focus-card" data-magnetic aria-label="Animated focus areas">
+            <small>Focused on</small>
+            <strong class="focus-word">SEO</strong>
+            <strong class="focus-word">Google Ads</strong>
+            <strong class="focus-word">Meta Ads</strong>
+          </div>
+
+          <div class="cta-stack">
+            <a class="btn primary" data-magnetic href="#contact">Request a consultation</a>
+            <a class="btn" data-magnetic href="#what-we-do">Explore services</a>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <div class="marquee" aria-hidden="true">
+      <div class="marquee-track">
+        <span><b>SEO</b><i class="dot"></i>Google Ads<i class="dot"></i>Meta Ads<i class="dot"></i>CRO<i class="dot"></i>Analytics<i class="dot"></i>Strategy<i class="dot"></i></span>
+        <span><b>SEO</b><i class="dot"></i>Google Ads<i class="dot"></i>Meta Ads<i class="dot"></i>CRO<i class="dot"></i>Analytics<i class="dot"></i>Strategy<i class="dot"></i></span>
+        <span><b>SEO</b><i class="dot"></i>Google Ads<i class="dot"></i>Meta Ads<i class="dot"></i>CRO<i class="dot"></i>Analytics<i class="dot"></i>Strategy<i class="dot"></i></span>
+        <span><b>SEO</b><i class="dot"></i>Google Ads<i class="dot"></i>Meta Ads<i class="dot"></i>CRO<i class="dot"></i>Analytics<i class="dot"></i>Strategy<i class="dot"></i></span>
+      </div>
+    </div>
+
+    <section id="what-we-do" class="sticky-services" aria-label="What we do">
+      <div class="wrap sticky-services-grid">
+        <div class="sticky-services-copy">
+          <div data-reveal="clip"><div class="section-label">What we do</div></div>
+          <div data-reveal="clip"><h2 class="section-title">Marketing work that stays close to business results.</h2></div>
+          <p class="section-copy" data-reveal>Online marketing services built to work together: search visibility, paid acquisition, conversion improvements, and clear measurement.</p>
+        </div>
+
+        <div class="sticky-card-field">
+          <div class="emblem" aria-hidden="true"><div class="emblem-mark"></div></div>
+          <div class="sticky-card-list" aria-label="Service cards">
+            <article class="build-card" data-magnetic data-sticky-card>
+              <div class="card-top"><span>Service</span><strong>01</strong></div>
+              <div>
+                <h3>SEO</h3>
+                <p>Improve how your business is found through technical cleanup, search intent, content structure and practical prioritization.</p>
+                <div class="card-tags"><span class="tag">Technical SEO</span><span class="tag">Content</span><span class="tag">Search intent</span></div>
+              </div>
+            </article>
+            <article class="build-card" data-magnetic data-sticky-card>
+              <div class="card-top"><span>Service</span><strong>02</strong></div>
+              <div>
+                <h3>Google Ads</h3>
+                <p>Campaigns structured around demand, search intent, budget discipline and landing pages that support conversion.</p>
+                <div class="card-tags"><span class="tag">Search</span><span class="tag">Budgets</span><span class="tag">Qualified leads</span></div>
+              </div>
+            </article>
+            <article class="build-card" data-magnetic data-sticky-card>
+              <div class="card-top"><span>Service</span><strong>03</strong></div>
+              <div>
+                <h3>Meta Ads</h3>
+                <p>Facebook and Instagram campaigns with clearer angles, better testing logic and more useful reporting.</p>
+                <div class="card-tags"><span class="tag">Facebook</span><span class="tag">Instagram</span><span class="tag">Retargeting</span></div>
+              </div>
+            </article>
+            <article class="build-card" data-magnetic data-sticky-card>
+              <div class="card-top"><span>Service</span><strong>04</strong></div>
+              <div>
+                <h3>CRO</h3>
+                <p>Improve the path from visitor to inquiry with clearer messaging, trust signals, forms and page structure.</p>
+                <div class="card-tags"><span class="tag">Landing pages</span><span class="tag">Forms</span><span class="tag">UX clarity</span></div>
+              </div>
+            </article>
+            <article class="build-card" data-magnetic data-sticky-card>
+              <div class="card-top"><span>Service</span><strong>05</strong></div>
+              <div>
+                <h3>Analytics</h3>
+                <p>Tracking and reporting cleanup so marketing decisions become easier to understand and easier to improve.</p>
+                <div class="card-tags"><span class="tag">GA4</span><span class="tag">GTM</span><span class="tag">Reporting</span></div>
+              </div>
+            </article>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="experience" class="experience-section">
+      <div class="wrap split">
+        <div class="sticky-side">
+          <div data-reveal="clip"><div class="section-label">Experience</div></div>
+          <p class="large-copy" data-reveal>Senior marketing work for businesses where <span class="muted">visibility, lead quality and trust</span> matter.</p>
+        </div>
+
+        <div class="experience-list">
+          <article class="experience-card" data-reveal data-magnetic><small>01</small><div><h3>Financial services</h3><p>SEO and paid acquisition work where trust, lead quality and cost efficiency matter.</p></div></article>
+          <article class="experience-card" data-reveal data-magnetic><small>02</small><div><h3>Ecommerce</h3><p>Paid social, product feeds, catalog campaigns, tracking and conversion recommendations.</p></div></article>
+          <article class="experience-card" data-reveal data-magnetic><small>03</small><div><h3>Lead generation</h3><p>Search and paid campaigns for businesses that need qualified inquiries, not just form submissions.</p></div></article>
+          <article class="experience-card" data-reveal data-magnetic><small>04</small><div><h3>Tracking & reporting</h3><p>Measurement setups and reports that show what is working, what is wasting budget and what should happen next.</p></div></article>
+        </div>
+      </div>
+    </section>
+
+    <section id="process" class="process-section">
+      <div class="wrap process-panel">
+        <div data-reveal="clip"><div class="section-label">Process</div></div>
+        <div data-reveal="clip"><h2 class="section-title">Understand. Prioritize. Improve.</h2></div>
+        <p class="section-copy" data-reveal>The work stays focused: diagnose the business context, choose the highest-impact priorities, then execute and measure what changes.</p>
+        <div class="process-grid">
+          <article class="process-card" data-reveal data-magnetic><small>01</small><h3>Understand the business</h3><p>Offer, audience, website, channels, tracking and where growth is blocked.</p></article>
+          <article class="process-card" data-reveal data-magnetic><small>02</small><h3>Prioritize impact</h3><p>Choose the SEO, ads, CRO or tracking work most likely to improve results.</p></article>
+          <article class="process-card" data-reveal data-magnetic><small>03</small><h3>Execute and refine</h3><p>Keep strategy, implementation and measurement connected over time.</p></article>
+        </div>
+      </div>
+    </section>
+
+    <section id="contact" class="final">
+      <div class="wrap final-panel" data-reveal data-magnetic>
+        <div class="final-content">
+          <div class="section-label">Start here</div>
+          <h2>Want a clearer path to better leads?</h2>
+          <div class="cta-stack" style="max-width: 360px;">
+            <a class="btn orange" data-magnetic href="mailto:office@seo-pro.ro">Send a short brief</a>
+            <a class="btn" data-magnetic href="#what-we-do">Review services</a>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <div class="wrap footer-inner">
+      <span>© SEO Pro Romania</span>
+      <span>SEO · Google Ads · Meta Ads · CRO · Analytics</span>
+      <span>office@seo-pro.ro</span>
+    </div>
+  </footer>
+
+  <script>
+    const revealItems = document.querySelectorAll('[data-reveal]');
+    const revealObserver = new IntersectionObserver((entries) => {
+      entries.forEach((entry) => {
+        if (entry.isIntersecting) {
+          entry.target.classList.add('visible');
+          revealObserver.unobserve(entry.target);
+        }
+      });
+    }, { threshold: .14, rootMargin: '0px 0px -8% 0px' });
+
+    revealItems.forEach((item, index) => {
+      item.style.transitionDelay = `${Math.min(index % 5, 4) * 70}ms`;
+      revealObserver.observe(item);
+    });
+
+    const servicesSection = document.querySelector('.sticky-services');
+    const stickyCards = [...document.querySelectorAll('[data-sticky-card]')];
+    const emblem = document.querySelector('.emblem');
+    const clamp = (value, min, max) => Math.min(Math.max(value, min), max);
+    const lerp = (a, b, t) => a + (b - a) * t;
+
+    function updateStickyServices() {
+      if (!servicesSection) return;
+      const rect = servicesSection.getBoundingClientRect();
+      const scrollable = rect.height + window.innerHeight;
+      const progress = clamp((window.innerHeight - rect.top) / Math.max(scrollable, 1), 0, 1);
+
+      stickyCards.forEach((card) => {
+        const cardRect = card.getBoundingClientRect();
+        const distance = Math.max(0, 116 - cardRect.top);
+        const scale = 1 - clamp(distance / 1200, 0, .045);
+        card.style.setProperty('--card-scale', scale.toFixed(3));
+      });
+
+      if (emblem) {
+        emblem.style.setProperty('--emblem-rotate', `${lerp(-16, 14, progress).toFixed(2)}deg`);
+      }
+    }
+
+    function updateGlobalMotion() {
+      const maxScroll = Math.max(document.documentElement.scrollHeight - window.innerHeight, 1);
+      document.documentElement.style.setProperty('--scroll-progress', String(clamp(window.scrollY / maxScroll, 0, 1)));
+    }
+
+    let ticking = false;
+    function requestStackUpdate() {
+      if (!ticking) {
+        requestAnimationFrame(() => {
+          updateStickyServices();
+          updateGlobalMotion();
+          ticking = false;
+        });
+        ticking = true;
+      }
+    }
+
+    window.addEventListener('scroll', requestStackUpdate, { passive: true });
+    window.addEventListener('resize', requestStackUpdate);
+    updateStickyServices();
+    updateGlobalMotion();
+
+    const orb = document.querySelector('.ambient-orb');
+    window.addEventListener('pointermove', (event) => {
+      document.documentElement.style.setProperty('--orb-x', `${event.clientX}px`);
+      document.documentElement.style.setProperty('--orb-y', `${event.clientY}px`);
+    }, { passive: true });
+
+    document.querySelectorAll('[data-magnetic]').forEach((element) => {
+      element.addEventListener('pointermove', (event) => {
+        const rect = element.getBoundingClientRect();
+        const px = (event.clientX - rect.left) / rect.width;
+        const py = (event.clientY - rect.top) / rect.height;
+        element.style.setProperty('--mx', `${(px - .5) * 8}px`);
+        element.style.setProperty('--my', `${(py - .5) * 8}px`);
+        element.style.setProperty('--glow-x', `${px * 100}%`);
+        element.style.setProperty('--glow-y', `${py * 100}%`);
+      });
+      element.addEventListener('pointerleave', () => {
+        element.style.setProperty('--mx', '0px');
+        element.style.setProperty('--my', '0px');
+        element.style.removeProperty('--glow-x');
+        element.style.removeProperty('--glow-y');
+      });
+    });
+
+    const previewServices = new URLSearchParams(window.location.search).get('previewServices');
+    if (previewServices && servicesSection) {
+      window.addEventListener('load', () => {
+        const fraction = clamp(Number(previewServices), 0, 1);
+        const top = servicesSection.offsetTop;
+        const scrollable = servicesSection.offsetHeight - window.innerHeight;
+        window.scrollTo(0, top + scrollable * fraction);
+        updateStickyServices();
+      });
+    }
+  </script>
+</body>
+</html>

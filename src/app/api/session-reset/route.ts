@@ -20,7 +20,7 @@ function asTimeMs(value: Date | number | string): number {
  * 
  * Resets the OpenClaw session context via gateway RPC (sessions.reset).
  * Messages stay in the UI — only the LLM context resets.
- * Optionally flushes memory first (flush=true, default).
+ * Archives the transcript via sessions.reset. Optional legacy agent flush is available with flush=true, but defaults off because sending a synthetic chat turn before reset is stateful/race-prone.
  * 
  * IMPORTANT: /reset sent via /v1/chat/completions does NOT trigger a reset —
  * the HTTP completions path uses agentCommandFromIngress which bypasses
@@ -33,7 +33,7 @@ function asTimeMs(value: Date | number | string): number {
  */
 export async function POST(request: NextRequest) {
   try {
-    const { projectId, flush = true } = await request.json();
+    const { projectId, flush = false } = await request.json();
     if (!projectId) {
       return NextResponse.json({ error: 'projectId required' }, { status: 400 });
     }
@@ -69,7 +69,9 @@ export async function POST(request: NextRequest) {
     resetInFlight.add(projectId);
 
     try {
-      // If flush requested, send a memory flush message first
+      // Legacy path: if explicitly requested, ask the agent to summarize before reset.
+      // Fresh UI intentionally does not use this; sessions.reset already archives
+      // the transcript, and a synthetic chat turn can surface stale queued output.
       if (flush) {
         try {
           const { response: flushRes } = await chatStream({

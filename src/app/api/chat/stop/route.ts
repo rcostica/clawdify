@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
 import { abortActiveGatewayRuns } from '@/lib/gateway/active-runs';
+import { toGatewaySessionKey } from '@/lib/gateway/client';
 
 const execFileAsync = promisify(execFile);
 
@@ -18,11 +19,12 @@ const OPENCLAW_BIN = process.env.OPENCLAW_BIN || '/home/you/.npm-global/bin/open
 export async function POST(request: NextRequest) {
   try {
     const { projectId, sessionKey } = await request.json().catch(() => ({}));
-    const effectiveSessionKey = typeof sessionKey === 'string' && sessionKey.trim()
+    const rawSessionKey = typeof sessionKey === 'string' && sessionKey.trim()
       ? sessionKey.trim()
       : typeof projectId === 'string' && projectId.trim()
         ? `clawdify:${projectId.trim()}`
         : null;
+    const effectiveSessionKey = rawSessionKey ? (toGatewaySessionKey(rawSessionKey) || rawSessionKey) : null;
 
     if (!effectiveSessionKey) {
       return NextResponse.json({ error: 'projectId or sessionKey required' }, { status: 400 });

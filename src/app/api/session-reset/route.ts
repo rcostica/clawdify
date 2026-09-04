@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db, threads, messages } from '@/lib/db';
 import { and, eq, desc } from 'drizzle-orm';
 import { v4 as uuidv4 } from 'uuid';
-import { chatStream } from '@/lib/gateway/client';
+import { chatStream, toGatewaySessionKey } from '@/lib/gateway/client';
 import { execSync } from 'child_process';
 
 const RESET_DEDUP_MS = 2 * 60 * 1000;
@@ -49,7 +49,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'No existing thread for this project' }, { status: 404 });
     }
 
-    const sessionKey = `clawdify:${projectId}`;
+    const sessionKey = toGatewaySessionKey(`clawdify:${projectId}`) || `clawdify:${projectId}`;
 
     const recentDivider = db.select().from(messages)
       .where(and(

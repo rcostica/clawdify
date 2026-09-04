@@ -1,4 +1,4 @@
-import { gatewayRpc } from '@/lib/gateway/client';
+import { gatewayRpc, toGatewaySessionKey } from '@/lib/gateway/client';
 
 const SESSION_PAGE_SIZE = 500;
 const MAX_SESSION_ROWS = 20_000;
@@ -169,7 +169,7 @@ export async function readGatewaySessionMessages(
 
   while (hasMore && offset < MAX_HISTORY_MESSAGES) {
     const result = await gatewayRpc<GatewayHistoryResult>('chat.history', {
-      sessionKey,
+      sessionKey: toGatewaySessionKey(sessionKey) || sessionKey,
       limit: Math.min(HISTORY_PAGE_SIZE, MAX_HISTORY_MESSAGES - offset),
       offset,
       maxChars: 500_000,

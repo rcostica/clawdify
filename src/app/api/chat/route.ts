@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { chatStream, type ChatMessage, type ChatStreamResult } from '@/lib/gateway/client';
+import { chatStream, toGatewaySessionKey, type ChatMessage, type ChatStreamResult } from '@/lib/gateway/client';
 import { db, messages, threads, projects, settings, vault, messageReactions } from '@/lib/db';
 import { sqlite } from '@/lib/db/sqlite';
 import { eq, desc, like, and, lt, sql } from 'drizzle-orm';
@@ -333,7 +333,7 @@ export async function GET(request: NextRequest) {
   const limit = Math.min(parseInt(request.nextUrl.searchParams.get('limit') || '50', 10), 200);
   const beforeParam = request.nextUrl.searchParams.get('before'); // ISO timestamp cursor
 
-  const sessionKey = `clawdify:${projectId}`;
+  const sessionKey = toGatewaySessionKey(`clawdify:${projectId}`) || `clawdify:${projectId}`;
 
   // Load ALL threads for this project — including archived threads from old session rotations
   const currentThreads = db.select().from(threads)
@@ -434,9 +434,9 @@ export async function POST(request: NextRequest) {
 
     // Stable session key per project — no thread ID.
     // OpenClaw's daily reset and compaction apply naturally.
-    const effectiveSessionKey = projectId
+    const effectiveSessionKey = toGatewaySessionKey(projectId
       ? `clawdify:${projectId}`
-      : 'agent:main:main';
+      : 'main') || 'agent:main:main';
 
     // Save user message
     const userMsgId = uuidv4();

@@ -10,11 +10,26 @@ const GATEWAY_URL = process.env.OPENCLAW_GATEWAY_URL || 'http://localhost:18789'
 const GATEWAY_TOKEN = process.env.OPENCLAW_GATEWAY_TOKEN || '';
 const GATEWAY_PROTOCOL_VERSION = 4;
 const GATEWAY_RPC_TIMEOUT_MS = 10_000;
+const GATEWAY_AGENT_ID = process.env.OPENCLAW_AGENT_ID || 'main';
+
+export function toGatewaySessionKey(sessionKey?: string | null): string | undefined {
+  const key = sessionKey?.trim();
+  if (!key) return undefined;
+  if (key.startsWith('agent:')) return key;
+  return `agent:${GATEWAY_AGENT_ID}:${key}`;
+}
+
+function sessionUser(user: string | undefined, originalSessionKey: string | undefined, resolvedSessionKey: string | undefined): string | undefined {
+  if (!user) return resolvedSessionKey;
+  if (originalSessionKey && user === originalSessionKey) return resolvedSessionKey;
+  return user;
+}
 
 function headers(extra?: Record<string, string>): Record<string, string> {
   return {
     'Authorization': `Bearer ${GATEWAY_TOKEN}`,
     'Content-Type': 'application/json',
+    'x-openclaw-agent-id': GATEWAY_AGENT_ID,
     ...extra,
   };
 }
@@ -284,22 +299,22 @@ export async function chatStream(opts: {
   signal?: AbortSignal;
 }): Promise<ChatStreamResult> {
   const { messages, sessionKey, model, user, signal } = opts;
+  const resolvedSessionKey = toGatewaySessionKey(sessionKey);
   
   const extraHeaders: Record<string, string> = {};
-  if (sessionKey) {
-    extraHeaders['x-openclaw-session-key'] = sessionKey;
+  if (resolvedSessionKey) {
+    extraHeaders['x-openclaw-session-key'] = resolvedSessionKey;
   }
 
   const body: Record<string, unknown> = {
-    model: model || 'openclaw:main',
+    model: model || `openclaw:${GATEWAY_AGENT_ID}`,
     messages,
     stream: true,
   };
   // Send user field for stable session derivation by the Gateway
-  if (user) {
-    body.user = user;
-  } else if (sessionKey) {
-    body.user = sessionKey;
+  const resolvedUser = sessionUser(user, sessionKey, resolvedSessionKey);
+  if (resolvedUser) {
+    body.user = resolvedUser;
   }
 
   const url = `${GATEWAY_URL}/v1/chat/completions`;
@@ -348,21 +363,21 @@ export async function chat(opts: {
   user?: string;
 }) {
   const { messages, sessionKey, model, user } = opts;
+  const resolvedSessionKey = toGatewaySessionKey(sessionKey);
   
   const extraHeaders: Record<string, string> = {};
-  if (sessionKey) {
-    extraHeaders['x-openclaw-session-key'] = sessionKey;
+  if (resolvedSessionKey) {
+    extraHeaders['x-openclaw-session-key'] = resolvedSessionKey;
   }
 
   const body: Record<string, unknown> = {
-    model: model || 'openclaw:main',
+    model: model || `openclaw:${GATEWAY_AGENT_ID}`,
     messages,
     stream: false,
   };
-  if (user) {
-    body.user = user;
-  } else if (sessionKey) {
-    body.user = sessionKey;
+  const resolvedUser = sessionUser(user, sessionKey, resolvedSessionKey);
+  if (resolvedUser) {
+    body.user = resolvedUser;
   }
 
   const response = await fetch(`${GATEWAY_URL}/v1/chat/completions`, {

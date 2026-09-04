@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import fs from 'fs/promises';
 import path from 'path';
-import { gatewayRpc, invokeTool } from '@/lib/gateway/client';
+import { gatewayRpc, invokeTool, toGatewaySessionKey } from '@/lib/gateway/client';
 
 const SESSIONS_PATH = process.env.OPENCLAW_SESSIONS_PATH ||
   path.join(process.env.HOME || '/home/you', '.openclaw/agents/main/sessions');
@@ -62,8 +62,9 @@ function parseCompactionCount(result: ToolInvokeResult): number {
 async function getGatewayStats(sessionKey: string): Promise<SessionStats> {
   // sessions.describe accepts legacy/non-canonical keys and returns the
   // canonical session row, so Clawdify does not need to know key internals.
+  const gatewaySessionKey = toGatewaySessionKey(sessionKey) || sessionKey;
   const description = await gatewayRpc<SessionDescription>('sessions.describe', {
-    key: sessionKey,
+    key: gatewaySessionKey,
   });
   const session = description.session;
   if (!session) return { ...EMPTY_STATS, source: 'gateway' };
@@ -119,7 +120,8 @@ async function getFileFallbackStats(sessionKey: string): Promise<SessionStats> {
   const sessionsFile = path.join(SESSIONS_PATH, 'sessions.json');
   const raw = await fs.readFile(sessionsFile, 'utf-8');
   const sessions = JSON.parse(raw);
-  const session = sessions[sessionKey] || sessions[`agent:main:${sessionKey}`];
+  const gatewaySessionKey = toGatewaySessionKey(sessionKey) || sessionKey;
+  const session = sessions[gatewaySessionKey] || sessions[sessionKey] || sessions[`agent:main:${sessionKey}`];
   if (!session) return { ...EMPTY_STATS, source: 'file-fallback' };
 
   return {

@@ -980,7 +980,7 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
 
   const REACTION_EMOJIS = ['👍', '❤️', '😂', '🎉', '🤔', '👀', '🔥', '✅'];
 
-  // Session stats: fetch from OpenClaw sessions.json (read-only)
+  // Session stats: fetch through the OpenClaw Gateway (read-only)
   const fetchSessionStats = useCallback(async (sessionKey: string) => {
     try {
       const res = await fetch(`/api/session-stats?sessionKey=${encodeURIComponent(sessionKey)}`);

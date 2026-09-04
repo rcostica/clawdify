@@ -8,6 +8,8 @@ import { request as httpsRequest } from 'node:https';
 
 const GATEWAY_URL = process.env.OPENCLAW_GATEWAY_URL || 'http://localhost:18789';
 const GATEWAY_TOKEN = process.env.OPENCLAW_GATEWAY_TOKEN || '';
+const GATEWAY_PROTOCOL_VERSION = 4;
+const GATEWAY_RPC_TIMEOUT_MS = 10_000;
 
 function headers(extra?: Record<string, string>): Record<string, string> {
   return {
@@ -140,6 +142,138 @@ export type ChatStreamResult = {
   fallbackModel?: string;
 };
 
+type GatewayResponseFrame = {
+  type: 'res';
+  id: string;
+  ok: boolean;
+  payload?: unknown;
+  error?: {
+    code?: string;
+    message?: string;
+  };
+};
+
+function gatewayWebSocketUrl(): string {
+  const url = new URL(GATEWAY_URL);
+  url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
+  return url.toString();
+}
+
+/**
+ * Call a documented OpenClaw Gateway RPC over its WebSocket control plane.
+ * A short-lived connection keeps this helper simple and is sufficient for
+ * occasional server-side reads such as session stats.
+ */
+export async function gatewayRpc<T>(
+  method: string,
+  params: Record<string, unknown> = {},
+  timeoutMs = GATEWAY_RPC_TIMEOUT_MS,
+): Promise<T> {
+  if (!GATEWAY_TOKEN) {
+    throw new Error('OPENCLAW_GATEWAY_TOKEN is not configured');
+  }
+
+  const connectId = crypto.randomUUID();
+  const requestId = crypto.randomUUID();
+
+  return new Promise<T>((resolve, reject) => {
+    const socket = new WebSocket(gatewayWebSocketUrl());
+    let settled = false;
+
+    const cleanup = () => {
+      clearTimeout(timer);
+      socket.removeEventListener('message', onMessage);
+      socket.removeEventListener('error', onError);
+      socket.removeEventListener('close', onClose);
+      if (socket.readyState === WebSocket.OPEN) socket.close();
+    };
+
+    const succeed = (value: T) => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      resolve(value);
+    };
+
+    const fail = (error: Error) => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      reject(error);
+    };
+
+    const sendRequest = (id: string, rpcMethod: string, rpcParams: Record<string, unknown>) => {
+      socket.send(JSON.stringify({
+        type: 'req',
+        id,
+        method: rpcMethod,
+        params: rpcParams,
+      }));
+    };
+
+    const onMessage = (event: MessageEvent) => {
+      let frame: Record<string, unknown>;
+      try {
+        frame = JSON.parse(String(event.data));
+      } catch {
+        return;
+      }
+
+      if (frame.type === 'event' && frame.event === 'connect.challenge') {
+        sendRequest(connectId, 'connect', {
+          minProtocol: GATEWAY_PROTOCOL_VERSION,
+          maxProtocol: GATEWAY_PROTOCOL_VERSION,
+          client: {
+            id: 'gateway-client',
+            version: '0.1.0',
+            platform: 'linux',
+            mode: 'backend',
+          },
+          role: 'operator',
+          scopes: ['operator.read'],
+          caps: [],
+          commands: [],
+          permissions: {},
+          auth: { token: GATEWAY_TOKEN },
+          locale: 'en-US',
+          userAgent: 'clawdify/0.1.0',
+        });
+        return;
+      }
+
+      if (frame.type !== 'res') return;
+      const response = frame as GatewayResponseFrame;
+
+      if (response.id === connectId) {
+        if (!response.ok) {
+          fail(new Error(response.error?.message || 'Gateway connection rejected'));
+          return;
+        }
+        sendRequest(requestId, method, params);
+        return;
+      }
+
+      if (response.id !== requestId) return;
+      if (!response.ok) {
+        fail(new Error(response.error?.message || `Gateway RPC ${method} failed`));
+        return;
+      }
+      succeed(response.payload as T);
+    };
+
+    const onError = () => fail(new Error(`Gateway WebSocket error at ${gatewayWebSocketUrl()}`));
+    const onClose = () => fail(new Error(`Gateway WebSocket closed before ${method} completed`));
+    const timer = setTimeout(
+      () => fail(new Error(`Gateway RPC ${method} timed out after ${timeoutMs}ms`)),
+      timeoutMs,
+    );
+
+    socket.addEventListener('message', onMessage);
+    socket.addEventListener('error', onError);
+    socket.addEventListener('close', onClose);
+  });
+}
+
 // Gateway handles model failover natively — no Clawdify-level model override needed.
 
 export async function chatStream(opts: {
@@ -248,11 +382,15 @@ export async function chat(opts: {
 /**
  * Invoke a Gateway tool directly.
  */
-export async function invokeTool(tool: string, args: Record<string, unknown> = {}) {
+export async function invokeTool(
+  tool: string,
+  args: Record<string, unknown> = {},
+  options: { sessionKey?: string; agentId?: string } = {},
+) {
   const response = await fetch(`${GATEWAY_URL}/tools/invoke`, {
     method: 'POST',
     headers: headers(),
-    body: JSON.stringify({ tool, args }),
+    body: JSON.stringify({ tool, args, ...options }),
   });
 
   if (!response.ok) {

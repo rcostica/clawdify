@@ -9,10 +9,12 @@ import Link from 'next/link';
 
 interface SessionInfo {
   id: string;
-  filename: string;
-  messageCount: number;
+  source: 'gateway' | 'legacy';
+  sessionKey?: string;
+  filename?: string;
+  messageCount?: number;
   firstMessage?: string;
-  size: number;
+  size?: number;
   modifiedAt: string;
 }
 
@@ -22,12 +24,17 @@ export default function MigrationSessionsPage() {
   const [importing, setImporting] = useState<string | null>(null);
   const [imported, setImported] = useState<Set<string>>(new Set());
   const [projectNames, setProjectNames] = useState<Record<string, string>>({});
+  const [source, setSource] = useState<'gateway' | 'legacy'>('gateway');
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     async function fetchSessions() {
+      setLoading(true);
+      setError(null);
       try {
-        const res = await fetch('/api/migration/sessions');
+        const res = await fetch(`/api/migration/sessions?source=${source}`);
         const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Failed to load sessions');
         setSessions(data.sessions || []);
         const names: Record<string, string> = {};
         for (const s of data.sessions || []) {
@@ -35,24 +42,31 @@ export default function MigrationSessionsPage() {
           names[s.id] = preview;
         }
         setProjectNames(names);
-      } catch {
+      } catch (err) {
         setSessions([]);
+        setError(err instanceof Error ? err.message : 'Failed to load sessions');
       } finally {
         setLoading(false);
       }
     }
     fetchSessions();
-  }, []);
+  }, [source]);
 
   const handleImport = async (sessionId: string) => {
     const projectName = projectNames[sessionId]?.trim();
     if (!projectName) return;
+    const selectedSession = sessions.find(session => session.id === sessionId);
     setImporting(sessionId);
     try {
       const res = await fetch('/api/migration/import', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sessionId, projectName }),
+        body: JSON.stringify({
+          sessionId,
+          sessionKey: selectedSession?.sessionKey,
+          source: selectedSession?.source || source,
+          projectName,
+        }),
       });
       const data = await res.json();
       if (res.ok) {
@@ -83,14 +97,43 @@ export default function MigrationSessionsPage() {
         </Link>
         <div>
           <h1 className="text-2xl font-bold">Import OpenClaw Sessions</h1>
-          <p className="text-sm text-muted-foreground">Import individual chat sessions as new projects</p>
+          <p className="text-sm text-muted-foreground">Import sessions from the active store or legacy JSONL files</p>
         </div>
       </div>
+
+      <div className="flex flex-wrap gap-2">
+        <Button
+          variant={source === 'gateway' ? 'default' : 'outline'}
+          size="sm"
+          onClick={() => setSource('gateway')}
+        >
+          Active OpenClaw store
+        </Button>
+        <Button
+          variant={source === 'legacy' ? 'default' : 'outline'}
+          size="sm"
+          onClick={() => setSource('legacy')}
+        >
+          Legacy JSONL files
+        </Button>
+      </div>
+
+      <p className="text-xs text-muted-foreground">
+        {source === 'gateway'
+          ? 'Reads sessions through the OpenClaw Gateway and works with both the current store and the newer SQLite store.'
+          : 'Scans archived .jsonl files directly. This compatibility mode is only for older session exports.'}
+      </p>
 
       {loading ? (
         <div className="flex justify-center py-12">
           <Loader2 className="h-6 w-6 animate-spin" />
         </div>
+      ) : error ? (
+        <Card>
+          <CardContent className="py-12 text-center">
+            <p className="text-destructive">{error}</p>
+          </CardContent>
+        </Card>
       ) : sessions.length === 0 ? (
         <Card>
           <CardContent className="py-12 text-center">
@@ -107,8 +150,14 @@ export default function MigrationSessionsPage() {
                   <div className="flex-1 min-w-0 space-y-1">
                     <div className="flex items-center gap-2">
                       <MessageSquare className="h-4 w-4 text-muted-foreground shrink-0" />
-                      <span className="text-sm font-medium">{session.messageCount} messages</span>
-                      <span className="text-xs text-muted-foreground">· {formatSize(session.size)}</span>
+                      <span className="text-sm font-medium">
+                        {typeof session.messageCount === 'number'
+                          ? `${session.messageCount} messages`
+                          : 'Gateway session'}
+                      </span>
+                      {typeof session.size === 'number' && (
+                        <span className="text-xs text-muted-foreground">· {formatSize(session.size)}</span>
+                      )}
                       <span className="text-xs text-muted-foreground">· {new Date(session.modifiedAt).toLocaleDateString()}</span>
                     </div>
                     {session.firstMessage && (

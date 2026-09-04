@@ -4,46 +4,64 @@ import { v4 as uuidv4 } from 'uuid';
 import { logAudit } from '@/lib/audit';
 import { redactSecrets } from '@/lib/redact';
 import fs from 'fs/promises';
+import { createReadStream } from 'fs';
 import path from 'path';
+import readline from 'readline';
+import {
+  ImportedSessionMessage,
+  projectImportableMessage,
+  readGatewaySessionMessages,
+} from '@/lib/gateway/sessions';
 
 const SESSIONS_PATH = process.env.OPENCLAW_SESSIONS_PATH || path.join(process.env.HOME || '/tmp', '.openclaw/agents/main/sessions');
 const WORKSPACE_PATH = process.env.OPENCLAW_WORKSPACE_PATH || '';
 
+async function readLegacySessionMessages(sessionId: string): Promise<ImportedSessionMessage[]> {
+  if (!/^[a-zA-Z0-9._-]+$/.test(sessionId)) {
+    throw new Error('Invalid legacy session id');
+  }
+
+  const filePath = path.join(SESSIONS_PATH, `${sessionId}.jsonl`);
+  const messages: ImportedSessionMessage[] = [];
+  const lines = readline.createInterface({
+    input: createReadStream(filePath, { encoding: 'utf-8' }),
+    crlfDelay: Infinity,
+  });
+
+  for await (const line of lines) {
+    if (!line.trim()) continue;
+    try {
+      const parsed = JSON.parse(line);
+      if (parsed.type !== 'message') continue;
+
+      const message = projectImportableMessage({
+        ...parsed.message,
+        timestamp: parsed.message?.timestamp ?? parsed.timestamp,
+      });
+      if (message) messages.push(message);
+    } catch {}
+  }
+
+  return messages;
+}
+
 export async function POST(request: NextRequest) {
   try {
-    const { sessionId, projectName } = await request.json();
+    const { sessionId, sessionKey, projectName, source = 'legacy' } = await request.json();
 
     if (!sessionId || !projectName) {
       return NextResponse.json({ error: 'sessionId and projectName required' }, { status: 400 });
     }
-
-    // Read the JSONL file
-    const filePath = path.join(SESSIONS_PATH, `${sessionId}.jsonl`);
-    const content = await fs.readFile(filePath, 'utf-8');
-    const lines = content.split('\n').filter(l => l.trim());
-
-    // Parse messages
-    const parsedMessages: { role: 'user' | 'assistant' | 'system'; content: string; }[] = [];
-
-    for (const line of lines) {
-      try {
-        const parsed = JSON.parse(line);
-        if (parsed.type === 'message' && parsed.message?.role) {
-          const role = parsed.message.role as 'user' | 'assistant' | 'system';
-          let text = '';
-          const contentField = parsed.message.content;
-          if (Array.isArray(contentField)) {
-            const textBlocks = contentField.filter((b: any) => b.type === 'text');
-            text = textBlocks.map((b: any) => b.text).join('\n');
-          } else if (typeof contentField === 'string') {
-            text = contentField;
-          }
-          if (text && (role === 'user' || role === 'assistant')) {
-            parsedMessages.push({ role, content: text });
-          }
-        }
-      } catch {}
+    if (source !== 'gateway' && source !== 'legacy') {
+      return NextResponse.json({ error: 'Invalid session source' }, { status: 400 });
     }
+    if (source === 'gateway' && (!sessionKey || typeof sessionKey !== 'string')) {
+      return NextResponse.json({ error: 'sessionKey required for Gateway import' }, { status: 400 });
+    }
+
+    const parsedMessages = source === 'gateway'
+      ? await readGatewaySessionMessages(sessionKey)
+      : await readLegacySessionMessages(sessionId);
 
     if (parsedMessages.length === 0) {
       return NextResponse.json({ error: 'No messages found in session' }, { status: 400 });
@@ -90,11 +108,17 @@ export async function POST(request: NextRequest) {
         threadId,
         role: msg.role,
         content: redactSecrets(msg.content),
-        createdAt: new Date(now.getTime() + i * 1000), // offset for ordering
+        createdAt: new Date(msg.timestamp ?? now.getTime() + i * 1000),
       }).run();
     }
 
-    logAudit('session_imported', JSON.stringify({ sessionId, projectId, messageCount: parsedMessages.length }));
+    logAudit('session_imported', JSON.stringify({
+      sessionId,
+      sessionKey: source === 'gateway' ? sessionKey : undefined,
+      source,
+      projectId,
+      messageCount: parsedMessages.length,
+    }));
 
     return NextResponse.json({
       success: true,

@@ -1,8 +1,9 @@
 import { NextResponse } from 'next/server';
 import { db, messages, threads, projects } from '@/lib/db';
-import { eq, sql, desc, count, and, gte } from 'drizzle-orm';
+import { eq, sql, desc, count, gte } from 'drizzle-orm';
 import fs from 'fs/promises';
 import path from 'path';
+import { listGatewaySessions } from '@/lib/gateway/sessions';
 
 const SESSIONS_PATH = process.env.OPENCLAW_SESSIONS_PATH ||
   path.join(process.env.HOME || '/home/you', '.openclaw/agents/main/sessions');
@@ -20,20 +21,61 @@ interface SessionData {
   cacheWrite?: number;
 }
 
+async function readLegacySessions(): Promise<Record<string, SessionData>> {
+  const raw = await fs.readFile(path.join(SESSIONS_PATH, 'sessions.json'), 'utf-8');
+  return JSON.parse(raw);
+}
+
+async function readSessionStats(): Promise<{
+  sessions: Array<[string, SessionData]>;
+  source: 'gateway' | 'legacy-file';
+}> {
+  try {
+    const result = await listGatewaySessions({ includeArchived: true });
+    if (result.truncated) {
+      throw new Error('Gateway session list exceeded the Clawdify safety limit');
+    }
+
+    return {
+      source: 'gateway',
+      sessions: result.sessions.map((session) => [session.key, {
+        sessionId: session.sessionId || session.key,
+        updatedAt: session.updatedAt || 0,
+        totalTokens: session.totalTokens,
+        model: session.model,
+        inputTokens: session.inputTokens,
+        outputTokens: session.outputTokens,
+        compactionCount: session.compactionCheckpointCount ?? session.compactionCount,
+      }]),
+    };
+  } catch (gatewayError) {
+    console.warn('[usage] Gateway session list unavailable; using legacy sessions.json:', gatewayError);
+    return {
+      source: 'legacy-file',
+      sessions: Object.entries(await readLegacySessions()),
+    };
+  }
+}
+
 /**
  * GET /api/usage
  *
- * Aggregates token usage from sessions.json + message/project data from SQLite.
+ * Aggregates token usage from the active OpenClaw session store through the
+ * Gateway, plus message/project data from Clawdify's SQLite database. Older
+ * OpenClaw installs retain a sessions.json fallback.
  */
 export async function GET() {
   try {
-    // 1. Read sessions.json
-    let sessionsMap: Record<string, SessionData> = {};
+    // 1. Read session stats from the supported Gateway API. The file fallback
+    // keeps this route usable on older or temporarily unavailable Gateways.
+    let sessionStats: Awaited<ReturnType<typeof readSessionStats>> = {
+      sessions: [],
+      source: 'legacy-file',
+    };
     try {
-      const raw = await fs.readFile(path.join(SESSIONS_PATH, 'sessions.json'), 'utf-8');
-      sessionsMap = JSON.parse(raw);
+      sessionStats = await readSessionStats();
     } catch {
-      // sessions.json missing or corrupt — continue with empty
+      // Gateway and legacy file both unavailable — continue with empty stats.
     }
 
     // 2. Aggregate session stats for clawdify sessions by project ID
@@ -58,7 +100,7 @@ export async function GET() {
     let totalCacheRead = 0;
     let totalCacheWrite = 0;
 
-    for (const [key, session] of Object.entries(sessionsMap)) {
+    for (const [key, session] of sessionStats.sessions) {
       // Match clawdify session keys
       const match = key.match(/^agent:main:clawdify:([a-f0-9-]+)/);
       if (!match) continue;
@@ -220,6 +262,7 @@ export async function GET() {
       projects: projectBreakdown,
       dailyActivity,
       roleBreakdown,
+      sessionStatsSource: sessionStats.source,
     });
   } catch (error) {
     console.error('[usage] Error:', error);

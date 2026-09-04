@@ -4,6 +4,7 @@ import { readFile, access, readdir } from 'fs/promises';
 import { constants } from 'fs';
 import { homedir } from 'os';
 import { join } from 'path';
+import { listGatewaySessions } from '@/lib/gateway/sessions';
 
 const GATEWAY_URL = process.env.OPENCLAW_GATEWAY_URL || 'http://localhost:18789';
 
@@ -106,8 +107,20 @@ export async function GET() {
     uptime = formatUptime(secs);
   } catch { /* ignore */ }
 
-  // Session count
-  const sessionCount = sessionFiles.filter(f => f.endsWith('.jsonl')).length;
+  // Prefer the active Gateway store (SQLite on newer OpenClaw releases), while
+  // retaining the legacy JSONL count for older or temporarily offline installs.
+  let sessionCount = sessionFiles.filter(f => f.endsWith('.jsonl')).length;
+  let sessionStatsSource: 'gateway' | 'legacy-file' = 'legacy-file';
+  try {
+    const result = await listGatewaySessions({ includeArchived: true });
+    if (result.truncated) {
+      throw new Error('Gateway session list exceeded the Clawdify safety limit');
+    }
+    sessionCount = result.sessions.length;
+    sessionStatsSource = 'gateway';
+  } catch (error) {
+    console.warn('[health] Gateway session list unavailable; using legacy JSONL count:', error);
+  }
 
   // Parse config for channels and model info
   let channels: string[] = [];
@@ -189,6 +202,7 @@ export async function GET() {
     openclaw: {
       configExists,
       sessionCount,
+      sessionStatsSource,
     },
     model: {
       name: modelName,

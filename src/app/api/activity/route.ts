@@ -3,6 +3,7 @@ import { db, messages, threads, projects, tasks, auditLogs } from '@/lib/db';
 import { eq, desc, and, gt, ne } from 'drizzle-orm';
 import { readFile, readdir } from 'fs/promises';
 import path from 'path';
+import { listGatewayCronRuns } from '@/lib/gateway/cron';
 
 const CRON_DIR = path.join(process.env.HOME || '/root', '.openclaw', 'cron');
 const JOBS_FILE = path.join(CRON_DIR, 'jobs.json');
@@ -130,7 +131,7 @@ async function getRecentTasks(since?: Date): Promise<ActivityEntry[]> {
   }
 }
 
-async function getCronRuns(since?: Date): Promise<ActivityEntry[]> {
+async function getLegacyCronRuns(since?: Date): Promise<ActivityEntry[]> {
   try {
     // Read job names
     let jobMap: Record<string, string> = {};
@@ -201,6 +202,46 @@ async function getCronRuns(since?: Date): Promise<ActivityEntry[]> {
   } catch (err) {
     console.error('Error fetching cron runs:', err);
     return [];
+  }
+}
+
+async function getCronRuns(since?: Date): Promise<ActivityEntry[]> {
+  try {
+    const runs = await listGatewayCronRuns(100);
+    const sinceMs = since ? since.getTime() : 0;
+
+    return runs
+      .filter((run) => !sinceMs || run.ts >= sinceMs)
+      .map((run) => {
+        const jobName = run.jobName || run.jobId.slice(0, 8);
+        const durationStr = run.durationMs
+          ? `${(run.durationMs / 1000).toFixed(1)}s`
+          : '';
+        const status = run.status || 'unknown';
+        const statusStr = status === 'ok'
+          ? '✅ OK'
+          : status === 'skipped'
+            ? '⚠️ Skipped'
+            : status === 'error'
+              ? '❌ Error'
+              : status;
+        const detail = [jobName, statusStr, durationStr].filter(Boolean).join(' · ');
+
+        return {
+          id: `cron-${run.jobId}-${run.ts}`,
+          type: 'cron_run',
+          title: run.error
+            ? `${jobName}: ${run.error.slice(0, 80)}`
+            : `${jobName} ${status === 'skipped' ? 'skipped' : 'completed'}`,
+          detail,
+          projectName: jobName,
+          projectIcon: '⏰',
+          timestamp: new Date(run.ts).toISOString(),
+        };
+      });
+  } catch (gatewayError) {
+    console.warn('[activity] Gateway cron runs unavailable; using legacy files:', gatewayError);
+    return getLegacyCronRuns(since);
   }
 }
 

@@ -3,6 +3,7 @@ import { readFile } from 'fs/promises';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
 import path from 'path';
+import { listGatewayCronJobs, listGatewayCronRuns } from '@/lib/gateway/cron';
 
 const execFileAsync = promisify(execFile);
 const JOBS_FILE = path.join(process.env.HOME || '/root', '.openclaw', 'cron', 'jobs.json');
@@ -49,17 +50,27 @@ async function readRuns(jobId: string, limit = 5): Promise<unknown[]> {
 }
 
 export async function GET() {
-  const jobs = await readJobs();
-
-  // Attach last few runs to each job
-  const jobsWithRuns = await Promise.all(
-    jobs.map(async (job) => {
-      const recentRuns = await readRuns(job.id, 3);
-      return { ...job, recentRuns };
-    })
-  );
-
-  return NextResponse.json({ jobs: jobsWithRuns });
+  try {
+    const [result, recentRuns] = await Promise.all([
+      listGatewayCronJobs(),
+      listGatewayCronRuns(100),
+    ]);
+    if (result.truncated) {
+      throw new Error('Gateway cron list exceeded the Clawdify safety limit');
+    }
+    const jobsWithRuns = result.jobs.map((job) => ({
+      ...job,
+      recentRuns: recentRuns.filter((run) => run.jobId === job.id).slice(0, 3),
+    }));
+    return NextResponse.json({ jobs: jobsWithRuns, source: 'gateway' });
+  } catch (gatewayError) {
+    console.warn('[cron] Gateway cron list unavailable; using legacy files:', gatewayError);
+    const jobs = await readJobs();
+    const jobsWithRuns = await Promise.all(
+      jobs.map(async (job) => ({ ...job, recentRuns: await readRuns(job.id, 3) }))
+    );
+    return NextResponse.json({ jobs: jobsWithRuns, source: 'legacy-file' });
+  }
 }
 
 export async function POST(req: NextRequest) {

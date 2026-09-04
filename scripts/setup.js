@@ -60,14 +60,38 @@ function checkPort(host, port, timeoutMs = 2000) {
   });
 }
 
-function detectGatewayToken() {
+function readEnvValue(envPath, name) {
+  try {
+    const line = fs.readFileSync(envPath, "utf-8")
+      .split("\n")
+      .find((entry) => entry.startsWith(`${name}=`));
+    if (!line) return null;
+    const value = line.slice(name.length + 1).trim();
+    if ((value.startsWith('"') && value.endsWith('"')) ||
+        (value.startsWith("'") && value.endsWith("'"))) {
+      return value.slice(1, -1);
+    }
+    return value || null;
+  } catch {
+    return null;
+  }
+}
+
+function detectGatewayToken(projectRoot) {
+  // A protected OpenClaw SecretRef is intentionally not resolved by this
+  // standalone script. Reuse the existing Clawdify value or injected runtime
+  // value when the OpenClaw config no longer contains plaintext.
+  const existingToken = process.env.OPENCLAW_GATEWAY_TOKEN ||
+    readEnvValue(path.join(projectRoot, ".env"), "OPENCLAW_GATEWAY_TOKEN");
+
   // Try openclaw.json first (current format), then config.yaml (legacy)
   const jsonPath = path.join(os.homedir(), ".openclaw", "openclaw.json");
   try {
     const content = fs.readFileSync(jsonPath, "utf-8");
     const config = JSON.parse(content);
     const token = config?.gateway?.auth?.token;
-    if (token) return token;
+    if (typeof token === "string" && token) return token;
+    if (token && typeof token === "object") return existingToken || null;
   } catch {}
 
   // Legacy YAML format
@@ -80,7 +104,7 @@ function detectGatewayToken() {
     }
   } catch {}
 
-  return null;
+  return existingToken || null;
 }
 
 function generateSecret() {
@@ -93,7 +117,7 @@ function detectWorkspacePath() {
   try {
     const content = fs.readFileSync(jsonPath, "utf-8");
     const config = JSON.parse(content);
-    let ws = config?.workspace;
+    let ws = config?.agents?.defaults?.workspace || config?.workspace;
     if (ws) {
       ws = ws.replace(/^~/, os.homedir());
       if (fs.existsSync(ws)) return ws;
@@ -121,8 +145,18 @@ function detectWorkspacePath() {
 }
 
 function detectSessionsPath() {
+  const containsLegacySessions = (directory) => {
+    try {
+      return fs.readdirSync(directory).some((name) =>
+        name === "sessions.json" || name.endsWith(".jsonl")
+      );
+    } catch {
+      return false;
+    }
+  };
+
   const defaultPath = path.join(os.homedir(), ".openclaw", "agents", "main", "sessions");
-  if (fs.existsSync(defaultPath)) return defaultPath;
+  if (containsLegacySessions(defaultPath)) return defaultPath;
   // Try just the agents dir
   const agentsDir = path.join(os.homedir(), ".openclaw", "agents");
   if (fs.existsSync(agentsDir)) {
@@ -131,7 +165,7 @@ function detectSessionsPath() {
       const agents = fs.readdirSync(agentsDir);
       for (const agent of agents) {
         const sessDir = path.join(agentsDir, agent, "sessions");
-        if (fs.existsSync(sessDir)) return sessDir;
+        if (containsLegacySessions(sessDir)) return sessDir;
       }
     } catch {}
   }
@@ -206,7 +240,7 @@ if (process.argv.includes("--help") || process.argv.includes("-h")) {
   print();
   print("This interactive wizard will:");
   print("  1. Check if the OpenClaw gateway is running");
-  print("  2. Auto-detect your gateway token from ~/.openclaw/openclaw.json");
+  print("  2. Reuse your gateway token from OpenClaw or the existing Clawdify .env");
   print("  3. Generate a secure session secret");
   print("  4. Ask for optional PIN and port configuration");
   print("  5. Write a .env file");
@@ -252,10 +286,9 @@ async function main() {
   }
 
   // Token
-  let gatewayToken = detectGatewayToken();
+  let gatewayToken = detectGatewayToken(projectRoot);
   if (gatewayToken) {
-    const masked = gatewayToken.slice(0, 6) + "..." + gatewayToken.slice(-4);
-    print(`  ${GREEN}✔${RESET}  Gateway token: ${DIM}${masked}${RESET}`);
+    print(`  ${GREEN}✔${RESET}  Gateway token detected`);
   } else {
     print(`  ${YELLOW}!${RESET}  Could not auto-detect gateway token`);
     gatewayToken = await ask(rl, "Enter your OpenClaw gateway token");
@@ -280,7 +313,7 @@ async function main() {
   if (sessionsPath) {
     print(`  ${GREEN}✔${RESET}  Sessions: ${DIM}${sessionsPath}${RESET}`);
   } else {
-    print(`  ${DIM}·${RESET}  Sessions path not found (optional — session history won't be available)`);
+    print(`  ${DIM}·${RESET}  No legacy sessions path found (Gateway-backed history remains available)`);
     sessionsPath = "";
   }
 

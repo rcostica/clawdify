@@ -17,15 +17,17 @@ import {
   Timer,
   Calendar,
 } from 'lucide-react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
 
 interface CronSchedule {
   kind: string;
-  expr: string;
+  expr?: string;
   tz?: string;
+  everyMs?: number;
+  at?: string;
 }
 
 interface CronState {
@@ -122,6 +124,20 @@ function cronToHuman(expr: string, tz?: string): string {
   return desc;
 }
 
+function scheduleToHuman(schedule: CronSchedule): string {
+  if (schedule.kind === 'cron' && schedule.expr) {
+    return cronToHuman(schedule.expr, schedule.tz);
+  }
+  if (schedule.kind === 'every' && schedule.everyMs) {
+    return `Every ${formatDuration(schedule.everyMs)}`;
+  }
+  if (schedule.kind === 'at' && schedule.at) {
+    const timestamp = Date.parse(schedule.at);
+    return Number.isFinite(timestamp) ? `Once · ${formatTime(timestamp)}` : schedule.at;
+  }
+  return schedule.kind || 'Unknown schedule';
+}
+
 function StatusIcon({ status }: { status?: string }) {
   if (status === 'ok') return <CheckCircle className="h-4 w-4 text-green-500" />;
   if (status === 'error') return <XCircle className="h-4 w-4 text-red-500" />;
@@ -197,7 +213,7 @@ function JobRow({ job, onAction, actionLoading }: {
           <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground flex-wrap">
             <span className="flex items-center gap-1">
               <Calendar className="h-3 w-3" />
-              {cronToHuman(job.schedule.expr, job.schedule.tz)}
+              {scheduleToHuman(job.schedule)}
             </span>
             {job.state?.lastRunAtMs && (
               <span className="flex items-center gap-1">

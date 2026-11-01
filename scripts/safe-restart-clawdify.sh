@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-PROJECT_ID="${1:-00000000-0000-0000-0000-000000000000}"
+PROJECT_ID="${1:-${CLAWDIFY_NOTIFY_PROJECT_ID:-}}"
 POST_MESSAGE="${2:-✅ Clawdify restarted and is live.}"
 PRE_MESSAGE="${3:-}"
 BASE_URL="${CLAWDIFY_URL:-http://127.0.0.1:3000}"
 
 post_message() {
   local message="$1"
-  [[ -z "$message" ]] && return 0
+  [[ -z "$message" || -z "$PROJECT_ID" ]] && return 0
   python3 - "$PROJECT_ID" "$message" <<'PY' | curl -fsS -X POST "$BASE_URL/api/messages/save" -H 'Content-Type: application/json' --data-binary @- >/dev/null
 import json, sys
 print(json.dumps({

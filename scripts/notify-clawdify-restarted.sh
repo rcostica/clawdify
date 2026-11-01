@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-PROJECT_ID="${CLAWDIFY_NOTIFY_PROJECT_ID:-00000000-0000-0000-0000-000000000000}"
+PROJECT_ID="${CLAWDIFY_NOTIFY_PROJECT_ID:-}"
+[[ -z "$PROJECT_ID" ]] && exit 0
+
 BASE_URL="${CLAWDIFY_URL:-http://127.0.0.1:3000}"
 BASE_MESSAGE="${CLAWDIFY_RESTART_MESSAGE:-✅ Clawdify restarted successfully and is live.}"
 MESSAGE="$BASE_MESSAGE ($(date -u +'%H:%M:%S UTC'))"

@@ -1,9 +1,10 @@
+import os from 'os';
 import { NextRequest, NextResponse } from 'next/server';
 import { db, threads, messages } from '@/lib/db';
 import { and, eq, desc } from 'drizzle-orm';
 import { v4 as uuidv4 } from 'uuid';
 import { chatStream, toGatewaySessionKey } from '@/lib/gateway/client';
-import { execSync } from 'child_process';
+import { execFileSync } from 'child_process';
 
 const RESET_DEDUP_MS = 2 * 60 * 1000;
 const resetInFlight = new Set<string>();
@@ -106,9 +107,14 @@ export async function POST(request: NextRequest) {
         // auto-loads .env from CWD, which contains OPENCLAW_GATEWAY_URL that
         // gets rejected as insecure plaintext HTTP. Running from /tmp avoids this.
         // Also pass a clean env to prevent Next.js-injected vars from leaking.
-        const home = process.env.HOME || '/home/you';
-        const resetCmd = `env -i HOME=${home} PATH=/home/you/.npm-global/bin:/usr/local/bin:/usr/bin:/bin openclaw gateway call sessions.reset --params '${JSON.stringify({ key: sessionKey })}'`;
-        const result = execSync(resetCmd, { timeout: 15000, encoding: 'utf-8', cwd: '/tmp' });
+        const home = os.homedir();
+        const result = execFileSync(process.env.OPENCLAW_BIN || 'openclaw',
+          ['gateway', 'call', 'sessions.reset', '--params', JSON.stringify({ key: sessionKey })],
+          { timeout: 15000, encoding: 'utf-8', cwd: os.tmpdir(), env: {
+            HOME: home,
+            PATH: process.env.PATH || '/usr/local/bin:/usr/bin:/bin',
+            NODE_ENV: process.env.NODE_ENV || 'production',
+          } });
         console.log('[session-reset] Gateway RPC result:', result.trim().slice(0, 200));
       } catch (resetErr) {
         console.warn('[session-reset] Gateway RPC sessions.reset failed:', resetErr);

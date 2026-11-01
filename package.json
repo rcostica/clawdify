@@ -7,7 +7,10 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "setup": "node scripts/setup.js"
+    "setup": "node scripts/setup.js",
+    "check:release": "node scripts/check-release.mjs",
+    "hooks:install": "git config core.hooksPath .githooks",
+    "test:release": "node --test scripts/tests/release-hygiene.test.mjs"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

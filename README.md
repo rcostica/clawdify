@@ -302,3 +302,16 @@ If this returns 405 → endpoint disabled (see above). If it hangs → gateway m
 ## License
 
 MIT
+
+## Repository hygiene
+
+The repository contains the reusable application only. Each installation creates
+its own database, workspace and credentials; local previews and runtime data are
+excluded. Configure development origins with `CLAWDIFY_ALLOWED_DEV_ORIGINS`, CLI
+location with `OPENCLAW_BIN`, and optional restart notifications with
+`CLAWDIFY_NOTIFY_PROJECT_ID`. Restart helpers otherwise skip chat notifications.
+
+Contributors: run `npm run hooks:install` once and `npm run check:release -- HEAD`
+before publishing. The pre-push hook also scans every newly published commit.
+CI checks the final tree and incoming commit range. See `AGENTS.md` for the
+repository's publication rules and optional private blocklist configuration.

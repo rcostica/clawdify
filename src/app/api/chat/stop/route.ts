@@ -1,3 +1,4 @@
+import os from 'os';
 import { NextRequest, NextResponse } from 'next/server';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
@@ -6,7 +7,7 @@ import { toGatewaySessionKey } from '@/lib/gateway/client';
 
 const execFileAsync = promisify(execFile);
 
-const OPENCLAW_BIN = process.env.OPENCLAW_BIN || '/home/you/.npm-global/bin/openclaw';
+const OPENCLAW_BIN = process.env.OPENCLAW_BIN || 'openclaw';
 
 /**
  * POST /api/chat/stop
@@ -40,7 +41,7 @@ export async function POST(request: NextRequest) {
     // important part for Clawdify is localAbort above.
     let parsed: unknown = { ok: true, aborted: false, runIds: [] };
     try {
-      const home = process.env.HOME || '/home/you';
+      const home = os.homedir();
       const { stdout, stderr } = await execFileAsync(
         OPENCLAW_BIN,
         ['gateway', 'call', 'chat.abort', '--params', JSON.stringify({ sessionKey: effectiveSessionKey })],
@@ -50,7 +51,7 @@ export async function POST(request: NextRequest) {
           encoding: 'utf8',
           env: {
             HOME: home,
-            PATH: '/home/you/.npm-global/bin:/usr/local/bin:/usr/bin:/bin',
+            PATH: process.env.PATH || '/usr/local/bin:/usr/bin:/bin',
             NODE_ENV: process.env.NODE_ENV || 'production',
           } as NodeJS.ProcessEnv,
         },

@@ -1,10 +1,11 @@
+import os from 'os';
 import { NextRequest, NextResponse } from 'next/server';
 import fs from 'fs/promises';
 import path from 'path';
 import { gatewayRpc, invokeTool, toGatewaySessionKey } from '@/lib/gateway/client';
 
 const SESSIONS_PATH = process.env.OPENCLAW_SESSIONS_PATH ||
-  path.join(process.env.HOME || '/home/you', '.openclaw/agents/main/sessions');
+  path.join(os.homedir(), '.openclaw/agents/main/sessions');
 
 type GatewaySession = {
   key: string;

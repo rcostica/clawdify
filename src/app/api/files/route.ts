@@ -1,10 +1,11 @@
+import os from 'os';
 import { NextRequest, NextResponse } from 'next/server';
 import fs from 'fs/promises';
 import path from 'path';
 import { incrementFileAccess } from '@/lib/file-intelligence';
 
 const WORKSPACE_PATH = process.env.OPENCLAW_WORKSPACE_PATH || '';
-const OPENCLAW_MEDIA_PATH = process.env.OPENCLAW_MEDIA_PATH || path.join(process.env.HOME || '/home/you', '.openclaw', 'media');
+const OPENCLAW_MEDIA_PATH = process.env.OPENCLAW_MEDIA_PATH || path.join(os.homedir(), '.openclaw', 'media');
 
 interface FileEntry {
   name: string;

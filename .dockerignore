@@ -4,3 +4,16 @@ node_modules
 .env.local
 *.db
 .git
+
+.env*
+!.env.example
+.next*
+*.db-*
+*.sqlite*
+*.bak
+*.log
+public/previews
+_uploads
+backups
+memory
+projects

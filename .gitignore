@@ -40,3 +40,17 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Instance data and local-only work
+*.db
+*.db-*
+*.sqlite
+*.sqlite3
+*.log
+/.next*
+/_uploads/
+/public/previews/
+/backups/
+/memory/
+/projects/
+!.env.example

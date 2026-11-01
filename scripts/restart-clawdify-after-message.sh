@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-PROJECT_ID="${1:-00000000-0000-0000-0000-000000000000}"
+PROJECT_ID="${1:-${CLAWDIFY_NOTIFY_PROJECT_ID:-}}"
 PRE_MESSAGE="${2:-🔄 Clawdify needs a restart. I’m saving this message first, then restarting now.}"
 POST_MESSAGE="${3:-✅ Clawdify restarted safely and is live.}"
 
@@ -20,5 +20,5 @@ EOF
   exit 0
 fi
 
-cd /home/you/clawdify
-./scripts/safe-restart-clawdify.sh "$PROJECT_ID" "$POST_MESSAGE" "$PRE_MESSAGE"
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+"$SCRIPT_DIR/safe-restart-clawdify.sh" "$PROJECT_ID" "$POST_MESSAGE" "$PRE_MESSAGE"

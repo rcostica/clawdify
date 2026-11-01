@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-PROJECT_ID="${1:-00000000-0000-0000-0000-000000000000}"
+PROJECT_ID="${1:-${CLAWDIFY_NOTIFY_PROJECT_ID:-}}"
 POST_MESSAGE="${2:-✅ Clawdify restarted safely and is live.}"
 DELAY_SECONDS="${3:-2}"
 UNIT="clawdify-deferred-restart-$(date +%s)"
@@ -19,12 +19,14 @@ EOF
   exit 0
 fi
 
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+
 systemd-run --user \
   --unit="$UNIT" \
   --description="Deferred Clawdify safe restart" \
   --on-active="${DELAY_SECONDS}s" \
   --setenv="PROJECT_ID=$PROJECT_ID" \
   --setenv="POST_MESSAGE=$POST_MESSAGE" \
-  /bin/bash -lc 'cd /home/you/clawdify && ./scripts/safe-restart-clawdify.sh "$PROJECT_ID" "$POST_MESSAGE"'
+  /bin/bash "$SCRIPT_DIR/safe-restart-clawdify.sh" "$PROJECT_ID" "$POST_MESSAGE"
 
 echo "Scheduled deferred Clawdify restart: unit=$UNIT delay=${DELAY_SECONDS}s"

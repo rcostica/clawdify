@@ -1,3 +1,4 @@
+import os from 'os';
 import { NextResponse } from 'next/server';
 import { db, messages, threads, projects } from '@/lib/db';
 import { eq, sql, desc, count, gte } from 'drizzle-orm';
@@ -6,7 +7,7 @@ import path from 'path';
 import { listGatewaySessions } from '@/lib/gateway/sessions';
 
 const SESSIONS_PATH = process.env.OPENCLAW_SESSIONS_PATH ||
-  path.join(process.env.HOME || '/home/you', '.openclaw/agents/main/sessions');
+  path.join(os.homedir(), '.openclaw/agents/main/sessions');
 
 interface SessionData {
   sessionId: string;

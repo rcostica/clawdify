@@ -67,3 +67,25 @@ test('a cleaned tip cannot hide a credential in an outgoing earlier commit', t =
   });
   assert.equal(r.status, 1);
 });
+
+test('private commit metadata is blocked without printing the value', t => {
+  const f = fixture(t);
+  f.commit('app.ts', 'generic');
+  const marker = 'private-commit-fixture-' + Date.now();
+  const list = path.join(f.root, '.git', 'private-patterns.json');
+  fs.writeFileSync(list, JSON.stringify([marker]));
+  f.git('config', 'clawdify.privatePatternsFile', list);
+  f.git('commit', '--allow-empty', '-qm', marker);
+  const r = f.run('--history', 'HEAD');
+  assert.equal(r.status, 1); assert.match(r.stderr, /commit metadata/);
+  assert.ok(!r.stderr.includes(marker));
+});
+test('private filenames are blocked even when their content is generic', t => {
+  const f = fixture(t);
+  const marker = 'private-filename-fixture-' + Date.now();
+  const list = path.join(f.root, '.git', 'private-patterns.json');
+  fs.writeFileSync(list, JSON.stringify([marker]));
+  f.git('config', 'clawdify.privatePatternsFile', list);
+  f.commit(marker + '.txt', 'generic');
+  assert.equal(f.run('HEAD').status, 1);
+});

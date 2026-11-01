@@ -19,6 +19,8 @@ if (args[0] === '--pre-push') {
     const [, local, , remote] = line.split(/\s+/);
     if (!zero.test(local)) outgoing(local, remote);
   }
+} else if (args[0] === '--history') {
+  for (const commit of text('rev-list', args[1] || 'HEAD').split('\n').filter(Boolean)) refs.add(commit);
 } else if (args[0] === '--range') {
   if (!args[1] || !args[2]) throw new Error('Usage: --range <base> <head>');
   outgoing(args[2], args[1]);
@@ -44,6 +46,16 @@ const checked = new Set();
 const problems = [];
 let files = 0;
 for (const ref of refs) {
+  if (text('cat-file', '-t', ref) === 'commit') {
+    const metadata = text('cat-file', 'commit', ref);
+    if (privatePatterns.some(value => metadata.includes(value))) {
+      problems.push(`${ref.slice(0, 12)} commit metadata: private instance marker`);
+    }
+    for (const [label, pattern] of rules) {
+      pattern.lastIndex = 0;
+      if (pattern.test(metadata)) problems.push(`${ref.slice(0, 12)} commit metadata: ${label}`);
+    }
+  }
   for (const record of git('ls-tree', '-r', '-z', ref).toString().split('\0').filter(Boolean)) {
     const [meta, file] = record.split('\t');
     const [, kind, oid] = meta.split(' ');
@@ -55,7 +67,7 @@ for (const ref of refs) {
     const data = git('cat-file', 'blob', oid);
     const content = data.toString('utf8');
     // Literal matches include binary assets; never echo matched values.
-    if (privatePatterns.some(value => data.includes(Buffer.from(value)))) {
+    if (privatePatterns.some(value => file.includes(value) || data.includes(Buffer.from(value)))) {
       problems.push(`${ref.slice(0, 12)} ${file}: private instance marker`);
     }
     if (data.includes(0)) continue;
